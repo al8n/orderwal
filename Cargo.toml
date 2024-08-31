@@ -1,13 +1,13 @@
 [package]
-name = "template-rs"
-version = "0.1.6"
+name = "orderwal"
+version = "0.0.0"
 edition = "2021"
-repository = "https://github.com/al8n/template-rs"
-homepage = "https://github.com/al8n/template-rs"
-documentation = "https://docs.rs/template-rs"
-description = "A template for creating Rust open-source repo on GitHub"
-license = "MIT/Apache-2.0"
-rust-version = "1.73"
+repository = "https://github.com/al8n/orderwal"
+homepage = "https://github.com/al8n/orderwal"
+documentation = "https://docs.rs/orderwal"
+description = "An ordered Write-Ahead Log implementation for Rust."
+license = "MIT OR Apache-2.0"
+rust-version = "1.80"
 
 [[bench]]
 path = "benches/foo.rs"
@@ -16,10 +16,13 @@ harness = false
 
 [features]
 default = ["std"]
-alloc = []
-std = []
+alloc = ["rarena-allocator/alloc", "crossbeam-skiplist/alloc"]
+std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/default"]
 
 [dependencies]
+bitflags = { version = "1", default-features = false }
+rarena-allocator = { version = "0.2", default-features = false }
+crossbeam-skiplist = { version = "0.1", default-features = false }
 
 [dev-dependencies]
 criterion = "0.5"
