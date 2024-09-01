@@ -21,8 +21,9 @@ std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/defau
 
 [dependencies]
 bitflags = { version = "1", default-features = false }
-rarena-allocator = { version = "0.2", default-features = false }
+rarena-allocator = { version = "0.2", default-features = false, features = ["memmap"] }
 crossbeam-skiplist = { version = "0.1", default-features = false }
+thiserror = "1"
 
 [dev-dependencies]
 criterion = "0.5"
