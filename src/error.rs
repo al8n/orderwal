@@ -1,4 +1,3 @@
-
 /// The error type.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -45,26 +44,61 @@ pub enum Error {
 impl Error {
   /// Create a new `Error::InsufficientSpace` instance.
   pub(crate) const fn insufficient_space(requested: u32, available: u32) -> Self {
-    Self::InsufficientSpace { requested, available }
+    Self::InsufficientSpace {
+      requested,
+      available,
+    }
   }
 
   /// Create a new `Error::KeyTooLarge` instance.
   pub(crate) const fn key_too_large(size: u32, maximum_key_size: u32) -> Self {
-    Self::KeyTooLarge { size, maximum_key_size }
+    Self::KeyTooLarge {
+      size,
+      maximum_key_size,
+    }
   }
 
   /// Create a new `Error::ValueTooLarge` instance.
   pub(crate) const fn value_too_large(size: u32, maximum_value_size: u32) -> Self {
-    Self::ValueTooLarge { size, maximum_value_size }
+    Self::ValueTooLarge {
+      size,
+      maximum_value_size,
+    }
   }
 
   /// Create a new `Error::EntryTooLarge` instance.
   pub(crate) const fn entry_too_large(size: u64, maximum_entry_size: u64) -> Self {
-    Self::EntryTooLarge { size, maximum_entry_size }
+    Self::EntryTooLarge {
+      size,
+      maximum_entry_size,
+    }
+  }
+
+  /// Create a new corrupted error.
+  #[inline]
+  pub(crate) fn corrupted() -> Error {
+    Self::IO(std::io::Error::new(
+      std::io::ErrorKind::InvalidData,
+      "corrupted write-ahead log",
+    ))
   }
 
   /// Create a read-only error.
   pub(crate) const fn read_only() -> Self {
     Self::ReadOnly
+  }
+
+  pub(crate) fn magic_text_mismatch() -> Error {
+    Self::IO(std::io::Error::new(
+      std::io::ErrorKind::InvalidData,
+      "magic text of orderwal does not match",
+    ))
+  }
+
+  pub(crate) fn magic_version_mismatch() -> Error {
+    Self::IO(std::io::Error::new(
+      std::io::ErrorKind::InvalidData,
+      "magic version of orderwal does not match",
+    ))
   }
 }

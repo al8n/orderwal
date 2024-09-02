@@ -5,12 +5,12 @@ use either::Either;
 use error::Error;
 
 use core::ptr::NonNull;
-use rarena_allocator::{unsync::Arena, ArenaPosition, Error as ArenaError};
-use std::collections::BTreeSet;
+use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
+use std::sync::Arc;
 
-walcore!(BTreeSet);
+walcore!(SkipSet: Send);
 
-/// An ordered write-ahead log implementation for single thread environments.
+/// A single writer multiple readers ordered write-ahead log implementation.
 ///
 /// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
 // ```text
@@ -29,16 +29,26 @@ walcore!(BTreeSet);
 // +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
 // ```
 pub struct OrderWal<C = Ascend, S = Crc32> {
-  core: OrderWalCore<C, S>,
+  core: Arc<OrderWalCore<C, S>>,
   ro: bool,
   _s: PhantomData<S>,
 }
 
+impl<C, S> Clone for OrderWal<C, S> {
+  fn clone(&self) -> Self {
+    Self {
+      core: self.core.clone(),
+      ro: true,
+      _s: PhantomData,
+    }
+  }
+}
+
 impl<C, S> OrderWal<C, S> {
   #[inline]
-  const fn from_core(core: OrderWalCore<C, S>, ro: bool) -> Self {
+  fn from_core(core: OrderWalCore<C, S>, ro: bool) -> Self {
     Self {
-      core,
+      core: Arc::new(core),
       ro,
       _s: PhantomData,
     }
@@ -47,18 +57,18 @@ impl<C, S> OrderWal<C, S> {
 
 impl_common_methods!();
 
-impl_common_methods!(<S: Checksumer>);
-
 impl_common_methods!(<C: Comparator, S>);
+
+impl_common_methods!(<S: Checksumer>);
 
 impl_common_methods!(
   where
-    C: Comparator + CheapClone + 'static,
+    C: Comparator + CheapClone + Send + 'static,
 );
 
 impl_common_methods!(
-  Self mut: where
-  C: Comparator + CheapClone + 'static,
+  Self: where
+  C: Comparator + CheapClone + Send + 'static,
   S: Checksumer,
 );
 

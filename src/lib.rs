@@ -8,7 +8,9 @@
 use core::{borrow::Borrow, cmp, marker::PhantomData, mem, slice};
 
 use crossbeam_skiplist::SkipSet;
-use rarena_allocator::{Allocator, ArenaOptions, Freelist, Memory, MmapOptions, OpenOptions};
+use rarena_allocator::{
+  either, Allocator, ArenaOptions, Freelist, Memory, MmapOptions, OpenOptions,
+};
 
 #[cfg(not(any(feature = "std", feature = "alloc")))]
 compile_error!("`orderwal` requires either the 'std' or 'alloc' feature to be enabled");
@@ -19,21 +21,36 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub use dbutils::{Ascend, CheapClone, Checksumer, Comparator, Descend};
+
+#[cfg(feature = "xxhash3")]
+pub use dbutils::XxHash3;
+
+#[cfg(feature = "xxhash64")]
+pub use dbutils::XxHash64;
+
+#[cfg(feature = "crc32fast")]
+pub use dbutils::Crc32;
+
 const STATUS_SIZE: usize = mem::size_of::<u8>();
 const KEY_LEN_SIZE: usize = mem::size_of::<u32>();
 const VALUE_LEN_SIZE: usize = mem::size_of::<u32>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const FIXED_RECORD_SIZE: usize = STATUS_SIZE + KEY_LEN_SIZE + VALUE_LEN_SIZE + CHECKSUM_SIZE;
 const CURRENT_VERSION: u16 = 0;
-
-/// An lock-free ordered write-ahead Log implementation.
-pub mod sync;
-
-/// An ordered write-ahead Log implementation.
-pub mod unsync;
+const MAGIC_TEXT: [u8; 6] = *b"ordwal";
+const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
+const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
+const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 
 /// Error types.
 pub mod error;
+
+/// Iterators for the WAL.
+pub mod iter;
+
+mod buffer;
+pub use buffer::*;
 
 bitflags::bitflags! {
   /// The flags of the entry.
@@ -43,13 +60,6 @@ bitflags::bitflags! {
   }
 }
 
-/// The comparator trait, which is used to compare two byte slices.
-pub trait Comparator {
-  /// Compares two byte slices.
-  fn compare(a: &[u8], b: &[u8]) -> cmp::Ordering;
-}
-
-
 struct Pointer<C> {
   /// The pointer to the start of the entry.
   ptr: *const u8,
@@ -57,19 +67,20 @@ struct Pointer<C> {
   key_len: usize,
   /// The length of the value.
   value_len: usize,
-  _m: PhantomData<C>,
+  cmp: C,
 }
 
-unsafe impl<C> Send for Pointer<C> {}
+unsafe impl<C: Send> Send for Pointer<C> {}
+unsafe impl<C: Sync> Sync for Pointer<C> {}
 
 impl<C> Pointer<C> {
   #[inline]
-  const fn new(key_len: usize, value_len: usize, ptr: *const u8) -> Self {
+  const fn new(key_len: usize, value_len: usize, ptr: *const u8, cmp: C) -> Self {
     Self {
       ptr,
       key_len,
       value_len,
-      _m: PhantomData,
+      cmp,
     }
   }
 
@@ -80,9 +91,7 @@ impl<C> Pointer<C> {
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe {
-      slice::from_raw_parts(self.ptr.add(STATUS_SIZE + KEY_LEN_SIZE), self.key_len)
-    }
+    unsafe { slice::from_raw_parts(self.ptr.add(STATUS_SIZE + KEY_LEN_SIZE), self.key_len) }
   }
 
   #[inline]
@@ -94,7 +103,9 @@ impl<C> Pointer<C> {
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
     unsafe {
       slice::from_raw_parts(
-        self.ptr.add(STATUS_SIZE + KEY_LEN_SIZE + self.key_len + VALUE_LEN_SIZE),
+        self
+          .ptr
+          .add(STATUS_SIZE + KEY_LEN_SIZE + self.key_len + VALUE_LEN_SIZE),
         self.value_len,
       )
     }
@@ -103,7 +114,10 @@ impl<C> Pointer<C> {
 
 impl<C: Comparator> PartialEq for Pointer<C> {
   fn eq(&self, other: &Self) -> bool {
-    C::compare(self.as_key_slice(), other.as_key_slice()).is_eq()
+    self
+      .cmp
+      .compare(self.as_key_slice(), other.as_key_slice())
+      .is_eq()
   }
 }
 
@@ -117,7 +131,7 @@ impl<C: Comparator> PartialOrd for Pointer<C> {
 
 impl<C: Comparator> Ord for Pointer<C> {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
-    C::compare(self.as_key_slice(), other.as_key_slice())
+    self.cmp.compare(self.as_key_slice(), other.as_key_slice())
   }
 }
 
@@ -131,8 +145,8 @@ impl<C> Borrow<[u8]> for Pointer<C> {
 pub struct Options {
   maximum_key_size: u32,
   maximum_value_size: u32,
-  read_only: bool,
   sync_on_write: bool,
+  magic_version: u16,
 }
 
 impl Default for Options {
@@ -148,20 +162,37 @@ impl Options {
     Self {
       maximum_key_size: u16::MAX as u32,
       maximum_value_size: u32::MAX,
-      read_only: false,
       sync_on_write: true,
+      magic_version: 0,
     }
   }
 
-  /// Returns the maximum key length.
-  /// 
-  /// The default value is `u16::MAX`.
-  /// 
+  /// Returns the magic version.
+  ///
+  /// The default value is `0`.
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
+  /// let options = Options::new().with_magic_version(1);
+  /// assert_eq!(options.magic_version(), 1);
+  /// ```
+  #[inline]
+  pub const fn magic_version(&self) -> u16 {
+    self.magic_version
+  }
+
+  /// Returns the maximum key length.
+  ///
+  /// The default value is `u16::MAX`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::Options;
+  ///
   /// let options = Options::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
@@ -171,14 +202,14 @@ impl Options {
   }
 
   /// Returns the maximum value length.
-  /// 
+  ///
   /// The default value is `u32::MAX`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
@@ -187,30 +218,15 @@ impl Options {
     self.maximum_value_size
   }
 
-  /// Returns `true` if the WAL is read-only.
+  /// Returns `true` if the WAL syncs on write.
+  ///
+  /// The default value is `true`.
   ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
-  /// let options = Options::new().with_read_only(true);
-  /// assert_eq!(options.read_only(), true);
-  /// ```
-  #[inline]
-  pub const fn read_only(&self) -> bool {
-    self.read_only
-  }
-
-  /// Returns `true` if the WAL syncs on write.
-  /// 
-  /// The default value is `true`.
-  /// 
-  /// # Example
-  /// 
-  /// ```rust
-  /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new();
   /// assert_eq!(options.sync_on_write(), true);
   /// ```
@@ -220,12 +236,12 @@ impl Options {
   }
 
   /// Sets the maximum key length.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
@@ -236,12 +252,12 @@ impl Options {
   }
 
   /// Sets the maximum value length.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
@@ -251,31 +267,15 @@ impl Options {
     self
   }
 
-  /// Sets the WAL to be opened in read-only mode.
-  /// 
-  /// # Example
-  /// 
-  /// ```rust
-  /// use orderwal::Options;
-  /// 
-  /// let options = Options::new().with_read_only(true);
-  /// assert_eq!(options.read_only(), true);
-  /// ```
-  #[inline]
-  pub const fn with_read_only(mut self, ro: bool) -> Self {
-    self.read_only = ro;
-    self
-  }
-
   /// Sets the WAL to sync on write.
-  /// 
+  ///
   /// The default value is `true`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_sync_on_write(false);
   /// assert_eq!(options.sync_on_write(), false);
   /// ```
@@ -284,201 +284,23 @@ impl Options {
     self.sync_on_write = sync;
     self
   }
-}
 
-/// The checksum trait, which is used to calculate the checksum of a byte slice.
-pub trait Checksumer {
-  /// Calculates the checksum of the byte slice.
-  fn checksum(data: &[u8]) -> u64;
-}
-
-struct OrderWalCore<A, C> {
-  arena: A,
-  map: SkipSet<Pointer<C>>,
-  opts: Options,
-}
-
-
-/// A single writer multiple readers ordered write-ahead log implementation.
-/// 
-/// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
-// ```text
-// +----------------------+-------------------------+--------------------+
-// | magic text (4 bytes) | magic version (2 bytes) |  version (2 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------|--------------------+
-// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// ```
-pub struct OrderWal<A, C, S> {
-  core: std::sync::Arc<OrderWalCore<A, C>>,
-  ro: bool,
-  _s: PhantomData<S>,
-}
-
-impl<A, C, S> Clone for OrderWal<A, C, S> {
-  fn clone(&self) -> Self {
-    Self {
-      core: self.core.clone(),
-      ro: true,
-      _s: PhantomData,
-    }
-  }
-}
-
-impl<A: Allocator, C: Comparator, S> OrderWal<A, C, S> {
-  /// Returns `true` if the WAL contains the specified key.
-  #[inline]
-  pub fn contains_key(&self, key: &[u8]) -> bool {
-    self.core.map.contains(key)
-  }
-
-  /// Returns the value associated with the key.
-  #[inline]
-  pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
-    self.core.map.get(key).map(|ent| ent.as_value_slice())
-  }
-}
-
-impl<A: Allocator, C: Comparator + 'static, S: Checksumer> OrderWal<A, C, S> {
-  /// Inserts a new entry into the WAL.
-  #[inline]
-  pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), error::Error> {
-    if self.ro || self.core.opts.read_only {
-      return Err(error::Error::read_only());
-    }
-
-    self.check(key, value)?;
-
-    let key_len = key.len();
-    let value_len = value.len();
-    let elen = entry_size(key_len as u32, value_len as u32);
-    let buf = self.core.arena.alloc_bytes(elen);
-
-    match buf {
-      Err(e) => Err(match e {
-        rarena_allocator::Error::InsufficientSpace { requested, available } => error::Error::insufficient_space(requested, available),
-        rarena_allocator::Error::ReadOnly => error::Error::read_only(),
-        rarena_allocator::Error::LargerThanPageSize { .. } => unreachable!(),
-      }),
-      Ok(mut buf) => {
-        unsafe {
-          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
-          buf.put_u8_unchecked(Flags::empty().bits());
-          buf.put_u32_le_unchecked(key_len as u32);
-          buf.put_slice_unchecked(key);
-          buf.put_u32_le_unchecked(value_len as u32);
-          buf.put_slice_unchecked(value);
-
-          let cks = S::checksum(&buf);
-          buf.put_u64_le_unchecked(cks);
-
-          // commit the entry
-          buf[0] |= Flags::COMMITTED.bits();
-
-          if self.core.opts.sync_on_write {
-            self.core.arena.flush_range(buf.offset(), elen as usize)?;
-          }
-          buf.detach();
-          self.core.map.insert(Pointer::new(key_len, value_len, buf.as_ptr()));
-          Ok(())
-        }
-      },
-    }
-  }
-}
-
-impl<A: Allocator, C, S> OrderWal<A, C, S> {
-  /// Creates a new allocator backed by a mmap with the given options.
+  /// Sets the magic version.
+  ///
+  /// The default value is `0`.
   ///
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+  /// use orderwal::Options;
   ///
-  /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
-  /// # std::fs::remove_file(&path);
-  ///
-  /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-  /// let mmap_options = MmapOptions::new();
-  /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
-  ///
-  /// # std::fs::remove_file(path);
+  /// let options = Options::new().with_magic_version(1);
+  /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]
-  pub fn map_mut<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> Result<Self, error::Error> {
-    Ok(Self {
-      core: std::sync::Arc::new(OrderWalCore {
-        arena: A::map_mut(
-          path,
-          ArenaOptions::new().with_freelist(Freelist::None).with_magic_version(CURRENT_VERSION),
-          open_options,
-          mmap_options
-        )?,
-        map: SkipSet::new(),
-        opts,
-      }),
-      ro: false,
-      _s: PhantomData,
-    })
-  }
-
-  /// Flushes the to disk.
-  #[inline]
-  pub fn flush(&self) -> Result<(), error::Error> {
-    if self.ro || self.core.opts.read_only {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush().map_err(Into::into)
-  }
-
-  /// Flushes the to disk.
-  #[inline]
-  pub fn flush_async(&self) -> Result<(), error::Error> {
-    if self.ro || self.core.opts.read_only {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush_async().map_err(Into::into)
-  }
-}
-
-impl<A, C, S> OrderWal<A, C, S> {
-  #[inline]
-  fn check(&self, key: &[u8], val: &[u8]) -> Result<(), error::Error> {
-    let klen = key.len();
-    let vlen = val.len();
-    let elen = klen as u64 + vlen as u64;
-
-    if self.core.opts.maximum_key_size < klen as u32 {
-      return Err(error::Error::key_too_large(klen as u32, self.core.opts.maximum_key_size));
-    }
-
-    if self.core.opts.maximum_value_size < vlen as u32 {
-      return Err(error::Error::value_too_large(vlen as u32, self.core.opts.maximum_value_size));
-    }
-
-    if elen + FIXED_RECORD_SIZE as u64 > u32::MAX as u64 {
-      return Err(error::Error::entry_too_large(
-        elen,
-        min_u64(self.core.opts.maximum_key_size as u64 + self.core.opts.maximum_value_size as u64, u32::MAX as u64),
-      ));
-    }
-
-    Ok(())
+  pub const fn with_magic_version(mut self, version: u16) -> Self {
+    self.magic_version = version;
+    self
   }
 }
 
@@ -493,5 +315,1042 @@ const fn min_u64(a: u64, b: u64) -> u64 {
 
 #[inline]
 const fn entry_size(key_len: u32, value_len: u32) -> u32 {
-  STATUS_SIZE as u32 + KEY_LEN_SIZE as u32 + key_len + VALUE_LEN_SIZE as u32 + value_len + CHECKSUM_SIZE as u32
+  STATUS_SIZE as u32
+    + KEY_LEN_SIZE as u32
+    + key_len
+    + VALUE_LEN_SIZE as u32
+    + value_len
+    + CHECKSUM_SIZE as u32
 }
+
+#[inline]
+const fn arena_options() -> ArenaOptions {
+  ArenaOptions::new()
+    .with_magic_version(CURRENT_VERSION)
+    .with_freelist(Freelist::None)
+    .with_reserved(HEADER_SIZE as u32)
+    .with_unify(true)
+}
+
+macro_rules! impl_common_methods {
+  () => {
+    impl OrderWal {
+      /// Creates a new in-memory write-ahead log backed by an aligned vec with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options};
+      ///
+      /// let wal = OrderWal::new(Options::new(), 100).unwrap();
+      /// ```
+      #[inline]
+      pub fn new(opts: Options, cap: u32) -> Result<Self, Error> {
+        Self::with_comparator_and_checksumer(cap, opts, Ascend, Crc32)
+      }
+
+      /// Creates a new in-memory write-ahead log but backed by an anonymous mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, ArenaOptions, MmapOptions};
+      ///
+      /// let mmap_options = MmapOptions::new().len(100);
+      /// let wal = OrderWal::map_anon(Options::new(), mmap_options).unwrap();
+      /// ```
+      pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> Result<Self, Error> {
+        Self::map_anon_with_comparator_and_checksumer(opts, mmap_options, Ascend, Crc32)
+      }
+
+      /// Opens a read only WAL backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      pub fn map<P: AsRef<std::path::Path>>(
+        path: P,
+        mmap_options: MmapOptions,
+      ) -> Result<Self, error::Error> {
+        Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), mmap_options)
+          .map_err(|e| e.unwrap_right())
+      }
+
+      /// Opens a read only allocator backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_with_path_builder<PB, E>(
+        path_builder: PB,
+        mmap_options: MmapOptions,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        Self::map_with_path_builder_and_comparator_and_checksumer(
+          path_builder,
+          mmap_options,
+          Ascend,
+          Crc32,
+        )
+      }
+
+      /// Creates a new allocator backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut<P: AsRef<std::path::Path>>(
+        path: P,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+      ) -> Result<Self, error::Error> {
+        Self::map_mut_with_path_builder::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          opts,
+          open_options,
+          mmap_options,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Creates a new WAL backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut_with_path_builder<PB, E>(
+        path_builder: PB,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        Self::map_mut_with_path_builder_and_comparator_and_checksumer(
+          path_builder,
+          opts,
+          open_options,
+          mmap_options,
+          Ascend,
+          Crc32,
+        )
+      }
+    }
+  };
+  (<C, S>) => {
+    impl<C, S> OrderWal<C, S> {
+      /// Creates a new in-memory write-ahead log backed by an aligned vec with the given [`Comparator`], [`Checksumer`] and capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options};
+      ///
+      /// let wal = OrderWal::new(ArenaOptions::new(), mmap_options).unwrap();
+      /// ```
+      pub fn with_comparator_and_checksumer(
+        cap: u32,
+        opts: Options,
+        cmp: C,
+        cks: S,
+      ) -> Result<Self, Error> {
+        let arena = Arena::new(arena_options().with_capacity(cap));
+        OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
+      }
+
+      /// Creates a new in-memory write-ahead log but backed by an anonymous mmap with the given [`Comparator`], [`Checksumer`] and capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, MmapOptions};
+      ///
+      /// let mmap_options = MmapOptions::new().len(100);
+      /// let arena = Arena::map_anon(ArenaOptions::new(), mmap_options).unwrap();
+      /// ```
+      pub fn map_anon_with_comparator_and_checksumer(
+        opts: Options,
+        mmap_options: MmapOptions,
+        cmp: C,
+        cks: S,
+      ) -> Result<Self, Error> {
+        Arena::map_anon(arena_options(), mmap_options)
+          .map_err(Into::into)
+          .and_then(|arena| {
+            OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
+          })
+      }
+
+      /// Flushes the to disk.
+      #[inline]
+      pub fn flush(&self) -> Result<(), error::Error> {
+        if self.ro {
+          return Err(error::Error::read_only());
+        }
+
+        self.core.arena.flush().map_err(Into::into)
+      }
+
+      /// Flushes the to disk.
+      #[inline]
+      pub fn flush_async(&self) -> Result<(), error::Error> {
+        if self.ro {
+          return Err(error::Error::read_only());
+        }
+
+        self.core.arena.flush_async().map_err(Into::into)
+      }
+
+      #[inline]
+      fn check(&self, klen: usize, vlen: usize) -> Result<(), error::Error> {
+        let elen = klen as u64 + vlen as u64;
+
+        if self.core.opts.maximum_key_size < klen as u32 {
+          return Err(error::Error::key_too_large(
+            klen as u32,
+            self.core.opts.maximum_key_size,
+          ));
+        }
+
+        if self.core.opts.maximum_value_size < vlen as u32 {
+          return Err(error::Error::value_too_large(
+            vlen as u32,
+            self.core.opts.maximum_value_size,
+          ));
+        }
+
+        if elen + FIXED_RECORD_SIZE as u64 > u32::MAX as u64 {
+          return Err(error::Error::entry_too_large(
+            elen,
+            min_u64(
+              self.core.opts.maximum_key_size as u64 + self.core.opts.maximum_value_size as u64,
+              u32::MAX as u64,
+            ),
+          ));
+        }
+
+        Ok(())
+      }
+    }
+  };
+  (<S: Checksumer>) => {
+    impl<S: Checksumer> OrderWal<Ascend, S> {
+      /// Opens a read only WAL backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      pub fn map_with_checksumer<P: AsRef<std::path::Path>>(
+        path: P,
+        mmap_options: MmapOptions,
+        cks: S,
+      ) -> Result<Self, error::Error> {
+        Self::map_with_path_builder_and_checksumer::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          mmap_options,
+          cks,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Opens a read only allocator backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_with_path_builder_and_checksumer<PB, E>(
+        path_builder: PB,
+        mmap_options: MmapOptions,
+        cks: S,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        Self::map_with_path_builder_and_comparator_and_checksumer(
+          path_builder,
+          mmap_options,
+          Ascend,
+          cks,
+        )
+      }
+
+      /// Creates a new allocator backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut_with_checksumer<P: AsRef<std::path::Path>>(
+        path: P,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+        cks: S,
+      ) -> Result<Self, error::Error> {
+        Self::map_mut_with_path_builder_and_checksumer::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          opts,
+          open_options,
+          mmap_options,
+          cks,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Creates a new WAL backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut_with_path_builder_and_checksumer<PB, E>(
+        path_builder: PB,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+        cks: S,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        Self::map_mut_with_path_builder_and_comparator_and_checksumer(
+          path_builder,
+          opts,
+          open_options,
+          mmap_options,
+          Ascend,
+          cks,
+        )
+      }
+    }
+  };
+  (<C: Comparator, S>) => {
+    impl<C: Comparator, S> OrderWal<C, S> {
+      /// Returns `true` if the WAL contains the specified key.
+      #[inline]
+      pub fn contains_key(&self, key: &[u8]) -> bool {
+        self.core.map.contains(key)
+      }
+
+      /// Returns the value associated with the key.
+      #[inline]
+      pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
+        self.core.map.get(key).map(|ent| ent.as_value_slice())
+      }
+    }
+  };
+  (
+    Self $($mut:ident)?: where
+      C: Comparator + CheapClone + $($ident:ident + )? 'static,
+      S: Checksumer,
+  ) => {
+    impl<C, S> OrderWal<C, S>
+      where
+        C: Comparator + CheapClone + $($ident + )? 'static,
+        S: Checksumer,
+    {
+      /// Opens a read only WAL backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      pub fn map_with_comparator_and_checksumer<P: AsRef<std::path::Path>>(
+        path: P,
+        mmap_options: MmapOptions,
+        cmp: C,
+        cks: S,
+      ) -> Result<Self, error::Error> {
+        Self::map_with_path_builder_and_comparator_and_checksumer::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          mmap_options,
+          cmp,
+          cks,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Opens a read only allocator backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      pub fn map_with_path_builder_and_comparator_and_checksumer<PB, E>(
+        path_builder: PB,
+        mmap_options: MmapOptions,
+        cmp: C,
+        cks: S,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        let open_options = OpenOptions::default().read(true);
+
+        Arena::map_with_path_builder(path_builder, arena_options(), open_options, mmap_options)
+          .map_err(|e| e.map_right(Into::into))
+          .and_then(|arena| {
+            OrderWalCore::replay(arena, Options::new(), true, cmp, cks)
+              .map(|core| Self::from_core(core, true))
+              .map_err(Either::Right)
+          })
+      }
+
+      /// Creates a new allocator backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut_with_comparator_and_checksumer<P: AsRef<std::path::Path>>(
+        path: P,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+        cmp: C,
+        cks: S,
+      ) -> Result<Self, error::Error> {
+        Self::map_mut_with_path_builder_and_comparator_and_checksumer::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          opts,
+          open_options,
+          mmap_options,
+          cmp,
+          cks,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Creates a new WAL backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      pub fn map_mut_with_path_builder_and_comparator_and_checksumer<PB, E>(
+        path_builder: PB,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+        cmp: C,
+        cks: S,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        let path = path_builder().map_err(Either::Left)?;
+
+        let new = path.exists();
+
+        Arena::map_mut(path, arena_options(), open_options, mmap_options)
+          .map_err(Into::into)
+          .and_then(|arena| {
+            if new {
+              OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
+            } else {
+              OrderWalCore::replay(arena, opts, false, cmp, cks).map(|core| Self::from_core(core, false))
+            }
+          })
+          .map_err(Either::Right)
+      }
+
+      /// Get or insert a new entry into the WAL.
+      #[inline]
+      pub fn get_or_insert(&$($mut)? self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, error::Error> {
+        if self.ro {
+          return Err(error::Error::read_only());
+        }
+
+        self.check(key.len(), value.len())?;
+
+        if let Some(ent) = self.core.map.get(key) {
+          return Ok(Some(ent.as_value_slice()));
+        }
+
+        self.insert(key, value)?;
+        Ok(None)
+      }
+
+      /// Inserts a key-value pair into the WAL. This method
+      /// allows the caller to build the key and value in place.
+      pub fn insert_with<KE, VE>(
+        &$($mut)? self,
+        kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+        vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
+      ) -> Result<(), Among<KE, VE, Error>> {
+        if self.ro {
+          return Err(Among::Right(Error::read_only()));
+        }
+
+        self
+          .check(kb.size() as usize, vb.size() as usize)
+          .map_err(Among::Right)?;
+
+        self.insert_with_in(kb, vb)
+      }
+
+      /// Inserts a key-value pair into the WAL.
+      pub fn insert(&$($mut)? self, key: &[u8], value: &[u8]) -> Result<(), Error> {
+        if self.ro {
+          return Err(Error::read_only());
+        }
+
+        self.check(key.len(), value.len())?;
+
+        self.insert_with::<(), ()>(
+          KeyBuilder::new(key.len() as u32, |buf| {
+            buf.copy_from_slice(key);
+            Ok(())
+          }),
+          ValueBuilder::new(value.len() as u32, |buf| {
+            buf.copy_from_slice(value);
+            Ok(())
+          }),
+        ).map_err(Among::unwrap_right)
+      }
+
+      fn insert_with_in<KE, VE>(
+        &$($mut)? self,
+        kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+        vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
+      ) -> Result<(), Among<KE, VE, Error>> {
+        let (klen, kf) = kb.into_components();
+        let (vlen, vf) = vb.into_components();
+        let elen = entry_size(klen, vlen);
+        let buf = self.core.arena.alloc_bytes(elen);
+
+        match buf {
+          Err(e) => {
+            let e = match e {
+              ArenaError::InsufficientSpace {
+                requested,
+                available,
+              } => error::Error::insufficient_space(requested, available),
+              ArenaError::ReadOnly => error::Error::read_only(),
+              ArenaError::LargerThanPageSize { .. } => unreachable!(),
+            };
+            Err(Among::Right(e))
+          },
+          Ok(mut buf) => {
+            unsafe {
+              // We allocate the buffer with the exact size, so it's safe to write to the buffer.
+              buf.put_u8_unchecked(Flags::empty().bits());
+              buf.put_u32_le_unchecked(klen);
+
+              let ko = STATUS_SIZE + KEY_LEN_SIZE;
+
+              // TODO: buf.set_len(ko + klen as usize);
+              kf(&mut VacantBuffer::new(
+                klen as usize,
+                NonNull::new_unchecked(buf.as_mut_ptr().add(ko)),
+              )).map_err(Among::Left)?;
+
+              buf.put_u32_le_unchecked(vlen);
+
+              let vo = STATUS_SIZE + KEY_LEN_SIZE + klen as usize + VALUE_LEN_SIZE;
+              // TODO: buf.set_len(vo + vlen as usize);
+              vf(&mut VacantBuffer::new(
+                vlen as usize,
+                NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
+              )).map_err(Among::Middle)?;
+
+              let cks = self.core.cks.checksum(&buf);
+              buf.put_u64_le_unchecked(cks);
+
+              // commit the entry
+              buf[0] |= Flags::COMMITTED.bits();
+
+              if self.core.opts.sync_on_write && self.core.arena.is_ondisk() {
+                self.core.arena.flush_range(buf.offset(), elen as usize).map_err(|e| Among::Right(e.into()))?;
+              }
+              buf.detach();
+              self.core.map.insert(Pointer::new(
+                klen as usize,
+                vlen as usize,
+                buf.as_ptr(),
+                self.core.cmp.cheap_clone(),
+              ));
+              Ok(())
+            }
+          }
+        }
+      }
+    }
+  };
+  (
+    where
+      C: Comparator + CheapClone + $($ident:ident + )? 'static,
+  ) => {
+    impl<C> OrderWal<C>
+    where
+      C: Comparator + CheapClone + $($ident + )? 'static,
+    {
+      /// Opens a read only WAL backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      pub fn map_with_comparator<P: AsRef<std::path::Path>>(
+        path: P,
+        mmap_options: MmapOptions,
+        cmp: C,
+      ) -> Result<Self, error::Error> {
+        Self::map_with_path_builder_and_comparator::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          mmap_options,
+          cmp,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Opens a read only allocator backed by a mmap with the given capacity.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// # {
+      ///   # let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      ///   # let mmap_options = MmapOptions::new();
+      ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// # }
+      ///
+      /// let open_options = OpenOptions::default().read(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_with_path_builder_and_comparator<PB, E>(
+        path_builder: PB,
+        mmap_options: MmapOptions,
+        cmp: C,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        Self::map_with_path_builder_and_comparator_and_checksumer(
+          path_builder,
+          mmap_options,
+          cmp,
+          Crc32,
+        )
+      }
+
+      /// Creates a new allocator backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
+        path: P,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+        cmp: C,
+      ) -> Result<Self, error::Error> {
+        Self::map_mut_with_path_builder_and_comparator::<_, ()>(
+          || Ok(path.as_ref().to_path_buf()),
+          opts,
+          open_options,
+          mmap_options,
+          cmp,
+        )
+        .map_err(|e| e.unwrap_right())
+      }
+
+      /// Creates a new WAL backed by a mmap with the given options.
+      ///
+      /// # Example
+      ///
+      /// ```rust
+      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      ///
+      /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+      /// # std::fs::remove_file(&path);
+      ///
+      /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
+      /// let mmap_options = MmapOptions::new();
+      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      ///
+      /// # std::fs::remove_file(path);
+      /// ```
+      #[inline]
+      pub fn map_mut_with_path_builder_and_comparator<PB, E>(
+        path_builder: PB,
+        opts: Options,
+        open_options: OpenOptions,
+        mmap_options: MmapOptions,
+        cmp: C,
+      ) -> Result<Self, either::Either<E, error::Error>>
+      where
+        PB: FnOnce() -> Result<std::path::PathBuf, E>,
+      {
+        Self::map_mut_with_path_builder_and_comparator_and_checksumer(
+          path_builder,
+          opts,
+          open_options,
+          mmap_options,
+          cmp,
+          Crc32,
+        )
+      }
+    }
+  }
+}
+
+macro_rules! walcore {
+  ($map:ident $(: $send:ident)?) => {
+    struct OrderWalCore<C, S> {
+      arena: Arena,
+      map: $map<Pointer<C>>,
+      opts: Options,
+      cmp: C,
+      cks: S,
+    }
+
+    impl<C, S> OrderWalCore<C, S> {
+      #[inline]
+      fn new(arena: Arena, opts: Options, cmp: C, cks: S) -> Result<Self, Error> {
+        unsafe {
+          let slice = arena.reserved_slice_mut();
+          slice[0..6].copy_from_slice(&MAGIC_TEXT);
+          slice[6..8].copy_from_slice(&opts.magic_version.to_le_bytes());
+        }
+
+        arena
+          .flush_range(0, HEADER_SIZE)
+          .map(|_| Self {
+            arena,
+            map: $map::new(),
+            opts,
+            cmp,
+            cks,
+          })
+          .map_err(Into::into)
+      }
+    }
+
+    impl<C: Comparator + CheapClone + $($send +)? 'static, S: Checksumer> OrderWalCore<C, S> {
+      fn replay(arena: Arena, opts: Options, ro: bool, cmp: C, checksumer: S) -> Result<Self, Error> {
+        let slice = arena.reserved_slice();
+        let magic_text = &slice[0..6];
+        let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
+
+        if magic_text != MAGIC_TEXT {
+          return Err(Error::magic_text_mismatch());
+        }
+
+        if magic_version != opts.magic_version {
+          return Err(Error::magic_version_mismatch());
+        }
+
+        let mut set = $map::new();
+        let map = &mut set;
+
+        let mut cursor = arena.data_offset();
+        let allocated = arena.allocated();
+
+        loop {
+          unsafe {
+            // we reached the end of the arena, if we have any remaining, then if means two possibilities:
+            // 1. the remaining is a partial entry, but it does not be persisted to the disk, so following the write-ahead log principle, we should discard it.
+            // 2. our file may be corrupted, so we discard the remaining.
+            if cursor + STATUS_SIZE + KEY_LEN_SIZE + VALUE_LEN_SIZE > allocated {
+              if !ro && cursor < allocated {
+                arena.rewind(ArenaPosition::Start(cursor as u32));
+                arena.flush()?;
+              }
+
+              break;
+            }
+
+            let header = arena.get_bytes(cursor, STATUS_SIZE + KEY_LEN_SIZE);
+            let flag = Flags::from_bits_unchecked(header[0]);
+            let key_len = u32::from_le_bytes(header[1..5].try_into().unwrap()) as usize;
+
+            // Same as above, if we reached the end of the arena, we should discard the remaining.
+            if cursor + STATUS_SIZE + KEY_LEN_SIZE + key_len + VALUE_LEN_SIZE > allocated {
+              if !ro {
+                arena.rewind(ArenaPosition::Start(cursor as u32));
+                arena.flush()?;
+              }
+
+              break;
+            }
+
+            let value_len = u32::from_le_bytes(
+              arena
+                .get_bytes(
+                  cursor + STATUS_SIZE + KEY_LEN_SIZE + key_len,
+                  VALUE_LEN_SIZE,
+                )
+                .try_into()
+                .unwrap(),
+            ) as usize;
+
+            let elen = entry_size(key_len as u32, value_len as u32) as usize;
+            // Same as above, if we reached the end of the arena, we should discard the remaining.
+            if cursor + elen > allocated {
+              if !ro {
+                arena.rewind(ArenaPosition::Start(cursor as u32));
+                arena.flush()?;
+              }
+
+              break;
+            }
+
+            let cks = u64::from_le_bytes(
+              arena
+                .get_bytes(cursor + elen - CHECKSUM_SIZE, cursor + elen)
+                .try_into()
+                .unwrap(),
+            );
+
+            if cks != checksumer.checksum(arena.get_bytes(cursor, elen - CHECKSUM_SIZE)) {
+              return Err(Error::corrupted());
+            }
+
+            // If the entry is not committed, we should not rewind
+            if !flag.contains(Flags::COMMITTED) {
+              if !ro {
+                arena.rewind(ArenaPosition::Start(cursor as u32));
+                arena.flush()?;
+              }
+
+              break;
+            }
+
+            map.insert(Pointer::new(
+              key_len,
+              value_len,
+              arena.get_pointer(cursor),
+              cmp.cheap_clone(),
+            ));
+            cursor += elen;
+          }
+        }
+
+        Ok(Self {
+          arena,
+          map: set,
+          opts,
+          cmp,
+          cks: checksumer,
+        })
+      }
+    }
+  };
+}
+/// A single writer multiple readers ordered write-ahead Log implementation.
+pub mod swmr;
+
+/// An ordered write-ahead Log implementation.
+pub mod unsync;

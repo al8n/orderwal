@@ -16,14 +16,22 @@ harness = false
 
 [features]
 default = ["std"]
-alloc = ["rarena-allocator/alloc", "crossbeam-skiplist/alloc"]
-std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/default"]
+alloc = ["rarena-allocator/alloc", "crossbeam-skiplist/alloc", "dbutils/alloc"]
+std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/default", "dbutils/default", "among/default"]
+
+crc32fast = ["dbutils/crc32fast"]
+xxhash3 = ["dbutils/xxhash3"]
+xxhash64 = ["dbutils/xxhash64"]
 
 [dependencies]
+among = { version = "0.1", default-features = false }
 bitflags = { version = "1", default-features = false }
+dbutils = { version = "0.3", default-features = false }
 rarena-allocator = { version = "0.2", default-features = false, features = ["memmap"] }
 crossbeam-skiplist = { version = "0.1", default-features = false }
+paste = "1"
 thiserror = "1"
+
 
 [dev-dependencies]
 criterion = "0.5"
