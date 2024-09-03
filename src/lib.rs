@@ -49,6 +49,9 @@ pub mod iter;
 mod buffer;
 pub use buffer::*;
 
+/// Generic order WAL implementation, which supports structured keys and values.
+pub mod generic;
+
 bitflags::bitflags! {
   /// The flags of the entry.
   struct Flags: u8 {
