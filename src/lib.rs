@@ -21,16 +21,13 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub use dbutils::{Ascend, CheapClone, Checksumer, Comparator, Descend};
+pub use dbutils::{Ascend, CheapClone, Checksumer, Comparator, Crc32, Descend};
 
 #[cfg(feature = "xxhash3")]
 pub use dbutils::XxHash3;
 
 #[cfg(feature = "xxhash64")]
 pub use dbutils::XxHash64;
-
-#[cfg(feature = "crc32fast")]
-pub use dbutils::Crc32;
 
 const STATUS_SIZE: usize = mem::size_of::<u8>();
 const KEY_LEN_SIZE: usize = mem::size_of::<u32>();
@@ -346,7 +343,7 @@ macro_rules! impl_common_methods {
       /// ```
       #[inline]
       pub fn new(opts: Options, cap: u32) -> Result<Self, Error> {
-        Self::with_comparator_and_checksumer(cap, opts, Ascend, Crc32)
+        Self::with_comparator_and_checksumer(cap, opts, Ascend, Crc32::default())
       }
 
       /// Creates a new in-memory write-ahead log but backed by an anonymous mmap with the given capacity.
@@ -360,7 +357,7 @@ macro_rules! impl_common_methods {
       /// let wal = OrderWal::map_anon(Options::new(), mmap_options).unwrap();
       /// ```
       pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> Result<Self, Error> {
-        Self::map_anon_with_comparator_and_checksumer(opts, mmap_options, Ascend, Crc32)
+        Self::map_anon_with_comparator_and_checksumer(opts, mmap_options, Ascend, Crc32::default())
       }
 
       /// Opens a read only WAL backed by a mmap with the given capacity.
@@ -427,7 +424,7 @@ macro_rules! impl_common_methods {
           path_builder,
           mmap_options,
           Ascend,
-          Crc32,
+          Crc32::default(),
         )
       }
 
@@ -495,7 +492,7 @@ macro_rules! impl_common_methods {
           open_options,
           mmap_options,
           Ascend,
-          Crc32,
+          Crc32::default(),
         )
       }
     }
@@ -913,12 +910,12 @@ macro_rules! impl_common_methods {
       {
         let path = path_builder().map_err(Either::Left)?;
 
-        let new = path.exists();
+        let exist = path.exists();
 
         Arena::map_mut(path, arena_options(), open_options, mmap_options)
           .map_err(Into::into)
           .and_then(|arena| {
-            if new {
+            if !exist {
               OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
             } else {
               OrderWalCore::replay(arena, opts, false, cmp, cks).map(|core| Self::from_core(core, false))
@@ -945,8 +942,68 @@ macro_rules! impl_common_methods {
       }
 
       /// Inserts a key-value pair into the WAL. This method
+      /// allows the caller to build the key in place.
+      ///
+      /// See also [`insert_with_value_builder`](Self::insert_with_value_builder) and [`insert_with_builders`](Self::insert_with_builders).
+      pub fn insert_with_key_builder<E>(
+        &$($mut)? self,
+        kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+        value: &[u8],
+      ) -> Result<(), Either<E, Error>> {
+        if self.ro {
+          return Err(Either::Right(Error::read_only()));
+        }
+
+        self
+          .check(kb.size() as usize, value.len())
+          .map_err(Either::Right)?;
+
+        self.insert_with_in::<E, ()>(kb, ValueBuilder::new(value.len() as u32, |buf| {
+          buf.write(value).unwrap();
+          Ok(())
+        }))
+        .map_err(|e| {
+          match e {
+            Among::Left(e) => Either::Left(e),
+            Among::Middle(_) => unreachable!(),
+            Among::Right(e) => Either::Right(e),
+          }
+        })
+      }
+
+      /// Inserts a key-value pair into the WAL. This method
+      /// allows the caller to build the value in place.
+      ///
+      /// See also [`insert_with_key_builder`](Self::insert_with_key_builder) and [`insert_with_builders`](Self::insert_with_builders).
+      pub fn insert_with_value_builder<E>(
+        &$($mut)? self,
+        key: &[u8],
+        vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+      ) -> Result<(), Either<E, Error>> {
+        if self.ro {
+          return Err(Either::Right(Error::read_only()));
+        }
+
+        self
+          .check(key.len(), vb.size() as usize)
+          .map_err(Either::Right)?;
+
+        self.insert_with_in::<(), E>(KeyBuilder::new(key.len() as u32, |buf| {
+          buf.write(key).unwrap();
+          Ok(())
+        }), vb)
+        .map_err(|e| {
+          match e {
+            Among::Left(_) => unreachable!(),
+            Among::Middle(e) => Either::Left(e),
+            Among::Right(e) => Either::Right(e),
+          }
+        })
+      }
+
+      /// Inserts a key-value pair into the WAL. This method
       /// allows the caller to build the key and value in place.
-      pub fn insert_with<KE, VE>(
+      pub fn insert_with_builders<KE, VE>(
         &$($mut)? self,
         kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
         vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
@@ -970,13 +1027,13 @@ macro_rules! impl_common_methods {
 
         self.check(key.len(), value.len())?;
 
-        self.insert_with::<(), ()>(
+        self.insert_with_in::<(), ()>(
           KeyBuilder::new(key.len() as u32, |buf| {
-            buf.copy_from_slice(key);
+            buf.write(key).unwrap();
             Ok(())
           }),
           ValueBuilder::new(value.len() as u32, |buf| {
-            buf.copy_from_slice(value);
+            buf.write(value).unwrap();
             Ok(())
           }),
         ).map_err(Among::unwrap_right)
@@ -1007,12 +1064,16 @@ macro_rules! impl_common_methods {
           Ok(mut buf) => {
             unsafe {
               // We allocate the buffer with the exact size, so it's safe to write to the buffer.
+              let flag = Flags::COMMITTED.bits();
+
+              self.core.cks.reset();
+              self.core.cks.update(&[flag]);
+
               buf.put_u8_unchecked(Flags::empty().bits());
               buf.put_u32_le_unchecked(klen);
 
               let ko = STATUS_SIZE + KEY_LEN_SIZE;
-
-              // TODO: buf.set_len(ko + klen as usize);
+              buf.set_len(ko + klen as usize);
               kf(&mut VacantBuffer::new(
                 klen as usize,
                 NonNull::new_unchecked(buf.as_mut_ptr().add(ko)),
@@ -1021,13 +1082,16 @@ macro_rules! impl_common_methods {
               buf.put_u32_le_unchecked(vlen);
 
               let vo = STATUS_SIZE + KEY_LEN_SIZE + klen as usize + VALUE_LEN_SIZE;
-              // TODO: buf.set_len(vo + vlen as usize);
+              buf.set_len(vo + vlen as usize);
               vf(&mut VacantBuffer::new(
                 vlen as usize,
                 NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
               )).map_err(Among::Middle)?;
 
-              let cks = self.core.cks.checksum(&buf);
+              let cks = {
+                self.core.cks.update(&buf[1..]);
+                self.core.cks.digest()
+              };
               buf.put_u64_le_unchecked(cks);
 
               // commit the entry
@@ -1128,7 +1192,7 @@ macro_rules! impl_common_methods {
           path_builder,
           mmap_options,
           cmp,
-          Crc32,
+          Crc32::default(),
         )
       }
 
@@ -1199,23 +1263,66 @@ macro_rules! impl_common_methods {
           open_options,
           mmap_options,
           cmp,
-          Crc32,
+          Crc32::default(),
         )
+      }
+    }
+  };
+  (tests $prefix:ident) => {
+    #[cfg(test)]
+    mod common_tests {
+      use super::*;
+      use tempfile::tempdir;
+
+      const MB: usize = 1024 * 1024;
+
+      #[test]
+      fn test_construct_inmemory() {
+        let mut wal = OrderWal::new(Options::new(), MB as u32).unwrap();
+        let wal = &mut wal;
+        wal.insert(b"key1", b"value1").unwrap();
+      }
+
+      #[test]
+      fn test_construct_map_anon() {
+        let mut wal = OrderWal::map_anon(Options::new(), MmapOptions::new().len(MB as u32)).unwrap();
+        let wal = &mut wal;
+        wal.insert(b"key1", b"value1").unwrap();
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_construct_map_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(concat!(stringify!($prefix), "_construct_map_file"));
+
+        {
+          let mut wal = OrderWal::map_mut(
+            &path,
+            Options::new(),
+            OpenOptions::new()
+              .create_new(Some(MB as u32))
+              .write(true)
+              .read(true),
+            MmapOptions::new(),
+          )
+          .unwrap();
+
+          let wal = &mut wal;
+          wal.insert(b"key1", b"value1").unwrap();
+        }
+
+        let wal = OrderWal::map(&path, MmapOptions::new()).unwrap();
+        assert_eq!(wal.get(b"key1").unwrap(), b"value1");
       }
     }
   }
 }
 
 macro_rules! walcore {
-  ($map:ident $(: $send:ident)?) => {
-    struct OrderWalCore<C, S> {
-      arena: Arena,
-      map: $map<Pointer<C>>,
-      opts: Options,
-      cmp: C,
-      cks: S,
-    }
-
+  (
+    $map:ident $(: $send:ident)?
+  ) => {
     impl<C, S> OrderWalCore<C, S> {
       #[inline]
       fn new(arena: Arena, opts: Options, cmp: C, cks: S) -> Result<Self, Error> {
@@ -1227,13 +1334,7 @@ macro_rules! walcore {
 
         arena
           .flush_range(0, HEADER_SIZE)
-          .map(|_| Self {
-            arena,
-            map: $map::new(),
-            opts,
-            cmp,
-            cks,
-          })
+          .map(|_| Self::construct(arena, $map::new(), opts, cmp, cks))
           .map_err(Into::into)
       }
     }
@@ -1309,7 +1410,7 @@ macro_rules! walcore {
 
             let cks = u64::from_le_bytes(
               arena
-                .get_bytes(cursor + elen - CHECKSUM_SIZE, cursor + elen)
+                .get_bytes(cursor + elen - CHECKSUM_SIZE, CHECKSUM_SIZE)
                 .try_into()
                 .unwrap(),
             );
@@ -1338,13 +1439,7 @@ macro_rules! walcore {
           }
         }
 
-        Ok(Self {
-          arena,
-          map: set,
-          opts,
-          cmp,
-          cks: checksumer,
-        })
+        Ok(Self::construct(arena, set, opts, cmp, checksumer))
       }
     }
   };

@@ -4,11 +4,69 @@ use among::Among;
 use either::Either;
 use error::Error;
 
-use core::ptr::NonNull;
+use core::{cell::UnsafeCell, ptr::NonNull};
 use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 use std::sync::Arc;
 
+struct UnsafeCellChecksumer<S>(UnsafeCell<S>);
+
+impl<S> UnsafeCellChecksumer<S> {
+  #[inline]
+  const fn new(checksumer: S) -> Self {
+    Self(UnsafeCell::new(checksumer))
+  }
+}
+
+impl<S> UnsafeCellChecksumer<S>
+where
+  S: Checksumer,
+{
+  #[inline]
+  fn update(&self, buf: &[u8]) {
+    // SAFETY: the checksumer will not be invoked concurrently.
+    unsafe { (*self.0.get()).update(buf) }
+  }
+
+  #[inline]
+  fn reset(&self) {
+    // SAFETY: the checksumer will not be invoked concurrently.
+    unsafe { (*self.0.get()).reset() }
+  }
+
+  #[inline]
+  fn digest(&self) -> u64 {
+    unsafe { (*self.0.get()).digest() }
+  }
+}
+
+struct OrderWalCore<C, S> {
+  arena: Arena,
+  map: SkipSet<Pointer<C>>,
+  opts: Options,
+  cmp: C,
+  cks: UnsafeCellChecksumer<S>,
+}
+
 walcore!(SkipSet: Send);
+
+impl<C, S> OrderWalCore<C, S> {
+  #[inline]
+  fn construct(
+    arena: Arena,
+    set: SkipSet<Pointer<C>>,
+    opts: Options,
+    cmp: C,
+    checksumer: S,
+  ) -> Self {
+    Self {
+      arena,
+      map: set,
+      cmp,
+      opts,
+      cks: UnsafeCellChecksumer::new(checksumer),
+    }
+  }
+}
 
 /// A single writer multiple readers ordered write-ahead log implementation.
 ///
@@ -73,3 +131,5 @@ impl_common_methods!(
 );
 
 impl_common_methods!(<C, S>);
+
+impl_common_methods!(tests swmr);

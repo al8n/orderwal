@@ -8,7 +8,34 @@ use core::ptr::NonNull;
 use rarena_allocator::{unsync::Arena, ArenaPosition, Error as ArenaError};
 use std::collections::BTreeSet;
 
+struct OrderWalCore<C, S> {
+  arena: Arena,
+  map: BTreeSet<Pointer<C>>,
+  opts: Options,
+  cmp: C,
+  cks: S,
+}
+
 walcore!(BTreeSet);
+
+impl<C, S> OrderWalCore<C, S> {
+  #[inline]
+  fn construct(
+    arena: Arena,
+    set: BTreeSet<Pointer<C>>,
+    opts: Options,
+    cmp: C,
+    checksumer: S,
+  ) -> Self {
+    Self {
+      arena,
+      map: set,
+      cmp,
+      opts,
+      cks: checksumer,
+    }
+  }
+}
 
 /// An ordered write-ahead log implementation for single thread environments.
 ///
@@ -63,3 +90,5 @@ impl_common_methods!(
 );
 
 impl_common_methods!(<C, S>);
+
+impl_common_methods!(tests unsync);
