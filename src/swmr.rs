@@ -4,40 +4,9 @@ use among::Among;
 use either::Either;
 use error::Error;
 
-use core::{cell::UnsafeCell, ptr::NonNull};
+use core::ptr::NonNull;
 use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 use std::sync::Arc;
-
-struct UnsafeCellChecksumer<S>(UnsafeCell<S>);
-
-impl<S> UnsafeCellChecksumer<S> {
-  #[inline]
-  const fn new(checksumer: S) -> Self {
-    Self(UnsafeCell::new(checksumer))
-  }
-}
-
-impl<S> UnsafeCellChecksumer<S>
-where
-  S: Checksumer,
-{
-  #[inline]
-  fn update(&self, buf: &[u8]) {
-    // SAFETY: the checksumer will not be invoked concurrently.
-    unsafe { (*self.0.get()).update(buf) }
-  }
-
-  #[inline]
-  fn reset(&self) {
-    // SAFETY: the checksumer will not be invoked concurrently.
-    unsafe { (*self.0.get()).reset() }
-  }
-
-  #[inline]
-  fn digest(&self) -> u64 {
-    unsafe { (*self.0.get()).digest() }
-  }
-}
 
 struct OrderWalCore<C, S> {
   arena: Arena,

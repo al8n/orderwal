@@ -135,9 +135,45 @@ impl<C: Comparator> Ord for Pointer<C> {
   }
 }
 
-impl<C> Borrow<[u8]> for Pointer<C> {
-  fn borrow(&self) -> &[u8] {
-    self.as_key_slice()
+impl<C, Q> Borrow<Q> for Pointer<C>
+where
+  [u8]: Borrow<Q>,
+  Q: ?Sized + Ord,
+{
+  fn borrow(&self) -> &Q {
+    self.as_key_slice().borrow()
+  }
+}
+
+/// Use to avoid the mutable borrow checker, for single writer multiple readers usecase.
+struct UnsafeCellChecksumer<S>(core::cell::UnsafeCell<S>);
+
+impl<S> UnsafeCellChecksumer<S> {
+  #[inline]
+  const fn new(checksumer: S) -> Self {
+    Self(core::cell::UnsafeCell::new(checksumer))
+  }
+}
+
+impl<S> UnsafeCellChecksumer<S>
+where
+  S: Checksumer,
+{
+  #[inline]
+  fn update(&self, buf: &[u8]) {
+    // SAFETY: the checksumer will not be invoked concurrently.
+    unsafe { (*self.0.get()).update(buf) }
+  }
+
+  #[inline]
+  fn reset(&self) {
+    // SAFETY: the checksumer will not be invoked concurrently.
+    unsafe { (*self.0.get()).reset() }
+  }
+
+  #[inline]
+  fn digest(&self) -> u64 {
+    unsafe { (*self.0.get()).digest() }
   }
 }
 
@@ -748,13 +784,21 @@ macro_rules! impl_common_methods {
     impl<C: Comparator, S> OrderWal<C, S> {
       /// Returns `true` if the WAL contains the specified key.
       #[inline]
-      pub fn contains_key(&self, key: &[u8]) -> bool {
+      pub fn contains_key<Q>(&self, key: &Q) -> bool
+      where
+        [u8]: Borrow<Q>,
+        Q: ?Sized + Ord,
+      {
         self.core.map.contains(key)
       }
 
       /// Returns the value associated with the key.
       #[inline]
-      pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
+      pub fn get<Q>(&self, key: &Q) -> Option<&[u8]>
+      where
+        [u8]: Borrow<Q>,
+        Q: ?Sized + Ord,
+      {
         self.core.map.get(key).map(|ent| ent.as_value_slice())
       }
     }
