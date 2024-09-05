@@ -196,15 +196,15 @@ impl Default for Options {
 
 impl Options {
   /// Create a new `Options` instance.
-  /// 
-  /// 
+  ///
+  ///
   /// # Example
-  /// 
+  ///
   /// **Note:** If you are creating in-memory WAL, then you must specify the capacity.
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_capacity(1024 * 1024 * 8); // 8MB in-memory WAL
   /// ```
   #[inline]
@@ -239,16 +239,16 @@ impl Options {
   }
 
   /// Returns the capacity of the WAL.
-  /// 
+  ///
   /// The default value is `0`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
-  /// let options = Options::new().with_capacity(100);
-  /// assert_eq!(options.capacity(), 100);
+  ///
+  /// let options = Options::new().with_capacity(1000);
+  /// assert_eq!(options.capacity(), 1000);
   /// ```
   #[inline]
   pub const fn capacity(&self) -> u32 {
@@ -307,14 +307,14 @@ impl Options {
   }
 
   /// Returns `true`, when inserting an new entry, the owned `K` will be cached in memory.
-  /// 
+  ///
   /// The default value is `false`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new();
   /// assert_eq!(options.cache_key(), false);
   /// ```
@@ -324,14 +324,14 @@ impl Options {
   }
 
   /// Returns `true`, when inserting an new entry, the owned `V` will be cached in memory.
-  /// 
+  ///
   /// The default value is `false`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new();
   /// assert_eq!(options.cache_value(), false);
   /// ```
@@ -341,7 +341,7 @@ impl Options {
   }
 
   /// Returns the bits of the page size.
-  /// 
+  ///
   /// Configures the anonymous memory map to be allocated using huge pages.
   ///
   /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
@@ -353,14 +353,14 @@ impl Options {
   /// This option has no effect on file-backed memory maps.
   ///
   /// The default value is `None`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
-  /// let options = Options::new().with_huge(Some(12));
-  /// assert_eq!(options.huge(), Some(12));
+  ///
+  /// let options = Options::new().with_huge(Some(64));
+  /// assert_eq!(options.huge(), Some(64));
   /// ```
   #[inline]
   pub const fn huge(&self) -> Option<u8> {
@@ -368,16 +368,16 @@ impl Options {
   }
 
   /// Sets the capacity of the WAL.
-  /// 
+  ///
   /// This configuration will be ignored when using file-backed memory maps.
-  /// 
+  ///
   /// The default value is `0`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_capacity(100);
   /// assert_eq!(options.capacity(), 100);
   /// ```
@@ -420,16 +420,16 @@ impl Options {
   }
 
   /// Sets the cache key to `true`, when inserting an new entry, the owned version `K` will be cached in memory.
-  /// 
+  ///
   /// Only useful when using [`GenericOrderWal`](swmr::GenericOrderWal).
-  /// 
+  ///
   /// The default value is `false`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_cache_key(true);
   /// assert_eq!(options.cache_key(), true);
   /// ```
@@ -440,16 +440,16 @@ impl Options {
   }
 
   /// Sets the cache value to `true`, when inserting an new entry, the owned version `V` will be cached in memory.
-  /// 
+  ///
   /// Only useful when using [`GenericOrderWal`](swmr::GenericOrderWal).
-  /// 
+  ///
   /// The default value is `false`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_cache_value(true);
   /// assert_eq!(options.cache_value(), true);
   /// ```
@@ -460,7 +460,7 @@ impl Options {
   }
 
   /// Returns the bits of the page size.
-  /// 
+  ///
   /// Configures the anonymous memory map to be allocated using huge pages.
   ///
   /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
@@ -472,12 +472,12 @@ impl Options {
   /// This option has no effect on file-backed memory maps.
   ///
   /// The default value is `None`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use orderwal::Options;
-  /// 
+  ///
   /// let options = Options::new().with_huge(64);
   /// assert_eq!(options.huge(), Some(64));
   /// ```
@@ -583,7 +583,7 @@ macro_rules! impl_common_methods {
         Self::map_anon_with_comparator_and_checksumer(opts, Ascend, Crc32::default())
       }
 
-      /// Opens a read only WAL backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
       ///
       /// # Example
       ///
@@ -610,7 +610,7 @@ macro_rules! impl_common_methods {
           .map_err(|e| e.unwrap_right())
       }
 
-      /// Opens a read only allocator backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
       ///
       /// # Example
       ///
@@ -646,7 +646,7 @@ macro_rules! impl_common_methods {
         )
       }
 
-      /// Creates a new allocator backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with given options.
       ///
       /// # Example
       ///
@@ -675,7 +675,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Creates a new WAL backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with given options.
       ///
       /// # Example
       ///
@@ -715,7 +715,7 @@ macro_rules! impl_common_methods {
       ///
       /// # Example
       ///
-      /// ```rust 
+      /// ```rust
       #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Descend, Crc32};")]
       ///
       /// let wal = OrderWal::new(ArenaOptions::new(), mmap_options).unwrap();
@@ -739,7 +739,7 @@ macro_rules! impl_common_methods {
       /// let arena = OrderWal::map_anon_with_comparator_and_checksumer(Options::new(), Descend, Crc32::default()).unwrap();
       /// ```
       pub fn map_anon_with_comparator_and_checksumer(
-        opts: Options, 
+        opts: Options,
         cmp: C,
         cks: S,
       ) -> Result<Self, Error> {
@@ -805,7 +805,7 @@ macro_rules! impl_common_methods {
   };
   (<S: Checksumer>) => {
     impl<S: Checksumer> OrderWal<Ascend, S> {
-      /// Opens a read only WAL backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode with the given [`Checksumer`].
       ///
       /// # Example
       ///
@@ -836,7 +836,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Opens a read only allocator backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode with the given [`Checksumer`].
       ///
       /// # Example
       ///
@@ -871,7 +871,7 @@ macro_rules! impl_common_methods {
         )
       }
 
-      /// Creates a new allocator backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with given options and [`Checksumer`].
       ///
       /// # Example
       ///
@@ -902,7 +902,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Creates a new WAL backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Checksumer`].
       ///
       /// # Example
       ///
@@ -970,7 +970,7 @@ macro_rules! impl_common_methods {
         C: Comparator + CheapClone + $($ident + )? 'static,
         S: Checksumer,
     {
-      /// Opens a read only WAL backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode with the given [`Comparator`] and [`Checksumer`].
       ///
       /// # Example
       ///
@@ -1004,7 +1004,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Opens a read only allocator backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode with the given [`Comparator`] and [`Checksumer`].
       ///
       /// # Example
       ///
@@ -1043,7 +1043,7 @@ macro_rules! impl_common_methods {
           })
       }
 
-      /// Creates a new allocator backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with the given options, [`Comparator`] and [`Checksumer`].
       ///
       /// # Example
       ///
@@ -1076,7 +1076,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Creates a new WAL backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with the given options, [`Comparator`] and [`Checksumer`].
       ///
       /// # Example
       ///
@@ -1315,7 +1315,7 @@ macro_rules! impl_common_methods {
     where
       C: Comparator + CheapClone + $($ident + )? 'static,
     {
-      /// Opens a read only WAL backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode with the given [`Comparator`].
       ///
       /// # Example
       ///
@@ -1346,7 +1346,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Opens a read only allocator backed by a mmap with the given capacity.
+      /// Opens a write-ahead log backed by a file backed memory map in read-only mode with the given [`Comparator`].
       ///
       /// # Example
       ///
@@ -1381,7 +1381,7 @@ macro_rules! impl_common_methods {
         )
       }
 
-      /// Creates a new allocator backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Comparator`].
       ///
       /// # Example
       ///
@@ -1412,7 +1412,7 @@ macro_rules! impl_common_methods {
         .map_err(|e| e.unwrap_right())
       }
 
-      /// Creates a new WAL backed by a mmap with the given options.
+      /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Comparator`].
       ///
       /// # Example
       ///

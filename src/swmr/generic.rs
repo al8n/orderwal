@@ -1,126 +1,28 @@
-use core::{borrow::Borrow, cmp, marker::PhantomData, slice};
-use std::sync::Arc;
+use core::{cmp, marker::PhantomData, slice};
+use std::{
+  path::{Path, PathBuf},
+  sync::Arc,
+};
 
 use crossbeam_skiplist::{Comparable, Equivalent, SkipSet};
 use dbutils::{Checksumer, Crc32};
-use rarena_allocator::{either::Either, sync::Arena};
+use rarena_allocator::{
+  either::Either, sync::Arena, Allocator, ArenaPosition, MmapOptions, OpenOptions,
+};
 
-use crate::{Options, UnsafeCellChecksumer, KEY_LEN_SIZE, STATUS_SIZE, VALUE_LEN_SIZE};
+use crate::{
+  arena_options, entry_size, error::Error, Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE,
+  HEADER_SIZE, KEY_LEN_SIZE, MAGIC_TEXT, STATUS_SIZE, VALUE_LEN_SIZE,
+};
 
-/// The type trait for limiting the types that can be used as keys and values in the [`GenericOrderWal`].
-/// 
-/// This trait and its implementors can only be used with the [`GenericOrderWal`] type, otherwise
-/// the correctness of the implementations is not guaranteed.
-pub trait Type {
-  /// The reference type for the type.
-  type Ref<'a>;
-  /// The error type for encoding the type into a binary format.
-  type Error;
+mod entry;
+pub use entry::*;
 
-  /// Returns the length of the encoded type size.
-  fn encoded_len(&self) -> usize;
+mod traits;
+pub use traits::*;
 
-  /// Encodes the type into a binary slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error>;
-
-  /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
-  /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
-  fn from_slice(src: &[u8]) -> Self::Ref<'_>;
-}
-
-impl Type for () {
-  type Ref<'a> = ();
-  type Error = ();
-
-  fn encoded_len(&self) -> usize {
-    0
-  }
-
-  fn encode(&self, _buf: &mut [u8]) -> Result<(), Self::Error> {
-    Ok(())
-  }
-
-  fn from_slice(_src: &[u8]) -> Self::Ref<'_> {}
-}
-
-impl Type for String {
-  type Ref<'a> = &'a str;
-  type Error = ();
-
-  fn encoded_len(&self) -> usize {
-    self.len()
-  }
-
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-    buf.copy_from_slice(self.as_bytes());
-    Ok(())
-  }
-
-  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-    core::str::from_utf8(src).unwrap()
-  }
-}
-
-impl<'a> KeyRef<'a> for str {
-  type Key = String;
-
-  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-  where
-    Q: ?Sized + Ord + Comparable<Self>,
-  {
-    Comparable::compare(a, self).reverse()
-  }
-
-  fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering {
-    a.cmp(b)
-  }
-}
-
-impl Type for Vec<u8> {
-  type Ref<'a> = &'a [u8];
-  type Error = ();
-
-  fn encoded_len(&self) -> usize {
-    self.len()
-  }
-
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-    buf.copy_from_slice(self.as_slice());
-    Ok(())
-  }
-
-  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-    src
-  }
-}
-
-impl<'a> KeyRef<'a> for [u8] {
-  type Key = Vec<u8>;
-
-  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-  where
-    Q: ?Sized + Ord + Comparable<Self>,
-  {
-    Comparable::compare(a, self).reverse()
-  }
-
-  fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering {
-    a.cmp(b)
-  }
-}
-
-/// The key reference trait for comparing `K` in the [`GenericOrderWal`].
-pub trait KeyRef<'a>: Ord + Comparable<Self::Key> {
-  type Key: Type;
-
-  /// Compares with a type `Q` which can be borrowed from [`T::Ref`](Type::Ref).
-  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-  where
-    Q: ?Sized + Ord + Comparable<Self>;
-
-  /// Compares two binary formats of the `K` directly.
-  fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering;
-}
+#[cfg(test)]
+mod tests;
 
 struct Pointer<K, V> {
   /// The pointer to the start of the entry.
@@ -129,7 +31,7 @@ struct Pointer<K, V> {
   key_len: usize,
   /// The length of the value.
   value_len: usize,
-  
+
   cached_key: Option<K>,
   cached_value: Option<V>,
 }
@@ -145,7 +47,7 @@ impl<K: Type, V> Eq for Pointer<K, V> {}
 impl<K, V> PartialOrd for Pointer<K, V>
 where
   K: Type + Ord,
-  for<'a> K::Ref<'a>: KeyRef<'a, Key = K>,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
@@ -155,10 +57,10 @@ where
 impl<K, V> Ord for Pointer<K, V>
 where
   K: Type + Ord,
-  for<'a> K::Ref<'a>: KeyRef<'a, Key = K>,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
-    <K::Ref<'_> as KeyRef>::compare_binary(self.as_key_slice(), other.as_key_slice())
+    <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_key_slice(), other.as_key_slice())
   }
 }
 
@@ -233,11 +135,10 @@ impl<'a, K, Q: ?Sized> Ref<'a, K, Q> {
   }
 }
 
-
 impl<'a, K, Q, V> Equivalent<Pointer<K, V>> for Ref<'a, K, Q>
 where
   K: Type + Ord,
-  K::Ref<'a>: KeyRef<'a, Key = K>,
+  K::Ref<'a>: KeyRef<'a, K>,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
 {
   fn equivalent(&self, key: &Pointer<K, V>) -> bool {
@@ -248,7 +149,7 @@ where
 impl<'a, K, Q, V> Comparable<Pointer<K, V>> for Ref<'a, K, Q>
 where
   K: Type + Ord,
-  K::Ref<'a>: KeyRef<'a, Key = K>,
+  K::Ref<'a>: KeyRef<'a, K>,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
@@ -276,7 +177,7 @@ impl<'a, K, Q: ?Sized> Owned<'a, K, Q> {
 impl<'a, K, Q, V> Equivalent<Pointer<K, V>> for Owned<'a, K, Q>
 where
   K: Type + Ord,
-  K::Ref<'a>: KeyRef<'a, Key = K>,
+  K::Ref<'a>: KeyRef<'a, K>,
   Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
 {
   fn equivalent(&self, key: &Pointer<K, V>) -> bool {
@@ -287,14 +188,12 @@ where
 impl<'a, K, Q, V> Comparable<Pointer<K, V>> for Owned<'a, K, Q>
 where
   K: Type + Ord,
-  K::Ref<'a>: KeyRef<'a, Key = K>,
+  K::Ref<'a>: KeyRef<'a, K>,
   Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
     match p.cached_key.as_ref() {
-      Some(k) => {
-        Comparable::compare(self.key, k)
-      }
+      Some(k) => Comparable::compare(self.key, k),
       None => {
         let kr = K::from_slice(p.as_key_slice());
         KeyRef::compare(&kr, self.key).reverse()
@@ -310,10 +209,144 @@ struct GenericOrderWalCore<K, V, S> {
   cks: UnsafeCellChecksumer<S>,
 }
 
+impl<K, V, S> GenericOrderWalCore<K, V, S> {
+  #[inline]
+  fn new(arena: Arena, opts: Options, cks: S, flush: bool) -> Result<Self, Error> {
+    unsafe {
+      let slice = arena.reserved_slice_mut();
+      slice[0..6].copy_from_slice(&MAGIC_TEXT);
+      slice[6..8].copy_from_slice(&opts.magic_version.to_le_bytes());
+    }
+
+    if !flush {
+      return Ok(Self::construct(arena, SkipSet::new(), opts, cks));
+    }
+
+    arena
+      .flush_range(0, HEADER_SIZE)
+      .map(|_| Self::construct(arena, SkipSet::new(), opts, cks))
+      .map_err(Into::into)
+  }
+
+  #[inline]
+  fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>, opts: Options, checksumer: S) -> Self {
+    Self {
+      arena,
+      map: set,
+      opts,
+      cks: UnsafeCellChecksumer::new(checksumer),
+    }
+  }
+}
+
+impl<K, V, S> GenericOrderWalCore<K, V, S>
+where
+  K: Type + Ord + 'static,
+  for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
+  V: Type + 'static,
+  S: Checksumer,
+{
+  fn replay(arena: Arena, opts: Options, ro: bool, checksumer: S) -> Result<Self, Error> {
+    let slice = arena.reserved_slice();
+    let magic_text = &slice[0..6];
+    let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
+
+    if magic_text != MAGIC_TEXT {
+      return Err(Error::magic_text_mismatch());
+    }
+
+    if magic_version != opts.magic_version {
+      return Err(Error::magic_version_mismatch());
+    }
+
+    let map = SkipSet::new();
+
+    let mut cursor = arena.data_offset();
+    let allocated = arena.allocated();
+
+    loop {
+      unsafe {
+        // we reached the end of the arena, if we have any remaining, then if means two possibilities:
+        // 1. the remaining is a partial entry, but it does not be persisted to the disk, so following the write-ahead log principle, we should discard it.
+        // 2. our file may be corrupted, so we discard the remaining.
+        if cursor + STATUS_SIZE + KEY_LEN_SIZE + VALUE_LEN_SIZE > allocated {
+          if !ro && cursor < allocated {
+            arena.rewind(ArenaPosition::Start(cursor as u32));
+            arena.flush()?;
+          }
+
+          break;
+        }
+
+        let header = arena.get_bytes(cursor, STATUS_SIZE + KEY_LEN_SIZE);
+        let flag = Flags::from_bits_unchecked(header[0]);
+        let key_len = u32::from_le_bytes(header[1..5].try_into().unwrap()) as usize;
+
+        // Same as above, if we reached the end of the arena, we should discard the remaining.
+        if cursor + STATUS_SIZE + KEY_LEN_SIZE + key_len + VALUE_LEN_SIZE > allocated {
+          if !ro {
+            arena.rewind(ArenaPosition::Start(cursor as u32));
+            arena.flush()?;
+          }
+
+          break;
+        }
+
+        let value_len = u32::from_le_bytes(
+          arena
+            .get_bytes(
+              cursor + STATUS_SIZE + KEY_LEN_SIZE + key_len,
+              VALUE_LEN_SIZE,
+            )
+            .try_into()
+            .unwrap(),
+        ) as usize;
+
+        let elen = entry_size(key_len as u32, value_len as u32) as usize;
+        // Same as above, if we reached the end of the arena, we should discard the remaining.
+        if cursor + elen > allocated {
+          if !ro {
+            arena.rewind(ArenaPosition::Start(cursor as u32));
+            arena.flush()?;
+          }
+
+          break;
+        }
+
+        let cks = u64::from_le_bytes(
+          arena
+            .get_bytes(cursor + elen - CHECKSUM_SIZE, CHECKSUM_SIZE)
+            .try_into()
+            .unwrap(),
+        );
+
+        if cks != checksumer.checksum(arena.get_bytes(cursor, elen - CHECKSUM_SIZE)) {
+          return Err(Error::corrupted());
+        }
+
+        // If the entry is not committed, we should not rewind
+        if !flag.contains(Flags::COMMITTED) {
+          if !ro {
+            arena.rewind(ArenaPosition::Start(cursor as u32));
+            arena.flush()?;
+          }
+
+          break;
+        }
+
+        map.insert(Pointer::new(key_len, value_len, arena.get_pointer(cursor)));
+        cursor += elen;
+      }
+    }
+
+    Ok(Self::construct(arena, map, opts, checksumer))
+  }
+}
+
 /// Generic ordered write-ahead log implementation, which supports structured keys and values.
 pub struct GenericOrderWal<K, V, S = Crc32> {
   core: Arc<GenericOrderWalCore<K, V, S>>,
-  opts: Options,
+  ro: bool,
 }
 
 impl<K, V> GenericOrderWal<K, V> {
@@ -322,164 +355,256 @@ impl<K, V> GenericOrderWal<K, V> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::generic::{GenericOrderWal, Options};
+  /// use orderwal::{generic::GenericOrderWal, Options};
   ///
-  /// let wal = GenericOrderWal::new(Options::new(), 100).unwrap();
+  /// let wal = GenericOrderWal::new(Options::new()).unwrap();
   /// ```
+  #[inline]
   pub fn new(opts: Options) -> Self {
-    todo!()
+    Self::with_checksumer(opts, Crc32::default())
+  }
+
+  /// Creates a new in-memory write-ahead log backed by an anonymous memory map with the given options.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{generic::GenericOrderWal, Options};
+  ///
+  /// let wal = GenericOrderWal::map_anon(Options::new()).unwrap();
+  /// ```
+  #[inline]
+  pub fn map_anon(opts: Options) -> Result<Self, Error> {
+    Self::map_anon_with_checksumer(opts, Crc32::default())
   }
 }
 
 impl<K, V> GenericOrderWal<K, V>
 where
-  K: Type + Ord,
-  for<'a> K::Ref<'a>: KeyRef<'a, Key = K>,
-  V: Type,
+  K: Type + Ord + 'static,
+  for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
+  V: Type + 'static,
 {
-  fn get<'a, Q>(&self, key: &'a Q) -> Option<Either<&V, V::Ref<'_>>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
-  {
-    self.core.map.get::<Owned<K, Q>>(&Owned::new(key));
-    todo!()
+  /// Creates a new write-ahead log backed by a file backed memory map with the given options.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{generic::GenericOrderWal, Options, OpenOptions};
+  ///
+  /// ```
+  #[inline]
+  pub fn map_mut<P: AsRef<Path>>(
+    path: P,
+    opts: Options,
+    open_options: OpenOptions,
+  ) -> Result<Self, Error> {
+    Self::map_mut_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts, open_options)
+      .map_err(|e| e.unwrap_right())
   }
 
-  fn get_by_ref<Q>(&self, key: &Q) -> Option<Either<&V, V::Ref<'_>>>
+  /// Creates a new write-ahead log backed by a file backed memory map with the given options.
+  #[inline]
+  pub fn map_mut_with_path_builder<PB, E>(
+    pb: PB,
+    opts: Options,
+    open_options: OpenOptions,
+  ) -> Result<Self, Either<E, Error>>
   where
-    Q: ?Sized + Ord + for<'a> Comparable<K::Ref<'a>>,
+    PB: FnOnce() -> Result<PathBuf, E>,
   {
-    self.core.map.get::<Ref<K, Q>>(&Ref::new(key));
-    todo!()
+    Self::map_mut_with_path_builder_and_checksumer(pb, opts, open_options, Crc32::default())
+  }
+
+  /// Open a write-ahead log backed by a file backed memory map in read only mode.
+  #[inline]
+  pub fn map<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+    Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_err(|e| e.unwrap_right())
+  }
+
+  /// Open a write-ahead log backed by a file backed memory map in read only mode.
+  #[inline]
+  pub fn map_with_path_builder<PB, E>(pb: PB) -> Result<Self, Either<E, Error>>
+  where
+    PB: FnOnce() -> Result<PathBuf, E>,
+  {
+    Self::map_with_path_builder_and_checksumer(pb, Crc32::default())
   }
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
+impl<K, V, S> GenericOrderWal<K, V, S> {
+  /// Creates a new in-memory write-ahead log backed by an aligned vec with the given options and [`Checksumer`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{generic::GenericOrderWal, Options, Crc32};
+  ///
+  /// let wal = GenericOrderWal::with_checksumer(Options::new(), Crc32::default());
+  /// ```
+  pub fn with_checksumer(opts: Options, cks: S) -> Self {
+    let arena = Arena::new(arena_options().with_capacity(opts.cap));
 
-  #[derive(PartialEq, Eq, PartialOrd, Ord)]
-  struct Foo {
-    a: u32,
-    b: u64,
+    GenericOrderWalCore::new(arena, opts, cks, false)
+      .map(|core| Self::from_core(core, false))
+      .unwrap()
   }
 
-  struct FooRef<'a> {
-    data: &'a [u8],
+  /// Creates a new in-memory write-ahead log backed by an anonymous memory map with the given options and [`Checksumer`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{generic::GenericOrderWal, Options, Crc32};
+  ///
+  /// let wal = GenericOrderWal::map_anon_with_checksumer(Options::new(), Crc32::default()).unwrap();
+  /// ```
+  pub fn map_anon_with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
+    let arena = Arena::map_anon(arena_options(), MmapOptions::new().len(opts.cap))?;
+
+    GenericOrderWalCore::new(arena, opts, cks, true).map(|core| Self::from_core(core, false))
   }
 
-  impl<'a> PartialEq for FooRef<'a> {
-    fn eq(&self, other: &Self) -> bool {
-      self.data == other.data
+  #[inline]
+  fn from_core(core: GenericOrderWalCore<K, V, S>, ro: bool) -> Self {
+    Self {
+      core: Arc::new(core),
+      ro,
     }
   }
+}
 
-  impl<'a> Eq for FooRef<'a> {}
-
-  impl<'a> PartialOrd for FooRef<'a> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-      Some(self.cmp(other))
-    }
+impl<K, V, S> GenericOrderWal<K, V, S>
+where
+  K: Type + Ord + 'static,
+  for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
+  V: Type + 'static,
+  S: Checksumer,
+{
+  /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Checksumer`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{generic::GenericOrderWal, Options, OpenOptions, Crc32};
+  ///
+  /// ```
+  #[inline]
+  pub fn map_mut_with_checksumer<P: AsRef<Path>>(
+    path: P,
+    opts: Options,
+    open_options: OpenOptions,
+    cks: S,
+  ) -> Result<Self, Error> {
+    Self::map_mut_with_path_builder_and_checksumer::<_, ()>(
+      || Ok(path.as_ref().to_path_buf()),
+      opts,
+      open_options,
+      cks,
+    )
+    .map_err(|e| e.unwrap_right())
   }
 
-  impl<'a> Ord for FooRef<'a> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-      let a = u32::from_le_bytes(self.data[0..4].try_into().unwrap());
-      let b = u64::from_le_bytes(self.data[4..12].try_into().unwrap());
-      let other_a = u32::from_le_bytes(other.data[0..4].try_into().unwrap());
-      let other_b = u64::from_le_bytes(other.data[4..12].try_into().unwrap());
-
-      Foo { a, b }.cmp(&Foo { a: other_a, b: other_b })
-    }
-  }
-
-  impl Equivalent<Foo> for FooRef<'_> {
-    fn equivalent(&self, key: &Foo) -> bool {
-        let a = u32::from_be_bytes(self.data[..8].try_into().unwrap());
-        let b = u64::from_be_bytes(self.data[8..].try_into().unwrap());
-        a == key.a && b == key.b
-    }
-  }
-
-  impl Comparable<Foo> for FooRef<'_> {
-    fn compare(&self, key: &Foo) -> std::cmp::Ordering {
-        let a = u32::from_be_bytes(self.data[..8].try_into().unwrap());
-        let b = u64::from_be_bytes(self.data[8..].try_into().unwrap());
-        Foo { a, b }.cmp(key)
-    }
-  }
-
-  impl Equivalent<FooRef<'_>> for Foo {
-    fn equivalent(&self, key: &FooRef<'_>) -> bool {
-        let a = u32::from_be_bytes(key.data[..8].try_into().unwrap());
-        let b = u64::from_be_bytes(key.data[8..].try_into().unwrap());
-        self.a == a && self.b == b
-    }
-  }
-
-  impl Comparable<FooRef<'_>> for Foo {
-    fn compare(&self, key: &FooRef<'_>) -> std::cmp::Ordering {
-        let a = u32::from_be_bytes(key.data[..8].try_into().unwrap());
-        let b = u64::from_be_bytes(key.data[8..].try_into().unwrap());
-        self.cmp(&Foo { a, b })
-    }
-  }
-
-  impl<'a> KeyRef<'a> for FooRef<'a>
+  /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Checksumer`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{generic::GenericOrderWal, Options, OpenOptions, Crc32};
+  ///
+  /// ```
+  pub fn map_mut_with_path_builder_and_checksumer<PB, E>(
+    path_builder: PB,
+    opts: Options,
+    open_options: OpenOptions,
+    cks: S,
+  ) -> Result<Self, Either<E, Error>>
+  where
+    PB: FnOnce() -> Result<PathBuf, E>,
   {
-    type Key = Foo;
+    let path = path_builder().map_err(Either::Left)?;
+    let exist = path.exists();
+    let arena = Arena::map_mut_with_path_builder(
+      || Ok(path),
+      arena_options(),
+      open_options,
+      MmapOptions::new(),
+    )
+    .map_err(|e| e.map_right(Into::into))?;
 
-    fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-    where
-      Q: ?Sized + Ord + Comparable<Self> {
-      Comparable::compare(a, self)
+    if !exist {
+      return GenericOrderWalCore::new(arena, opts, cks, true)
+        .map(|core| Self::from_core(core, false))
+        .map_err(Either::Right);
     }
-  
-    fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
-      let a = u32::from_le_bytes(this[0..4].try_into().unwrap());
-      let b = u64::from_le_bytes(this[4..12].try_into().unwrap());
-      let other_a = u32::from_le_bytes(other[0..4].try_into().unwrap());
-      let other_b = u64::from_le_bytes(other[4..12].try_into().unwrap());
 
-      Foo { a, b }.cmp(&Foo { a: other_a, b: other_b })
-    }
+    GenericOrderWalCore::replay(arena, opts, false, cks)
+      .map(|core| Self::from_core(core, false))
+      .map_err(Either::Right)
   }
 
-  impl Type for Foo {
-    type Ref<'a> = FooRef<'a>;
-    type Error = ();
-
-    fn encoded_len(&self) -> usize {
-      12
-    }
-
-    fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-      buf[0..4].copy_from_slice(&self.a.to_le_bytes());
-      buf[4..12].copy_from_slice(&self.b.to_le_bytes());
-      Ok(())
-    }
-
-    fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-      FooRef { data: src }
-    }
+  /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
+  #[inline]
+  pub fn map_with_checksumer<P: AsRef<Path>>(path: P, cks: S) -> Result<Self, Error> {
+    Self::map_with_path_builder_and_checksumer::<_, ()>(|| Ok(path.as_ref().to_path_buf()), cks)
+      .map_err(|e| e.unwrap_right())
   }
 
-  impl<'a> Borrow<[u8]> for FooRef<'a> {
-    fn borrow(&self) -> &[u8] {
-      self.data
-    }
+  /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
+  #[inline]
+  pub fn map_with_path_builder_and_checksumer<PB, E>(
+    path_builder: PB,
+    cks: S,
+  ) -> Result<Self, Either<E, Error>>
+  where
+    PB: FnOnce() -> Result<PathBuf, E>,
+  {
+    let open_options = OpenOptions::default().read(true);
+    let arena = Arena::map_with_path_builder(
+      path_builder,
+      arena_options(),
+      open_options,
+      MmapOptions::new(),
+    )
+    .map_err(|e| e.map_right(Into::into))?;
+
+    GenericOrderWalCore::replay(arena, Options::new(), true, cks)
+      .map(|core| Self::from_core(core, true))
+      .map_err(Either::Right)
+  }
+}
+
+impl<K, V, S> GenericOrderWal<K, V, S>
+where
+  K: Type + Ord,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: Type,
+  S: Checksumer,
+{
+  /// Gets the value associated with the key.
+  #[inline]
+  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self
+      .core
+      .map
+      .get::<Owned<K, Q>>(&Owned::new(key))
+      .map(EntryRef::new)
   }
 
-  #[test]
-  fn generic_order_wal_flexible_lookup() {
-    let wal = GenericOrderWal::<Foo, ()>::new(Options::new().with_capacity(1000));
-    assert!(wal.get(&FooRef {
-      data: &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    }).is_none());
-    assert!(wal.get(&Foo {
-      a: 0,
-      b: 0,
-    }).is_none());
-    assert!(wal.get_by_ref([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].as_slice()).is_none());
+  /// Gets the value associated with the key.
+  #[inline]
+  pub fn get_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self
+      .core
+      .map
+      .get::<Ref<K, Q>>(&Ref::new(key))
+      .map(EntryRef::new)
   }
 }

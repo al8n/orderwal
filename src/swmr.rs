@@ -1,4 +1,3 @@
-
 mod wal;
 pub use wal::OrderWal;
 
