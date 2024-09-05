@@ -49,9 +49,6 @@ pub mod iter;
 mod buffer;
 pub use buffer::*;
 
-/// Generic order WAL implementation, which supports structured keys and values.
-pub mod generic;
-
 bitflags::bitflags! {
   /// The flags of the entry.
   struct Flags: u8 {
@@ -178,14 +175,20 @@ where
 }
 
 /// Options for the WAL.
+#[derive(Debug, Clone)]
 pub struct Options {
   maximum_key_size: u32,
   maximum_value_size: u32,
   sync_on_write: bool,
+  cache_key: bool,
+  cache_value: bool,
   magic_version: u16,
+  huge: Option<u8>,
+  cap: u32,
 }
 
 impl Default for Options {
+  #[inline]
   fn default() -> Self {
     Self::new()
   }
@@ -193,13 +196,28 @@ impl Default for Options {
 
 impl Options {
   /// Create a new `Options` instance.
+  /// 
+  /// 
+  /// # Example
+  /// 
+  /// **Note:** If you are creating in-memory WAL, then you must specify the capacity.
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_capacity(1024 * 1024 * 8); // 8MB in-memory WAL
+  /// ```
   #[inline]
   pub const fn new() -> Self {
     Self {
       maximum_key_size: u16::MAX as u32,
       maximum_value_size: u32::MAX,
       sync_on_write: true,
+      cache_key: false,
+      cache_value: false,
       magic_version: 0,
+      huge: None,
+      cap: 0,
     }
   }
 
@@ -218,6 +236,23 @@ impl Options {
   #[inline]
   pub const fn magic_version(&self) -> u16 {
     self.magic_version
+  }
+
+  /// Returns the capacity of the WAL.
+  /// 
+  /// The default value is `0`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_capacity(100);
+  /// assert_eq!(options.capacity(), 100);
+  /// ```
+  #[inline]
+  pub const fn capacity(&self) -> u32 {
+    self.cap
   }
 
   /// Returns the maximum key length.
@@ -271,6 +306,87 @@ impl Options {
     self.sync_on_write
   }
 
+  /// Returns `true`, when inserting an new entry, the owned `K` will be cached in memory.
+  /// 
+  /// The default value is `false`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new();
+  /// assert_eq!(options.cache_key(), false);
+  /// ```
+  #[inline]
+  pub const fn cache_key(&self) -> bool {
+    self.cache_key
+  }
+
+  /// Returns `true`, when inserting an new entry, the owned `V` will be cached in memory.
+  /// 
+  /// The default value is `false`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new();
+  /// assert_eq!(options.cache_value(), false);
+  /// ```
+  #[inline]
+  pub const fn cache_value(&self) -> bool {
+    self.cache_value
+  }
+
+  /// Returns the bits of the page size.
+  /// 
+  /// Configures the anonymous memory map to be allocated using huge pages.
+  ///
+  /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
+  ///
+  /// The size of the requested page can be specified in page bits.
+  /// If not provided, the system default is requested.
+  /// The requested length should be a multiple of this, or the mapping will fail.
+  ///
+  /// This option has no effect on file-backed memory maps.
+  ///
+  /// The default value is `None`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_huge(Some(12));
+  /// assert_eq!(options.huge(), Some(12));
+  /// ```
+  #[inline]
+  pub const fn huge(&self) -> Option<u8> {
+    self.huge
+  }
+
+  /// Sets the capacity of the WAL.
+  /// 
+  /// This configuration will be ignored when using file-backed memory maps.
+  /// 
+  /// The default value is `0`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_capacity(100);
+  /// assert_eq!(options.capacity(), 100);
+  /// ```
+  #[inline]
+  pub const fn with_capacity(mut self, cap: u32) -> Self {
+    self.cap = cap;
+    self
+  }
+
   /// Sets the maximum key length.
   ///
   /// # Example
@@ -300,6 +416,74 @@ impl Options {
   #[inline]
   pub const fn with_maximum_value_size(mut self, size: u32) -> Self {
     self.maximum_value_size = size;
+    self
+  }
+
+  /// Sets the cache key to `true`, when inserting an new entry, the owned version `K` will be cached in memory.
+  /// 
+  /// Only useful when using [`GenericOrderWal`](swmr::GenericOrderWal).
+  /// 
+  /// The default value is `false`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_cache_key(true);
+  /// assert_eq!(options.cache_key(), true);
+  /// ```
+  #[inline]
+  pub const fn with_cache_key(mut self, cache: bool) -> Self {
+    self.cache_key = cache;
+    self
+  }
+
+  /// Sets the cache value to `true`, when inserting an new entry, the owned version `V` will be cached in memory.
+  /// 
+  /// Only useful when using [`GenericOrderWal`](swmr::GenericOrderWal).
+  /// 
+  /// The default value is `false`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_cache_value(true);
+  /// assert_eq!(options.cache_value(), true);
+  /// ```
+  #[inline]
+  pub const fn with_cache_value(mut self, cache: bool) -> Self {
+    self.cache_value = cache;
+    self
+  }
+
+  /// Returns the bits of the page size.
+  /// 
+  /// Configures the anonymous memory map to be allocated using huge pages.
+  ///
+  /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
+  ///
+  /// The size of the requested page can be specified in page bits.
+  /// If not provided, the system default is requested.
+  /// The requested length should be a multiple of this, or the mapping will fail.
+  ///
+  /// This option has no effect on file-backed memory maps.
+  ///
+  /// The default value is `None`.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use orderwal::Options;
+  /// 
+  /// let options = Options::new().with_huge(64);
+  /// assert_eq!(options.huge(), Some(64));
+  /// ```
+  #[inline]
+  pub const fn with_huge(mut self, page_bits: u8) -> Self {
+    self.huge = Some(page_bits);
     self
   }
 
@@ -381,8 +565,8 @@ macro_rules! impl_common_methods {
       /// let wal = OrderWal::new(Options::new(), 100).unwrap();
       /// ```
       #[inline]
-      pub fn new(opts: Options, cap: u32) -> Result<Self, Error> {
-        Self::with_comparator_and_checksumer(cap, opts, Ascend, Crc32::default())
+      pub fn new(opts: Options) -> Result<Self, Error> {
+        Self::with_comparator_and_checksumer(opts, Ascend, Crc32::default())
       }
 
       /// Creates a new in-memory write-ahead log but backed by an anonymous mmap with the given capacity.
@@ -395,8 +579,8 @@ macro_rules! impl_common_methods {
       /// let mmap_options = MmapOptions::new().len(100);
       /// let wal = OrderWal::map_anon(Options::new(), mmap_options).unwrap();
       /// ```
-      pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> Result<Self, Error> {
-        Self::map_anon_with_comparator_and_checksumer(opts, mmap_options, Ascend, Crc32::default())
+      pub fn map_anon(opts: Options) -> Result<Self, Error> {
+        Self::map_anon_with_comparator_and_checksumer(opts, Ascend, Crc32::default())
       }
 
       /// Opens a read only WAL backed by a mmap with the given capacity.
@@ -421,11 +605,8 @@ macro_rules! impl_common_methods {
       ///
       /// # std::fs::remove_file(path);
       /// ```
-      pub fn map<P: AsRef<std::path::Path>>(
-        path: P,
-        mmap_options: MmapOptions,
-      ) -> Result<Self, error::Error> {
-        Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), mmap_options)
+      pub fn map<P: AsRef<std::path::Path>>(path: P) -> Result<Self, error::Error> {
+        Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()))
           .map_err(|e| e.unwrap_right())
       }
 
@@ -454,14 +635,12 @@ macro_rules! impl_common_methods {
       #[inline]
       pub fn map_with_path_builder<PB, E>(
         path_builder: PB,
-        mmap_options: MmapOptions,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
         PB: FnOnce() -> Result<std::path::PathBuf, E>,
       {
         Self::map_with_path_builder_and_comparator_and_checksumer(
           path_builder,
-          mmap_options,
           Ascend,
           Crc32::default(),
         )
@@ -472,14 +651,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let arena = OrderWal::map_mut(&path, Options::new(), open_options).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -488,13 +666,11 @@ macro_rules! impl_common_methods {
         path: P,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
       ) -> Result<Self, error::Error> {
         Self::map_mut_with_path_builder::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
           opts,
           open_options,
-          mmap_options,
         )
         .map_err(|e| e.unwrap_right())
       }
@@ -504,14 +680,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let wal = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), Options::new(), open_options).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -520,7 +695,6 @@ macro_rules! impl_common_methods {
         path_builder: PB,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
         PB: FnOnce() -> Result<std::path::PathBuf, E>,
@@ -529,31 +703,29 @@ macro_rules! impl_common_methods {
           path_builder,
           opts,
           open_options,
-          mmap_options,
           Ascend,
           Crc32::default(),
         )
       }
     }
   };
-  (<C, S>) => {
+  ($prefix:ident <C, S>) => {
     impl<C, S> OrderWal<C, S> {
       /// Creates a new in-memory write-ahead log backed by an aligned vec with the given [`Comparator`], [`Checksumer`] and capacity.
       ///
       /// # Example
       ///
-      /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options};
+      /// ```rust 
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Descend, Crc32};")]
       ///
       /// let wal = OrderWal::new(ArenaOptions::new(), mmap_options).unwrap();
       /// ```
       pub fn with_comparator_and_checksumer(
-        cap: u32,
         opts: Options,
         cmp: C,
         cks: S,
       ) -> Result<Self, Error> {
-        let arena = Arena::new(arena_options().with_capacity(cap));
+        let arena = Arena::new(arena_options().with_capacity(opts.cap));
         OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
       }
 
@@ -562,18 +734,17 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Descend, Crc32};")]
       ///
-      /// let mmap_options = MmapOptions::new().len(100);
-      /// let arena = Arena::map_anon(ArenaOptions::new(), mmap_options).unwrap();
+      /// let arena = OrderWal::map_anon_with_comparator_and_checksumer(Options::new(), Descend, Crc32::default()).unwrap();
       /// ```
       pub fn map_anon_with_comparator_and_checksumer(
-        opts: Options,
-        mmap_options: MmapOptions,
+        opts: Options, 
         cmp: C,
         cks: S,
       ) -> Result<Self, Error> {
-        Arena::map_anon(arena_options(), mmap_options)
+        let mmap_opts = MmapOptions::new().len(opts.cap).huge(opts.huge);
+        Arena::map_anon(arena_options(), mmap_opts)
           .map_err(Into::into)
           .and_then(|arena| {
             OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
@@ -639,7 +810,7 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
@@ -650,20 +821,16 @@ macro_rules! impl_common_methods {
       ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
       /// # }
       ///
-      /// let open_options = OpenOptions::default().read(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      /// let arena = OrderWal::map(&path, Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
       pub fn map_with_checksumer<P: AsRef<std::path::Path>>(
         path: P,
-        mmap_options: MmapOptions,
         cks: S,
       ) -> Result<Self, error::Error> {
         Self::map_with_path_builder_and_checksumer::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
-          mmap_options,
           cks,
         )
         .map_err(|e| e.unwrap_right())
@@ -674,7 +841,7 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
@@ -685,16 +852,13 @@ macro_rules! impl_common_methods {
       ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
       /// # }
       ///
-      /// let open_options = OpenOptions::default().read(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
       #[inline]
       pub fn map_with_path_builder_and_checksumer<PB, E>(
         path_builder: PB,
-        mmap_options: MmapOptions,
         cks: S,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
@@ -702,7 +866,6 @@ macro_rules! impl_common_methods {
       {
         Self::map_with_path_builder_and_comparator_and_checksumer(
           path_builder,
-          mmap_options,
           Ascend,
           cks,
         )
@@ -713,14 +876,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let wal = OrderWal::map_mut_with_checksumer(&path, Options::new(), open_options, Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -729,14 +891,12 @@ macro_rules! impl_common_methods {
         path: P,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
         cks: S,
       ) -> Result<Self, error::Error> {
         Self::map_mut_with_path_builder_and_checksumer::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
           opts,
           open_options,
-          mmap_options,
           cks,
         )
         .map_err(|e| e.unwrap_right())
@@ -747,14 +907,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, OpenOptions, Descend, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let arena = OrderWal::map_mut_with_path_builder_and_checksumer::<_, std::io::Error>(|| Ok(path.to_path_buf()), Options::new(), open_options, Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -763,7 +922,6 @@ macro_rules! impl_common_methods {
         path_builder: PB,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
         cks: S,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
@@ -773,7 +931,6 @@ macro_rules! impl_common_methods {
           path_builder,
           opts,
           open_options,
-          mmap_options,
           Ascend,
           cks,
         )
@@ -819,6 +976,7 @@ macro_rules! impl_common_methods {
       ///
       /// ```rust
       /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Descend, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
@@ -829,21 +987,17 @@ macro_rules! impl_common_methods {
       ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
       /// # }
       ///
-      /// let open_options = OpenOptions::default().read(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      /// let wal = OrderWal::map(&path, Decend, Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
       pub fn map_with_comparator_and_checksumer<P: AsRef<std::path::Path>>(
         path: P,
-        mmap_options: MmapOptions,
         cmp: C,
         cks: S,
       ) -> Result<Self, error::Error> {
         Self::map_with_path_builder_and_comparator_and_checksumer::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
-          mmap_options,
           cmp,
           cks,
         )
@@ -855,7 +1009,7 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Descend, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
@@ -866,15 +1020,12 @@ macro_rules! impl_common_methods {
       ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
       /// # }
       ///
-      /// let open_options = OpenOptions::default().read(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let wal = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), Descend, Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
       pub fn map_with_path_builder_and_comparator_and_checksumer<PB, E>(
         path_builder: PB,
-        mmap_options: MmapOptions,
         cmp: C,
         cks: S,
       ) -> Result<Self, either::Either<E, error::Error>>
@@ -883,7 +1034,7 @@ macro_rules! impl_common_methods {
       {
         let open_options = OpenOptions::default().read(true);
 
-        Arena::map_with_path_builder(path_builder, arena_options(), open_options, mmap_options)
+        Arena::map_with_path_builder(path_builder, arena_options(), open_options, MmapOptions::new())
           .map_err(|e| e.map_right(Into::into))
           .and_then(|arena| {
             OrderWalCore::replay(arena, Options::new(), true, cmp, cks)
@@ -897,14 +1048,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, OpenOptions, Descend, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let wal = OrderWal::map_mut(&path, Options::new(), open_options).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -913,7 +1063,6 @@ macro_rules! impl_common_methods {
         path: P,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
         cmp: C,
         cks: S,
       ) -> Result<Self, error::Error> {
@@ -921,7 +1070,6 @@ macro_rules! impl_common_methods {
           || Ok(path.as_ref().to_path_buf()),
           opts,
           open_options,
-          mmap_options,
           cmp,
           cks,
         )
@@ -933,14 +1081,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, OpenOptions, Descend, Crc32};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let wal = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), Options::new(), open_options, Descend, Crc32::default()).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -948,7 +1095,6 @@ macro_rules! impl_common_methods {
         path_builder: PB,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
         cmp: C,
         cks: S,
       ) -> Result<Self, either::Either<E, error::Error>>
@@ -959,7 +1105,7 @@ macro_rules! impl_common_methods {
 
         let exist = path.exists();
 
-        Arena::map_mut(path, arena_options(), open_options, mmap_options)
+        Arena::map_mut(path, arena_options(), open_options, MmapOptions::new())
           .map_err(Into::into)
           .and_then(|arena| {
             if !exist {
@@ -1174,7 +1320,7 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Descend};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
@@ -1185,20 +1331,16 @@ macro_rules! impl_common_methods {
       ///   # let arena = OrderWal::map_mut(&path, Options::new(), open_options, mmap_options).unwrap();
       /// # }
       ///
-      /// let open_options = OpenOptions::default().read(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map(&path, open_options, mmap_options).unwrap();
+      /// let arena = OrderWal::map(&path, Descend).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
       pub fn map_with_comparator<P: AsRef<std::path::Path>>(
         path: P,
-        mmap_options: MmapOptions,
         cmp: C,
       ) -> Result<Self, error::Error> {
         Self::map_with_path_builder_and_comparator::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
-          mmap_options,
           cmp,
         )
         .map_err(|e| e.unwrap_right())
@@ -1209,7 +1351,7 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use rarena_allocator::{sync::Arena, Allocator, ArenaOptions, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Descend};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
@@ -1220,16 +1362,13 @@ macro_rules! impl_common_methods {
       ///   # let arena = Arena::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
       /// # }
       ///
-      /// let open_options = OpenOptions::default().read(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let arena = Arena::map_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), Descend).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
       #[inline]
       pub fn map_with_path_builder_and_comparator<PB, E>(
         path_builder: PB,
-        mmap_options: MmapOptions,
         cmp: C,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
@@ -1237,7 +1376,6 @@ macro_rules! impl_common_methods {
       {
         Self::map_with_path_builder_and_comparator_and_checksumer(
           path_builder,
-          mmap_options,
           cmp,
           Crc32::default(),
         )
@@ -1248,14 +1386,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, MmapOptions, Options, OpenOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Descend};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut(&path, ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let wal = OrderWal::map_mut(&path, Options::new(), open_options).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -1264,14 +1401,12 @@ macro_rules! impl_common_methods {
         path: P,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
         cmp: C,
       ) -> Result<Self, error::Error> {
         Self::map_mut_with_path_builder_and_comparator::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
           opts,
           open_options,
-          mmap_options,
           cmp,
         )
         .map_err(|e| e.unwrap_right())
@@ -1282,14 +1417,13 @@ macro_rules! impl_common_methods {
       /// # Example
       ///
       /// ```rust
-      /// use orderwal::{swmr::OrderWal, Options, Allocator, OpenOptions, MmapOptions};
+      #[doc = concat!("use orderwal::{", stringify!($prefix), "::OrderWal, Options, Descend};")]
       ///
       /// # let path = tempfile::NamedTempFile::new().unwrap().into_temp_path();
       /// # std::fs::remove_file(&path);
       ///
       /// let open_options = OpenOptions::default().create_new(Some(100)).read(true).write(true);
-      /// let mmap_options = MmapOptions::new();
-      /// let arena = OrderWal::map_mut_with_path_builder::<_, std::io::Error>(|| Ok(path.to_path_buf()), ArenaOptions::new(), open_options, mmap_options).unwrap();
+      /// let arena = OrderWal::map_mut_with_path_builder_and_comparator::<_, std::io::Error>(|| Ok(path.to_path_buf()), Options::new(), open_options, Descend).unwrap();
       ///
       /// # std::fs::remove_file(path);
       /// ```
@@ -1298,7 +1432,6 @@ macro_rules! impl_common_methods {
         path_builder: PB,
         opts: Options,
         open_options: OpenOptions,
-        mmap_options: MmapOptions,
         cmp: C,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
@@ -1308,7 +1441,6 @@ macro_rules! impl_common_methods {
           path_builder,
           opts,
           open_options,
-          mmap_options,
           cmp,
           Crc32::default(),
         )
@@ -1325,14 +1457,14 @@ macro_rules! impl_common_methods {
 
       #[test]
       fn test_construct_inmemory() {
-        let mut wal = OrderWal::new(Options::new(), MB as u32).unwrap();
+        let mut wal = OrderWal::new(Options::new().with_capacity(MB as u32)).unwrap();
         let wal = &mut wal;
         wal.insert(b"key1", b"value1").unwrap();
       }
 
       #[test]
       fn test_construct_map_anon() {
-        let mut wal = OrderWal::map_anon(Options::new(), MmapOptions::new().len(MB as u32)).unwrap();
+        let mut wal = OrderWal::map_anon(Options::new().with_capacity(MB as u32)).unwrap();
         let wal = &mut wal;
         wal.insert(b"key1", b"value1").unwrap();
       }
@@ -1351,7 +1483,6 @@ macro_rules! impl_common_methods {
               .create_new(Some(MB as u32))
               .write(true)
               .read(true),
-            MmapOptions::new(),
           )
           .unwrap();
 
@@ -1359,7 +1490,7 @@ macro_rules! impl_common_methods {
           wal.insert(b"key1", b"value1").unwrap();
         }
 
-        let wal = OrderWal::map(&path, MmapOptions::new()).unwrap();
+        let wal = OrderWal::map(&path).unwrap();
         assert_eq!(wal.get(b"key1").unwrap(), b"value1");
       }
     }
