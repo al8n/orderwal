@@ -4,6 +4,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
+#![allow(clippy::type_complexity)]
 
 use core::{borrow::Borrow, cmp, marker::PhantomData, mem, slice};
 
@@ -1302,6 +1303,7 @@ macro_rules! impl_common_methods {
               ));
               Ok(())
             }
+
           }
         }
       }

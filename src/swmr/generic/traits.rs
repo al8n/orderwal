@@ -1,6 +1,7 @@
 use core::cmp;
 
 use crossbeam_skiplist::Comparable;
+use rarena_allocator::either::Either;
 
 mod impls;
 
@@ -24,6 +25,52 @@ pub trait Type {
   /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
   /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
   fn from_slice(src: &[u8]) -> Self::Ref<'_>;
+}
+
+impl<T: Type> Type for Either<T, &T> {
+  type Ref<'a> = T::Ref<'a>;
+  type Error = T::Error;
+
+  fn encoded_len(&self) -> usize {
+    match self {
+      Either::Left(t) => t.encoded_len(),
+      Either::Right(t) => t.encoded_len(),
+    }
+  }
+
+  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    match self {
+      Either::Left(t) => t.encode(buf),
+      Either::Right(t) => t.encode(buf),
+    }
+  }
+
+  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
+    T::from_slice(src)
+  }
+}
+
+impl<T: Type> Type for Either<&T, T> {
+  type Ref<'a> = T::Ref<'a>;
+  type Error = T::Error;
+
+  fn encoded_len(&self) -> usize {
+    match self {
+      Either::Left(t) => t.encoded_len(),
+      Either::Right(t) => t.encoded_len(),
+    }
+  }
+
+  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    match self {
+      Either::Left(t) => t.encode(buf),
+      Either::Right(t) => t.encode(buf),
+    }
+  }
+
+  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
+    T::from_slice(src)
+  }
 }
 
 /// The key reference trait for comparing `K` in the [`GenericOrderWal`].

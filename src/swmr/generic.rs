@@ -4,15 +4,19 @@ use std::{
   sync::Arc,
 };
 
+use among::Among;
 use crossbeam_skiplist::{Comparable, Equivalent, SkipSet};
 use dbutils::{Checksumer, Crc32};
 use rarena_allocator::{
-  either::Either, sync::Arena, Allocator, ArenaPosition, MmapOptions, OpenOptions,
+  either::Either, sync::Arena, Allocator, ArenaPosition, Error as ArenaError, Memory, MmapOptions,
+  OpenOptions,
 };
 
 use crate::{
-  arena_options, entry_size, error::Error, Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE,
-  HEADER_SIZE, KEY_LEN_SIZE, MAGIC_TEXT, STATUS_SIZE, VALUE_LEN_SIZE,
+  arena_options, entry_size,
+  error::{self, Error},
+  Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE, HEADER_SIZE, KEY_LEN_SIZE, MAGIC_TEXT,
+  STATUS_SIZE, VALUE_LEN_SIZE,
 };
 
 mod entry;
@@ -344,9 +348,20 @@ where
 }
 
 /// Generic ordered write-ahead log implementation, which supports structured keys and values.
+///
+/// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
 pub struct GenericOrderWal<K, V, S = Crc32> {
   core: Arc<GenericOrderWalCore<K, V, S>>,
   ro: bool,
+}
+
+impl<K, V, S> Clone for GenericOrderWal<K, V, S> {
+  fn clone(&self) -> Self {
+    Self {
+      core: self.core.clone(),
+      ro: true,
+    }
+  }
 }
 
 impl<K, V> GenericOrderWal<K, V> {
@@ -580,7 +595,6 @@ where
   K: Type + Ord,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: Type,
-  S: Checksumer,
 {
   /// Gets the value associated with the key.
   #[inline]
@@ -606,5 +620,178 @@ where
       .map
       .get::<Ref<K, Q>>(&Ref::new(key))
       .map(EntryRef::new)
+  }
+}
+
+impl<K, V, S> GenericOrderWal<K, V, S>
+where
+  K: Type + Ord + for<'a> Comparable<K::Ref<'a>> + 'static,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: Type + 'static,
+  S: Checksumer,
+{
+  /// Gets or insert the key value pair.
+  #[inline]
+  pub fn get_or_insert(
+    &self,
+    key: K,
+    value: V,
+  ) -> Option<Either<EntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>>> {
+    let ent = self
+      .core
+      .map
+      .get(&Owned::new(&key))
+      .map(|e| Either::Left(EntryRef::new(e)));
+
+    match ent {
+      Some(e) => Some(e),
+      None => {
+        let p = self.insert_in(Either::Left(key), Either::Left(value));
+        Some(Either::Right(p))
+      }
+    }
+  }
+
+  /// Gets or insert the key value pair.
+  #[inline]
+  pub fn get_or_insert_refs<'a, 'b: 'a>(
+    &'a self,
+    key: &'b K,
+    value: &'b V,
+  ) -> Option<Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>>> {
+    let ent = self
+      .core
+      .map
+      .get(&Ref::new(key))
+      .map(|e| Either::Left(EntryRef::new(e)));
+
+    match ent {
+      Some(e) => Some(e),
+      None => {
+        let p = self.insert_in(Either::Right(key), Either::Right(value));
+        Some(Either::Right(p))
+      }
+    }
+  }
+}
+
+impl<K, V, S> GenericOrderWal<K, V, S>
+where
+  K: Type + Ord + 'static,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: Type + 'static,
+  S: Checksumer,
+{
+  /// Inserts a key-value pair into the write-ahead log. If `cache_key` or `cache_value` is enabled, the key or value will be cached
+  /// in memory for faster access.
+  ///
+  /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
+  ///
+  /// See also [`insert_refs`](GenericOrderWal::insert_refs).
+  #[inline]
+  pub fn insert(&self, key: K, val: V) -> Result<(), Among<K::Error, V::Error, Error>> {
+    self.insert_in(Either::Left(key), Either::Left(val))
+  }
+
+  /// Inserts a key-value pair into the write-ahead log.
+  ///
+  /// Not like [`insert`](GenericOrderWal::insert), this method does not cache the key or value in memory even if the `cache_key` or `cache_value` is enabled.
+  ///
+  /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
+  ///
+  /// See also [`insert`](GenericOrderWal::insert), [`get_or_insert`](GenericOrderWal::get_or_insert) and [`get_or_insert_ref`](GenericOrderWal::get_or_insert_ref).
+  #[inline]
+  pub fn insert_refs(&self, key: &K, val: &V) -> Result<(), Among<K::Error, V::Error, Error>> {
+    self.insert_in(Either::Right(key), Either::Right(val))
+  }
+
+  fn insert_in(
+    &self,
+    key: Either<K, &K>,
+    val: Either<V, &V>,
+  ) -> Result<(), Among<K::Error, V::Error, Error>> {
+    if self.ro {
+      return Err(Among::Right(Error::read_only()));
+    }
+
+    let klen = key.encoded_len();
+    let vlen = val.encoded_len();
+
+    let elen = entry_size(klen as u32, vlen as u32) as usize;
+
+    let buf = self.core.arena.alloc_bytes(elen as u32);
+
+    match buf {
+      Err(e) => {
+        let e = match e {
+          ArenaError::InsufficientSpace {
+            requested,
+            available,
+          } => error::Error::insufficient_space(requested, available),
+          ArenaError::ReadOnly => error::Error::read_only(),
+          ArenaError::LargerThanPageSize { .. } => unreachable!(),
+        };
+        Err(Among::Right(e))
+      }
+      Ok(mut buf) => {
+        unsafe {
+          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
+          let flag = Flags::COMMITTED.bits();
+
+          self.core.cks.reset();
+          self.core.cks.update(&[flag]);
+
+          buf.put_u8_unchecked(Flags::empty().bits());
+          buf.put_u32_le_unchecked(klen as u32);
+
+          let ko = STATUS_SIZE + KEY_LEN_SIZE;
+          buf.set_len(ko + klen);
+
+          let key_buf = slice::from_raw_parts_mut(buf.as_mut_ptr().add(ko), klen);
+          key.encode(key_buf).map_err(Among::Left)?;
+
+          buf.put_u32_le_unchecked(vlen as u32);
+
+          let vo = STATUS_SIZE + KEY_LEN_SIZE + klen + VALUE_LEN_SIZE;
+          buf.set_len(vo + vlen);
+          let value_buf = slice::from_raw_parts_mut(buf.as_mut_ptr().add(vo), vlen);
+          val.encode(value_buf).map_err(Among::Middle)?;
+
+          let cks = {
+            self.core.cks.update(&buf[1..]);
+            self.core.cks.digest()
+          };
+          buf.put_u64_le_unchecked(cks);
+
+          // commit the entry
+          buf[0] |= Flags::COMMITTED.bits();
+
+          if self.core.opts.sync_on_write && self.core.arena.is_ondisk() {
+            self
+              .core
+              .arena
+              .flush_range(buf.offset(), elen as usize)
+              .map_err(|e| Among::Right(e.into()))?;
+          }
+          buf.detach();
+
+          let mut p = Pointer::new(klen, vlen, buf.as_ptr());
+          if let Either::Left(k) = key {
+            if self.core.opts.cache_key {
+              p = p.with_cached_key(k);
+            }
+          }
+
+          if let Either::Left(v) = val {
+            if self.core.opts.cache_value {
+              p = p.with_cached_value(v);
+            }
+          }
+
+          self.core.map.insert(p);
+          Ok(())
+        }
+      }
+    }
   }
 }
