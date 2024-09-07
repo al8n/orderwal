@@ -1,5 +1,6 @@
 use core::cmp;
 
+use among::Among;
 use crossbeam_skiplist::Comparable;
 use rarena_allocator::either::Either;
 
@@ -11,7 +12,7 @@ mod impls;
 /// the correctness of the implementations is not guaranteed.
 pub trait Type {
   /// The reference type for the type.
-  type Ref<'a>;
+  type Ref<'a>: TypeRef<'a>;
 
   /// The error type for encoding the type into a binary format.
   type Error;
@@ -21,16 +22,13 @@ pub trait Type {
 
   /// Encodes the type into a binary slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error>;
-
-  /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
-  /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
-  fn from_slice(src: &[u8]) -> Self::Ref<'_>;
 }
 
 impl<T: Type> Type for Either<T, &T> {
   type Ref<'a> = T::Ref<'a>;
   type Error = T::Error;
 
+  #[inline]
   fn encoded_len(&self) -> usize {
     match self {
       Either::Left(t) => t.encoded_len(),
@@ -38,15 +36,12 @@ impl<T: Type> Type for Either<T, &T> {
     }
   }
 
+  #[inline]
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
     match self {
       Either::Left(t) => t.encode(buf),
       Either::Right(t) => t.encode(buf),
     }
-  }
-
-  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-    T::from_slice(src)
   }
 }
 
@@ -54,6 +49,7 @@ impl<T: Type> Type for Either<&T, T> {
   type Ref<'a> = T::Ref<'a>;
   type Error = T::Error;
 
+  #[inline]
   fn encoded_len(&self) -> usize {
     match self {
       Either::Left(t) => t.encoded_len(),
@@ -61,16 +57,47 @@ impl<T: Type> Type for Either<&T, T> {
     }
   }
 
+  #[inline]
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
     match self {
       Either::Left(t) => t.encode(buf),
       Either::Right(t) => t.encode(buf),
     }
   }
+}
 
-  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-    T::from_slice(src)
+pub(super) trait InsertAmongExt<T: Type> {
+  fn encoded_len(&self) -> usize;
+  fn encode(&self, buf: &mut [u8]) -> Result<(), T::Error>;
+}
+
+impl<T: Type> InsertAmongExt<T> for Among<T, &T, &[u8]> {
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    match self {
+      Among::Left(t) => t.encoded_len(),
+      Among::Middle(t) => t.encoded_len(),
+      Among::Right(t) => t.len(),
+    }
   }
+
+  #[inline]
+  fn encode(&self, buf: &mut [u8]) -> Result<(), T::Error> {
+    match self {
+      Among::Left(t) => t.encode(buf),
+      Among::Middle(t) => t.encode(buf),
+      Among::Right(t) => {
+        buf.copy_from_slice(t);
+        Ok(())
+      }
+    }
+  }
+}
+
+pub trait TypeRef<'a> {
+  /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
+  /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
+  fn from_slice(src: &'a [u8]) -> Self;
 }
 
 /// The key reference trait for comparing `K` in the [`GenericOrderWal`].

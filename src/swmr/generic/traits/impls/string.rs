@@ -18,10 +18,6 @@ macro_rules! impls {
           buf.copy_from_slice(self.as_bytes());
           Ok(())
         }
-
-        fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-          core::str::from_utf8(src).unwrap()
-        }
       }
 
       $(#[cfg($cfg)])?
@@ -39,6 +35,12 @@ macro_rules! impls {
       }
     )*
   };
+}
+
+impl<'a> TypeRef<'a> for &'a str {
+  fn from_slice(src: &'a [u8]) -> Self {
+    core::str::from_utf8(src).unwrap()
+  }
 }
 
 impls! {

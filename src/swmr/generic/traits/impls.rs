@@ -14,6 +14,8 @@ impl Type for () {
   fn encode(&self, _buf: &mut [u8]) -> Result<(), Self::Error> {
     Ok(())
   }
+}
 
-  fn from_slice(_src: &[u8]) -> Self::Ref<'_> {}
+impl TypeRef<'_> for () {
+  fn from_slice(_buf: &[u8]) -> Self {}
 }

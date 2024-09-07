@@ -1,7 +1,7 @@
 use crossbeam_skiplist::set::Entry;
 use rarena_allocator::either::Either;
 
-use super::{Pointer, Type};
+use super::{Pointer, Type, TypeRef};
 
 /// The reference to an entry in the [`GenericOrderWal`](super::GenericOrderWal).
 pub struct EntryRef<'a, K: Type, V: Type> {
@@ -30,7 +30,7 @@ impl<'a, K: Type, V: Type> EntryRef<'a, K, V> {
     if let Some(k) = &p.cached_key {
       Either::Left(k)
     } else {
-      Either::Right(K::from_slice(p.as_key_slice()))
+      Either::Right(TypeRef::from_slice(p.as_key_slice()))
     }
   }
 
@@ -41,7 +41,7 @@ impl<'a, K: Type, V: Type> EntryRef<'a, K, V> {
     if let Some(v) = &p.cached_value {
       Either::Left(v)
     } else {
-      Either::Right(V::from_slice(p.as_value_slice()))
+      Either::Right(TypeRef::from_slice(p.as_value_slice()))
     }
   }
 }

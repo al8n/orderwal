@@ -106,8 +106,10 @@ impl Type for Foo {
     buf[4..12].copy_from_slice(&self.b.to_le_bytes());
     Ok(())
   }
+}
 
-  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
+impl<'a> TypeRef<'a> for FooRef<'a> {
+  fn from_slice(src: &'a [u8]) -> Self {
     FooRef { data: src }
   }
 }

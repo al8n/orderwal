@@ -18,10 +18,6 @@ macro_rules! impls {
           buf.copy_from_slice(self.as_ref());
           Ok(())
         }
-
-        fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-          src
-        }
       }
 
       $(#[cfg($cfg)])?
@@ -39,6 +35,12 @@ macro_rules! impls {
       }
     )*
   };
+}
+
+impl<'a> TypeRef<'a> for &'a [u8] {
+  fn from_slice(src: &'a [u8]) -> Self {
+    src
+  }
 }
 
 impls! {
@@ -62,10 +64,6 @@ impl<const N: usize> Type for ::smallvec::SmallVec<[u8; N]> {
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
     buf.copy_from_slice(self.as_ref());
     Ok(())
-  }
-
-  fn from_slice(src: &[u8]) -> Self::Ref<'_> {
-    src
   }
 }
 

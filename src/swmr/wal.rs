@@ -8,6 +8,9 @@ use core::ptr::NonNull;
 use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 use std::sync::Arc;
 
+mod reader;
+pub use reader::*;
+
 struct OrderWalCore<C, S> {
   arena: Arena,
   map: SkipSet<Pointer<C>>,
@@ -61,17 +64,25 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
   _s: PhantomData<S>,
 }
 
-impl<C, S> Clone for OrderWal<C, S> {
-  fn clone(&self) -> Self {
-    Self {
-      core: self.core.clone(),
-      ro: true,
-      _s: PhantomData,
-    }
-  }
-}
-
 impl<C, S> OrderWal<C, S> {
+  /// Returns the number of entries in the WAL.
+  #[inline]
+  pub fn len(&self) -> usize {
+    self.core.map.len()
+  }
+
+  /// Returns `true` if the WAL is empty.
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    self.core.map.is_empty()
+  }
+
+  /// Returns a read-only view of the WAL.
+  #[inline]
+  pub fn reader(&self) -> OrderWalReader<C, S> {
+    OrderWalReader::new(self.core.clone())
+  }
+
   #[inline]
   fn from_core(core: OrderWalCore<C, S>, ro: bool) -> Self {
     Self {
