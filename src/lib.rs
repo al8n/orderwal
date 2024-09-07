@@ -186,6 +186,7 @@ pub struct Options {
   magic_version: u16,
   huge: Option<u8>,
   cap: u32,
+  reserved: u32,
 }
 
 impl Default for Options {
@@ -219,7 +220,53 @@ impl Options {
       magic_version: 0,
       huge: None,
       cap: 0,
+      reserved: 0,
     }
+  }
+
+  /// Set the reserved bytes of the WAL.
+  ///
+  /// The `reserved` is used to configure the start position of the WAL. This is useful
+  /// when you want to add some bytes as your own WAL's header.
+  ///
+  /// The default reserved is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::Options;
+  ///
+  /// let opts = Options::new().with_reserved(8);
+  /// ```
+  #[inline]
+  pub const fn with_reserved(mut self, reserved: u32) -> Self {
+    self.reserved = if self.cap as u64 <= reserved as u64 + HEADER_SIZE as u64 {
+      self.cap
+    } else {
+      reserved
+    };
+    self
+  }
+
+  /// Get the reserved of the WAL.
+  ///
+  /// The `reserved` is used to configure the start position of the WAL. This is useful
+  /// when you want to add some bytes as your own WAL's header.
+  ///
+  /// The default reserved is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::Options;
+  ///
+  /// let opts = Options::new().with_reserved(8);
+  ///
+  /// assert_eq!(opts.reserved(), 8);
+  /// ```
+  #[inline]
+  pub const fn reserved(&self) -> u32 {
+    self.reserved
   }
 
   /// Returns the magic version.
@@ -545,11 +592,11 @@ const fn entry_size(key_len: u32, value_len: u32) -> u32 {
 }
 
 #[inline]
-const fn arena_options() -> ArenaOptions {
+const fn arena_options(reserved: u32) -> ArenaOptions {
   ArenaOptions::new()
     .with_magic_version(CURRENT_VERSION)
     .with_freelist(Freelist::None)
-    .with_reserved(HEADER_SIZE as u32)
+    .with_reserved((HEADER_SIZE + reserved as usize) as u32)
     .with_unify(true)
 }
 
@@ -606,8 +653,8 @@ macro_rules! impl_common_methods {
       ///
       /// # std::fs::remove_file(path);
       /// ```
-      pub fn map<P: AsRef<std::path::Path>>(path: P) -> Result<Self, error::Error> {
-        Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()))
+      pub fn map<P: AsRef<std::path::Path>>(path: P, opts: Options) -> Result<Self, error::Error> {
+        Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts)
           .map_err(|e| e.unwrap_right())
       }
 
@@ -636,12 +683,14 @@ macro_rules! impl_common_methods {
       #[inline]
       pub fn map_with_path_builder<PB, E>(
         path_builder: PB,
+        opts: Options,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
         PB: FnOnce() -> Result<std::path::PathBuf, E>,
       {
         Self::map_with_path_builder_and_comparator_and_checksumer(
           path_builder,
+          opts,
           Ascend,
           Crc32::default(),
         )
@@ -726,7 +775,7 @@ macro_rules! impl_common_methods {
         cmp: C,
         cks: S,
       ) -> Result<Self, Error> {
-        let arena = Arena::new(arena_options().with_capacity(opts.cap));
+        let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.cap));
         OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
       }
 
@@ -745,7 +794,7 @@ macro_rules! impl_common_methods {
         cks: S,
       ) -> Result<Self, Error> {
         let mmap_opts = MmapOptions::new().len(opts.cap).huge(opts.huge);
-        Arena::map_anon(arena_options(), mmap_opts)
+        Arena::map_anon(arena_options(opts.reserved()), mmap_opts)
           .map_err(Into::into)
           .and_then(|arena| {
             OrderWalCore::new(arena, opts, cmp, cks).map(|core| Self::from_core(core, false))
@@ -828,10 +877,12 @@ macro_rules! impl_common_methods {
       /// ```
       pub fn map_with_checksumer<P: AsRef<std::path::Path>>(
         path: P,
+        opts: Options,
         cks: S,
       ) -> Result<Self, error::Error> {
         Self::map_with_path_builder_and_checksumer::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
+          opts,
           cks,
         )
         .map_err(|e| e.unwrap_right())
@@ -860,6 +911,7 @@ macro_rules! impl_common_methods {
       #[inline]
       pub fn map_with_path_builder_and_checksumer<PB, E>(
         path_builder: PB,
+        opts: Options,
         cks: S,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
@@ -867,6 +919,7 @@ macro_rules! impl_common_methods {
       {
         Self::map_with_path_builder_and_comparator_and_checksumer(
           path_builder,
+          opts,
           Ascend,
           cks,
         )
@@ -994,11 +1047,13 @@ macro_rules! impl_common_methods {
       /// ```
       pub fn map_with_comparator_and_checksumer<P: AsRef<std::path::Path>>(
         path: P,
+        opts: Options,
         cmp: C,
         cks: S,
       ) -> Result<Self, error::Error> {
         Self::map_with_path_builder_and_comparator_and_checksumer::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
+          opts,
           cmp,
           cks,
         )
@@ -1027,6 +1082,7 @@ macro_rules! impl_common_methods {
       /// ```
       pub fn map_with_path_builder_and_comparator_and_checksumer<PB, E>(
         path_builder: PB,
+        opts: Options,
         cmp: C,
         cks: S,
       ) -> Result<Self, either::Either<E, error::Error>>
@@ -1035,7 +1091,7 @@ macro_rules! impl_common_methods {
       {
         let open_options = OpenOptions::default().read(true);
 
-        Arena::map_with_path_builder(path_builder, arena_options(), open_options, MmapOptions::new())
+        Arena::map_with_path_builder(path_builder, arena_options(opts.reserved()), open_options, MmapOptions::new())
           .map_err(|e| e.map_right(Into::into))
           .and_then(|arena| {
             OrderWalCore::replay(arena, Options::new(), true, cmp, cks)
@@ -1106,7 +1162,7 @@ macro_rules! impl_common_methods {
 
         let exist = path.exists();
 
-        Arena::map_mut(path, arena_options(), open_options, MmapOptions::new())
+        Arena::map_mut(path, arena_options(opts.reserved()), open_options, MmapOptions::new())
           .map_err(Into::into)
           .and_then(|arena| {
             if !exist {
@@ -1339,10 +1395,12 @@ macro_rules! impl_common_methods {
       /// ```
       pub fn map_with_comparator<P: AsRef<std::path::Path>>(
         path: P,
+        opts: Options,
         cmp: C,
       ) -> Result<Self, error::Error> {
         Self::map_with_path_builder_and_comparator::<_, ()>(
           || Ok(path.as_ref().to_path_buf()),
+          opts,
           cmp,
         )
         .map_err(|e| e.unwrap_right())
@@ -1371,6 +1429,7 @@ macro_rules! impl_common_methods {
       #[inline]
       pub fn map_with_path_builder_and_comparator<PB, E>(
         path_builder: PB,
+        opts: Options,
         cmp: C,
       ) -> Result<Self, either::Either<E, error::Error>>
       where
@@ -1378,6 +1437,7 @@ macro_rules! impl_common_methods {
       {
         Self::map_with_path_builder_and_comparator_and_checksumer(
           path_builder,
+          opts,
           cmp,
           Crc32::default(),
         )
@@ -1492,7 +1552,7 @@ macro_rules! impl_common_methods {
           wal.insert(b"key1", b"value1").unwrap();
         }
 
-        let wal = OrderWal::map(&path).unwrap();
+        let wal = OrderWal::map(&path, Options::new()).unwrap();
         assert_eq!(wal.get(b"key1").unwrap(), b"value1");
       }
     }

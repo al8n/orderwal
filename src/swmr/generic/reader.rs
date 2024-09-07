@@ -1,20 +1,17 @@
 use super::*;
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
-pub struct GenericWalReader<K, V, S>(GenericOrderWal<K, V, S>);
+pub struct GenericWalReader<K, V>(Arc<GenericOrderWalCore<K, V>>);
 
-impl<K, V, S> Clone for GenericWalReader<K, V, S> {
+impl<K, V> Clone for GenericWalReader<K, V> {
   fn clone(&self) -> Self {
-    self.0.reader()
+    Self(self.0.clone())
   }
 }
 
-impl<K, V, S> GenericWalReader<K, V, S> {
-  pub(super) fn new(wal: Arc<GenericOrderWalCore<K, V, S>>) -> Self {
-    Self(GenericOrderWal {
-      core: wal,
-      ro: true,
-    })
+impl<K, V> GenericWalReader<K, V> {
+  pub(super) fn new(wal: Arc<GenericOrderWalCore<K, V>>) -> Self {
+    Self(wal)
   }
 
   /// Returns number of entries in the WAL.
@@ -30,7 +27,7 @@ impl<K, V, S> GenericWalReader<K, V, S> {
   }
 }
 
-impl<K, V, S> GenericWalReader<K, V, S>
+impl<K, V> GenericWalReader<K, V>
 where
   K: Type + Ord,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,

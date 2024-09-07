@@ -286,51 +286,58 @@ where
   }
 }
 
-struct GenericOrderWalCore<K, V, S> {
+struct GenericOrderWalCore<K, V> {
   arena: Arena,
   map: SkipSet<Pointer<K, V>>,
-  opts: Options,
-  cks: UnsafeCellChecksumer<S>,
 }
 
-impl<K, V, S> GenericOrderWalCore<K, V, S> {
+impl<K, V> GenericOrderWalCore<K, V> {
   #[inline]
-  fn new(arena: Arena, opts: Options, cks: S, flush: bool) -> Result<Self, Error> {
+  fn len(&self) -> usize {
+    self.map.len()
+  }
+
+  #[inline]
+  fn is_empty(&self) -> bool {
+    self.map.is_empty()
+  }
+
+  #[inline]
+  fn new(arena: Arena, magic_version: u16, flush: bool) -> Result<Self, Error> {
     unsafe {
       let slice = arena.reserved_slice_mut();
       slice[0..6].copy_from_slice(&MAGIC_TEXT);
-      slice[6..8].copy_from_slice(&opts.magic_version.to_le_bytes());
+      slice[6..8].copy_from_slice(&magic_version.to_le_bytes());
     }
 
     if !flush {
-      return Ok(Self::construct(arena, SkipSet::new(), opts, cks));
+      return Ok(Self::construct(arena, SkipSet::new()));
     }
 
     arena
       .flush_range(0, HEADER_SIZE)
-      .map(|_| Self::construct(arena, SkipSet::new(), opts, cks))
+      .map(|_| Self::construct(arena, SkipSet::new()))
       .map_err(Into::into)
   }
 
   #[inline]
-  fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>, opts: Options, checksumer: S) -> Self {
-    Self {
-      arena,
-      map: set,
-      opts,
-      cks: UnsafeCellChecksumer::new(checksumer),
-    }
+  fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>) -> Self {
+    Self { arena, map: set }
   }
 }
 
-impl<K, V, S> GenericOrderWalCore<K, V, S>
+impl<K, V> GenericOrderWalCore<K, V>
 where
   K: Type + Ord + 'static,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
   V: Type + 'static,
-  S: Checksumer,
 {
-  fn replay(arena: Arena, opts: Options, ro: bool, checksumer: S) -> Result<Self, Error> {
+  fn replay<S: Checksumer>(
+    arena: Arena,
+    opts: &Options,
+    ro: bool,
+    checksumer: &mut S,
+  ) -> Result<Self, Error> {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];
     let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
@@ -423,7 +430,49 @@ where
       }
     }
 
-    Ok(Self::construct(arena, map, opts, checksumer))
+    Ok(Self::construct(arena, map))
+  }
+}
+
+impl<K, V> GenericOrderWalCore<K, V>
+where
+  K: Type + Ord,
+  for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
+  V: Type,
+{
+  #[inline]
+  fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self.map.get::<Owned<K, Q>>(&Owned::new(key)).is_some()
+  }
+
+  #[inline]
+  fn contains_key_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self.map.get::<Ref<K, Q>>(&Ref::new(key)).is_some()
+  }
+
+  #[inline]
+  fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self
+      .map
+      .get::<Owned<K, Q>>(&Owned::new(key))
+      .map(EntryRef::new)
+  }
+
+  #[inline]
+  fn get_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self.map.get::<Ref<K, Q>>(&Ref::new(key)).map(EntryRef::new)
   }
 }
 
@@ -431,10 +480,11 @@ where
 ///
 /// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
 pub struct GenericOrderWal<K, V, S = Crc32> {
-  core: Arc<GenericOrderWalCore<K, V, S>>,
+  core: Arc<GenericOrderWalCore<K, V>>,
+  opts: Options,
+  cks: UnsafeCellChecksumer<S>,
   ro: bool,
 }
-
 
 impl<K, V> GenericOrderWal<K, V> {
   /// Creates a new in-memory write-ahead log backed by an aligned vec with the given capacity and options.
@@ -505,38 +555,38 @@ where
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode.
   #[inline]
-  pub fn map<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-    Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()))
+  pub fn map<P: AsRef<Path>>(path: P, opts: Options) -> Result<Self, Error> {
+    Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts)
       .map_err(|e| e.unwrap_right())
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode.
   #[inline]
-  pub fn map_with_path_builder<PB, E>(pb: PB) -> Result<Self, Either<E, Error>>
+  pub fn map_with_path_builder<PB, E>(pb: PB, opts: Options) -> Result<Self, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
   {
-    Self::map_with_path_builder_and_checksumer(pb, Crc32::default())
+    Self::map_with_path_builder_and_checksumer(pb, opts, Crc32::default())
   }
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S> {
   /// Returns a read-only WAL instance.
   #[inline]
-  pub fn reader(&self) -> GenericWalReader<K, V, S> {
+  pub fn reader(&self) -> GenericWalReader<K, V> {
     GenericWalReader::new(self.core.clone())
   }
 
   /// Returns number of entries in the WAL.
   #[inline]
   pub fn len(&self) -> usize {
-    self.core.map.len()
+    self.core.len()
   }
 
   /// Returns `true` if the WAL is empty.
   #[inline]
   pub fn is_empty(&self) -> bool {
-    self.core.map.is_empty()
+    self.core.is_empty()
   }
 
   /// Creates a new in-memory write-ahead log backed by an aligned vec with the given options and [`Checksumer`].
@@ -549,10 +599,10 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// let wal = GenericOrderWal::with_checksumer(Options::new(), Crc32::default());
   /// ```
   pub fn with_checksumer(opts: Options, cks: S) -> Self {
-    let arena = Arena::new(arena_options().with_capacity(opts.cap));
+    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.cap));
 
-    GenericOrderWalCore::new(arena, opts, cks, false)
-      .map(|core| Self::from_core(core, false))
+    GenericOrderWalCore::new(arena, opts.magic_version, false)
+      .map(|core| Self::from_core(core, opts, cks, false))
       .unwrap()
   }
 
@@ -566,16 +616,22 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// let wal = GenericOrderWal::map_anon_with_checksumer(Options::new(), Crc32::default()).unwrap();
   /// ```
   pub fn map_anon_with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
-    let arena = Arena::map_anon(arena_options(), MmapOptions::new().len(opts.cap))?;
+    let arena = Arena::map_anon(
+      arena_options(opts.reserved()),
+      MmapOptions::new().len(opts.cap),
+    )?;
 
-    GenericOrderWalCore::new(arena, opts, cks, true).map(|core| Self::from_core(core, false))
+    GenericOrderWalCore::new(arena, opts.magic_version, true)
+      .map(|core| Self::from_core(core, opts, cks, false))
   }
 
   #[inline]
-  fn from_core(core: GenericOrderWalCore<K, V, S>, ro: bool) -> Self {
+  fn from_core(core: GenericOrderWalCore<K, V>, opts: Options, cks: S, ro: bool) -> Self {
     Self {
       core: Arc::new(core),
       ro,
+      opts,
+      cks: UnsafeCellChecksumer::new(cks),
     }
   }
 }
@@ -623,7 +679,7 @@ where
     path_builder: PB,
     opts: Options,
     open_options: OpenOptions,
-    cks: S,
+    mut cks: S,
   ) -> Result<Self, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
@@ -632,35 +688,44 @@ where
     let exist = path.exists();
     let arena = Arena::map_mut_with_path_builder(
       || Ok(path),
-      arena_options(),
+      arena_options(opts.reserved()),
       open_options,
       MmapOptions::new(),
     )
     .map_err(|e| e.map_right(Into::into))?;
 
     if !exist {
-      return GenericOrderWalCore::new(arena, opts, cks, true)
-        .map(|core| Self::from_core(core, false))
+      return GenericOrderWalCore::new(arena, opts.magic_version, true)
+        .map(|core| Self::from_core(core, opts, cks, false))
         .map_err(Either::Right);
     }
 
-    GenericOrderWalCore::replay(arena, opts, false, cks)
-      .map(|core| Self::from_core(core, false))
+    GenericOrderWalCore::replay(arena, &opts, false, &mut cks)
+      .map(|core| Self::from_core(core, opts, cks, false))
       .map_err(Either::Right)
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
   #[inline]
-  pub fn map_with_checksumer<P: AsRef<Path>>(path: P, cks: S) -> Result<Self, Error> {
-    Self::map_with_path_builder_and_checksumer::<_, ()>(|| Ok(path.as_ref().to_path_buf()), cks)
-      .map_err(|e| e.unwrap_right())
+  pub fn map_with_checksumer<P: AsRef<Path>>(
+    path: P,
+    opts: Options,
+    cks: S,
+  ) -> Result<Self, Error> {
+    Self::map_with_path_builder_and_checksumer::<_, ()>(
+      || Ok(path.as_ref().to_path_buf()),
+      opts,
+      cks,
+    )
+    .map_err(|e| e.unwrap_right())
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
   #[inline]
   pub fn map_with_path_builder_and_checksumer<PB, E>(
     path_builder: PB,
-    cks: S,
+    opts: Options,
+    mut cks: S,
   ) -> Result<Self, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
@@ -668,14 +733,14 @@ where
     let open_options = OpenOptions::default().read(true);
     let arena = Arena::map_with_path_builder(
       path_builder,
-      arena_options(),
+      arena_options(opts.reserved()),
       open_options,
       MmapOptions::new(),
     )
     .map_err(|e| e.map_right(Into::into))?;
 
-    GenericOrderWalCore::replay(arena, Options::new(), true, cks)
-      .map(|core| Self::from_core(core, true))
+    GenericOrderWalCore::replay(arena, &opts, true, &mut cks)
+      .map(|core| Self::from_core(core, opts, cks, true))
       .map_err(Either::Right)
   }
 }
@@ -692,11 +757,7 @@ where
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
-    self
-      .core
-      .map
-      .get::<Owned<K, Q>>(&Owned::new(key))
-      .is_some()
+    self.core.contains_key(key)
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -705,11 +766,7 @@ where
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
-    self
-      .core
-      .map
-      .get::<Ref<K, Q>>(&Ref::new(key))
-      .is_some()
+    self.core.contains_key_by_ref(key)
   }
 
   /// Gets the value associated with the key.
@@ -718,11 +775,7 @@ where
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
-    self
-      .core
-      .map
-      .get::<Owned<K, Q>>(&Owned::new(key))
-      .map(EntryRef::new)
+    self.core.get(key)
   }
 
   /// Gets the value associated with the key.
@@ -731,11 +784,7 @@ where
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
-    self
-      .core
-      .map
-      .get::<Ref<K, Q>>(&Ref::new(key))
-      .map(EntryRef::new)
+    self.core.get_by_ref(key)
   }
 }
 
@@ -749,7 +798,7 @@ where
   /// Gets or insert the key value pair.
   #[inline]
   pub fn get_or_insert(
-    &self,
+    &mut self,
     key: K,
     value: V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
@@ -771,7 +820,7 @@ where
   /// Gets or insert the key value pair.
   #[inline]
   pub fn get_or_insert_ref_with(
-    &self,
+    &mut self,
     key: &K,
     value: impl FnOnce() -> V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
@@ -793,7 +842,7 @@ where
   /// Gets or insert the key value pair.
   #[inline]
   pub fn get_or_insert_with(
-    &self,
+    &mut self,
     key: K,
     value: impl FnOnce() -> V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
@@ -815,7 +864,7 @@ where
   /// Gets or insert the key value pair.
   #[inline]
   pub fn get_or_insert_refs<'a, 'b: 'a>(
-    &'a self,
+    &'a mut self,
     key: &'b K,
     value: &'b V,
   ) -> Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
@@ -837,7 +886,7 @@ where
   /// Gets or insert the key value pair.
   #[inline]
   pub fn get_by_ref_or_insert_with<'a, 'b: 'a>(
-    &'a self,
+    &'a mut self,
     key: &'b K,
     value: impl FnOnce() -> V,
   ) -> Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
@@ -859,7 +908,7 @@ where
   /// Gets or insert the key value pair.
   #[inline]
   pub fn get_by_ref_or_insert<'a, 'b: 'a>(
-    &'a self,
+    &'a mut self,
     key: &'b K,
     value: V,
   ) -> Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
@@ -884,7 +933,7 @@ where
   /// - The given `key` and `value` must be valid to construct to `K::Ref` and `V::Ref` without remaining.
   #[inline]
   pub unsafe fn get_by_bytes_or_insert_bytes(
-    &self,
+    &mut self,
     key: &[u8],
     value: &[u8],
   ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
@@ -910,7 +959,7 @@ where
   /// - The given `value` must be valid to construct to `V::Ref` without remaining.
   #[inline]
   pub unsafe fn get_or_insert_bytes(
-    &self,
+    &mut self,
     key: K,
     value: &[u8],
   ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
@@ -936,7 +985,7 @@ where
   /// - The given `value` must be valid to construct to `V::Ref` without remaining.
   #[inline]
   pub unsafe fn get_by_ref_or_insert_bytes(
-    &self,
+    &mut self,
     key: &K,
     value: &[u8],
   ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
@@ -962,7 +1011,7 @@ where
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
   pub unsafe fn get_by_bytes_or_insert(
-    &self,
+    &mut self,
     key: &[u8],
     value: V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
@@ -988,7 +1037,7 @@ where
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
   pub unsafe fn get_by_bytes_or_insert_with(
-    &self,
+    &mut self,
     key: &[u8],
     value: impl FnOnce() -> V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
@@ -1021,7 +1070,7 @@ where
   ///
   /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
   #[inline]
-  pub fn insert(&self, key: K, val: V) -> Result<(), Among<K::Error, V::Error, Error>> {
+  pub fn insert(&mut self, key: K, val: V) -> Result<(), Among<K::Error, V::Error, Error>> {
     self.insert_in(Among::Left(key), Among::Left(val))
   }
 
@@ -1031,7 +1080,7 @@ where
   ///
   /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
   #[inline]
-  pub fn insert_refs(&self, key: &K, val: &V) -> Result<(), Among<K::Error, V::Error, Error>> {
+  pub fn insert_refs(&mut self, key: &K, val: &V) -> Result<(), Among<K::Error, V::Error, Error>> {
     self.insert_in(Among::Middle(key), Among::Middle(val))
   }
 
@@ -1124,7 +1173,7 @@ where
   /// unsafe { wal2.insert_bytes(ent.key(), ent.value().as_ref()).unwrap(); }
   /// ```
   #[inline]
-  pub unsafe fn insert_bytes(&self, key: &[u8], val: &[u8]) -> Result<(), Error> {
+  pub unsafe fn insert_bytes(&mut self, key: &[u8], val: &[u8]) -> Result<(), Error> {
     self
       .insert_in(Among::Right(key), Among::Right(val))
       .map_err(|e| match e {
@@ -1142,7 +1191,7 @@ where
   ///
   /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_key_with_bytes(&self, key: K, value: &[u8]) -> Result<(), Error> {
+  pub unsafe fn insert_key_with_bytes(&mut self, key: K, value: &[u8]) -> Result<(), Error> {
     self
       .insert_in(Among::Left(key), Among::Right(value))
       .map_err(|e| match e {
@@ -1160,7 +1209,7 @@ where
   ///
   /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_bytes_with_value(&self, key: &[u8], value: V) -> Result<(), Error> {
+  pub unsafe fn insert_bytes_with_value(&mut self, key: &[u8], value: V) -> Result<(), Error> {
     self
       .insert_in(Among::Right(key), Among::Left(value))
       .map_err(|e| match e {
@@ -1178,7 +1227,7 @@ where
   ///
   /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_ref_and_bytes(&self, key: &K, value: &[u8]) -> Result<(), Error> {
+  pub unsafe fn insert_ref_and_bytes(&mut self, key: &K, value: &[u8]) -> Result<(), Error> {
     self
       .insert_in(Among::Middle(key), Among::Right(value))
       .map_err(|e| match e {
@@ -1196,7 +1245,7 @@ where
   ///
   /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_bytes_and_ref(&self, key: &[u8], value: &V) -> Result<(), Error> {
+  pub unsafe fn insert_bytes_and_ref(&mut self, key: &[u8], value: &V) -> Result<(), Error> {
     self
       .insert_in(Among::Right(key), Among::Middle(value))
       .map_err(|e| match e {
@@ -1238,8 +1287,8 @@ where
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
           let flag = Flags::COMMITTED.bits();
 
-          self.core.cks.reset();
-          self.core.cks.update(&[flag]);
+          self.cks.reset();
+          self.cks.update(&[flag]);
 
           buf.put_u8_unchecked(Flags::empty().bits());
           buf.put_u32_le_unchecked(klen as u32);
@@ -1258,15 +1307,15 @@ where
           val.encode(value_buf).map_err(Among::Middle)?;
 
           let cks = {
-            self.core.cks.update(&buf[1..]);
-            self.core.cks.digest()
+            self.cks.update(&buf[1..]);
+            self.cks.digest()
           };
           buf.put_u64_le_unchecked(cks);
 
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.core.opts.sync_on_write && self.core.arena.is_ondisk() {
+          if self.opts.sync_on_write && self.core.arena.is_ondisk() {
             self
               .core
               .arena
@@ -1277,13 +1326,13 @@ where
 
           let mut p = Pointer::new(klen, vlen, buf.as_ptr());
           if let Among::Left(k) = key {
-            if self.core.opts.cache_key {
+            if self.opts.cache_key {
               p = p.with_cached_key(k);
             }
           }
 
           if let Among::Left(v) = val {
-            if self.core.opts.cache_value {
+            if self.opts.cache_value {
               p = p.with_cached_value(v);
             }
           }
