@@ -46,4 +46,10 @@ impl<C: Comparator, S> OrderWalReader<C, S> {
   {
     self.0.get(key)
   }
+
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  pub fn iter(&self) -> Iter<C> {
+    self.0.iter()
+  }
 }

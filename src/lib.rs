@@ -44,9 +44,6 @@ const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 /// Error types.
 pub mod error;
 
-/// Iterators for the WAL.
-pub mod iter;
-
 mod buffer;
 pub use buffer::*;
 

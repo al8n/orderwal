@@ -11,6 +11,12 @@ use std::sync::Arc;
 mod reader;
 pub use reader::*;
 
+mod iter;
+pub use iter::*;
+
+mod entry;
+pub use entry::*;
+
 struct OrderWalCore<C, S> {
   arena: Arena,
   map: SkipSet<Pointer<C>>,
@@ -20,6 +26,13 @@ struct OrderWalCore<C, S> {
 }
 
 walcore!(SkipSet: Send);
+
+impl<C: Comparator, S> OrderWalCore<C, S> {
+  #[inline]
+  fn iter(&self) -> Iter<C> {
+    Iter::new(self.map.iter())
+  }
+}
 
 impl<C, S> OrderWalCore<C, S> {
   #[inline]
@@ -64,6 +77,14 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
   _s: PhantomData<S>,
 }
 
+impl<C: Comparator, S> OrderWal<C, S> {
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  pub fn iter(&self) -> Iter<C> {
+    self.core.iter()
+  }
+}
+
 impl<C, S> OrderWal<C, S> {
   /// Returns the number of entries in the WAL.
   #[inline]
@@ -105,7 +126,7 @@ impl_common_methods!(
 );
 
 impl_common_methods!(
-  Self: where
+  Self mut: where
   C: Comparator + CheapClone + Send + 'static,
   S: Checksumer,
 );

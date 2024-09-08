@@ -28,6 +28,9 @@ pub use traits::*;
 mod reader;
 pub use reader::*;
 
+mod iter;
+pub use iter::*;
+
 #[cfg(test)]
 mod tests;
 
@@ -321,6 +324,15 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
+  fn iter(&self) -> Iter<K, V>
+  where
+    K: Type + Ord,
+    for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  {
+    Iter::new(self.map.iter())
+  }
+
+  #[inline]
   fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>) -> Self {
     Self { arena, map: set }
   }
@@ -513,6 +525,18 @@ impl<K, V> GenericOrderWal<K, V> {
   #[inline]
   pub fn map_anon(opts: Options) -> Result<Self, Error> {
     Self::map_anon_with_checksumer(opts, Crc32::default())
+  }
+}
+
+impl<K, V> GenericOrderWal<K, V>
+where
+  K: Type + Ord + 'static,
+  for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
+{
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  pub fn iter(&self) -> Iter<K, V> {
+    self.core.iter()
   }
 }
 

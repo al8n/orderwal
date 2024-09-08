@@ -31,6 +31,18 @@ impl<K, V> GenericWalReader<K, V>
 where
   K: Type + Ord,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
+{
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  pub fn iter(&self) -> Iter<K, V> {
+    self.0.iter()
+  }
+}
+
+impl<K, V> GenericWalReader<K, V>
+where
+  K: Type + Ord,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: Type,
 {
   /// Returns `true` if the key exists in the WAL.

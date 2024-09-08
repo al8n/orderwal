@@ -8,6 +8,9 @@ use core::ptr::NonNull;
 use rarena_allocator::{unsync::Arena, ArenaPosition, Error as ArenaError};
 use std::collections::BTreeSet;
 
+mod iter;
+pub use iter::*;
+
 struct OrderWalCore<C, S> {
   arena: Arena,
   map: BTreeSet<Pointer<C>>,
@@ -62,6 +65,25 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
 }
 
 impl<C, S> OrderWal<C, S> {
+  /// Gets an iterator that visits the elements in the `OrderWal` in ascending
+  /// order.
+  #[inline]
+  pub fn iter(&self) -> Iter<C> {
+    Iter::new(self.core.map.iter())
+  }
+
+  /// Gets an iterator over the keys of the `OrderWal`, in sorted order.
+  #[inline]
+  pub fn keys(&self) -> Keys<C> {
+    Keys::new(self.core.map.iter())
+  }
+
+  /// Gets an iterator over the values of the `OrderWal`, in sorted order.
+  #[inline]
+  pub fn values(&self) -> Values<C> {
+    Values::new(self.core.map.iter())
+  }
+
   #[inline]
   const fn from_core(core: OrderWalCore<C, S>, ro: bool) -> Self {
     Self {

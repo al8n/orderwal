@@ -4,11 +4,11 @@ use rarena_allocator::either::Either;
 use super::{Pointer, Type, TypeRef};
 
 /// The reference to an entry in the [`GenericOrderWal`](super::GenericOrderWal).
-pub struct EntryRef<'a, K: Type, V: Type> {
+pub struct EntryRef<'a, K, V> {
   ent: Entry<'a, Pointer<K, V>>,
 }
 
-impl<'a, K: Type, V: Type> Clone for EntryRef<'a, K, V> {
+impl<'a, K, V> Clone for EntryRef<'a, K, V> {
   #[inline]
   fn clone(&self) -> Self {
     Self {
@@ -17,12 +17,18 @@ impl<'a, K: Type, V: Type> Clone for EntryRef<'a, K, V> {
   }
 }
 
-impl<'a, K: Type, V: Type> EntryRef<'a, K, V> {
+impl<'a, K, V> EntryRef<'a, K, V> {
   #[inline]
   pub(super) fn new(ent: Entry<'a, Pointer<K, V>>) -> Self {
     Self { ent }
   }
+}
 
+impl<'a, K, V> EntryRef<'a, K, V>
+where
+  K: Type,
+  V: Type,
+{
   /// Returns the key of the entry.
   #[inline]
   pub fn key(&self) -> Either<&K, K::Ref<'a>> {
