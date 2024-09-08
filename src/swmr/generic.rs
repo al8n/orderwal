@@ -15,8 +15,8 @@ use rarena_allocator::{
 use crate::{
   arena_options, entry_size,
   error::{self, Error},
-  Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE, HEADER_SIZE, KEY_LEN_SIZE, MAGIC_TEXT,
-  STATUS_SIZE, VALUE_LEN_SIZE,
+  split_lengths, Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE, HEADER_SIZE, KEY_LEN_SIZE,
+  MAGIC_TEXT, STATUS_SIZE, VALUE_LEN_SIZE,
 };
 
 mod entry;
@@ -372,7 +372,7 @@ where
         // we reached the end of the arena, if we have any remaining, then if means two possibilities:
         // 1. the remaining is a partial entry, but it does not be persisted to the disk, so following the write-ahead log principle, we should discard it.
         // 2. our file may be corrupted, so we discard the remaining.
-        if cursor + STATUS_SIZE + KEY_LEN_SIZE + VALUE_LEN_SIZE > allocated {
+        if cursor + STATUS_SIZE > allocated {
           if !ro && cursor < allocated {
             arena.rewind(ArenaPosition::Start(cursor as u32));
             arena.flush()?;
@@ -381,33 +381,22 @@ where
           break;
         }
 
-        let header = arena.get_bytes(cursor, STATUS_SIZE + KEY_LEN_SIZE);
+        let header = arena.get_bytes(cursor, STATUS_SIZE);
         let flag = Flags::from_bits_unchecked(header[0]);
-        let key_len = u32::from_le_bytes(header[1..5].try_into().unwrap()) as usize;
+
+        let (kvsize, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|_e| {
+          #[cfg(feature = "tracing")]
+          tracing::error!(err=%_e);
+
+          Error::corrupted()
+        })?;
+        let (key_len, value_len) = split_lengths(encoded_len);
+        let key_len = key_len as usize;
+        let value_len = value_len as usize;
 
         // Same as above, if we reached the end of the arena, we should discard the remaining.
-        if cursor + STATUS_SIZE + KEY_LEN_SIZE + key_len + VALUE_LEN_SIZE > allocated {
-          if !ro {
-            arena.rewind(ArenaPosition::Start(cursor as u32));
-            arena.flush()?;
-          }
-
-          break;
-        }
-
-        let value_len = u32::from_le_bytes(
-          arena
-            .get_bytes(
-              cursor + STATUS_SIZE + KEY_LEN_SIZE + key_len,
-              VALUE_LEN_SIZE,
-            )
-            .try_into()
-            .unwrap(),
-        ) as usize;
-
-        let elen = entry_size(key_len as u32, value_len as u32) as usize;
-        // Same as above, if we reached the end of the arena, we should discard the remaining.
-        if cursor + elen > allocated {
+        let cks_offset = STATUS_SIZE + kvsize + key_len + value_len;
+        if cks_offset + CHECKSUM_SIZE > allocated {
           if !ro {
             arena.rewind(ArenaPosition::Start(cursor as u32));
             arena.flush()?;
@@ -418,12 +407,12 @@ where
 
         let cks = u64::from_le_bytes(
           arena
-            .get_bytes(cursor + elen - CHECKSUM_SIZE, CHECKSUM_SIZE)
+            .get_bytes(cursor + cks_offset, CHECKSUM_SIZE)
             .try_into()
             .unwrap(),
         );
 
-        if cks != checksumer.checksum(arena.get_bytes(cursor, elen - CHECKSUM_SIZE)) {
+        if cks != checksumer.checksum(arena.get_bytes(cursor, cks_offset)) {
           return Err(Error::corrupted());
         }
 
@@ -437,8 +426,12 @@ where
           break;
         }
 
-        map.insert(Pointer::new(key_len, value_len, arena.get_pointer(cursor)));
-        cursor += elen;
+        map.insert(Pointer::new(
+          key_len,
+          value_len,
+          arena.get_pointer(cursor + STATUS_SIZE + kvsize),
+        ));
+        cursor += cks_offset + CHECKSUM_SIZE;
       }
     }
 
@@ -1290,9 +1283,9 @@ where
     let klen = key.encoded_len();
     let vlen = val.encoded_len();
 
-    let elen = entry_size(klen as u32, vlen as u32) as usize;
+    let (len_size, kvlen, elen) = entry_size(klen as u32, vlen as u32);
 
-    let buf = self.core.arena.alloc_bytes(elen as u32);
+    let buf = self.core.arena.alloc_bytes(elen);
 
     match buf {
       Err(e) => {
@@ -1302,7 +1295,7 @@ where
             available,
           } => error::Error::insufficient_space(requested, available),
           ArenaError::ReadOnly => error::Error::read_only(),
-          ArenaError::LargerThanPageSize { .. } => unreachable!(),
+          _ => unreachable!(),
         };
         Err(Among::Right(e))
       }
@@ -1315,18 +1308,19 @@ where
           self.cks.update(&[flag]);
 
           buf.put_u8_unchecked(Flags::empty().bits());
-          buf.put_u32_le_unchecked(klen as u32);
+          let written = buf.put_u64_varint_unchecked(kvlen);
+          debug_assert_eq!(
+            written, len_size,
+            "the precalculated size should be equal to the written size"
+          );
 
-          let ko = STATUS_SIZE + KEY_LEN_SIZE;
-          buf.set_len(ko + klen);
+          let ko = STATUS_SIZE + written;
+          buf.set_len(ko + klen + vlen);
 
           let key_buf = slice::from_raw_parts_mut(buf.as_mut_ptr().add(ko), klen);
           key.encode(key_buf).map_err(Among::Left)?;
 
-          buf.put_u32_le_unchecked(vlen as u32);
-
-          let vo = STATUS_SIZE + KEY_LEN_SIZE + klen + VALUE_LEN_SIZE;
-          buf.set_len(vo + vlen);
+          let vo = STATUS_SIZE + written + klen;
           let value_buf = slice::from_raw_parts_mut(buf.as_mut_ptr().add(vo), vlen);
           val.encode(value_buf).map_err(Among::Middle)?;
 
@@ -1348,7 +1342,7 @@ where
           }
           buf.detach();
 
-          let mut p = Pointer::new(klen, vlen, buf.as_ptr());
+          let mut p = Pointer::new(klen, vlen, buf.as_ptr().add(ko));
           if let Among::Left(k) = key {
             if self.opts.cache_key {
               p = p.with_cached_key(k);
