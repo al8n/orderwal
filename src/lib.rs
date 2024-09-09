@@ -99,7 +99,7 @@ impl<C> Pointer<C> {
   }
 
   #[inline]
-  const fn as_key_slice(&self) -> &[u8] {
+  const fn as_key_slice<'a>(&self) -> &'a [u8] {
     if self.key_len == 0 {
       return &[];
     }

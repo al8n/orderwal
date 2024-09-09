@@ -32,10 +32,48 @@ where
   K: Type + Ord,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  #[inline]
+  pub fn first(&self) -> Option<EntryRef<K, V>> {
+    self.0.first()
+  }
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  #[inline]
+  pub fn last(&self) -> Option<EntryRef<K, V>> {
+    self.0.last()
+  }
+
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   pub fn iter(&self) -> Iter<K, V> {
     self.0.iter()
+  }
+
+  /// Returns an iterator over a subset of the entries in the WAL.
+  #[inline]
+  pub fn range_by_ref<'a, Q>(
+    &'a self,
+    start_bound: Bound<&'a Q>,
+    end_bound: Bound<&'a Q>,
+  ) -> RefRange<'a, Q, K, V>
+  where
+    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self.0.range_by_ref(start_bound, end_bound)
+  }
+
+  /// Returns an iterator over a subset of the entries in the WAL.
+  #[inline]
+  pub fn range<'a, Q>(
+    &'a self,
+    start_bound: Bound<&'a Q>,
+    end_bound: Bound<&'a Q>,
+  ) -> Range<'a, Q, K, V>
+  where
+    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+  {
+    self.0.range(start_bound, end_bound)
   }
 }
 

@@ -377,7 +377,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: tarpaulin
-          args: --features memmap --run-types tests --run-types doctests --workspace --out xml
+          args: --all-features --run-types tests --run-types doctests --workspace --out xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
         with:

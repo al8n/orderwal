@@ -55,4 +55,16 @@ impl<C: Comparator + Send + 'static, S> OrderWalReader<C, S> {
   pub fn iter(&self) -> Iter<C> {
     self.0.iter()
   }
+
+  /// Returns an iterator over the keys in the WAL.
+  #[inline]
+  pub fn keys(&self) -> Keys<C> {
+    self.0.keys()
+  }
+
+  /// Returns an iterator over the values in the WAL.
+  #[inline]
+  pub fn values(&self) -> Values<C> {
+    self.0.values()
+  }
 }

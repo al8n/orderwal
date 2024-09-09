@@ -43,20 +43,6 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
   _s: PhantomData<S>,
 }
 
-impl<C, S> OrderWal<C, S> {
-  /// Gets an iterator over the keys of the `OrderWal`, in sorted order.
-  #[inline]
-  pub fn keys(&self) -> Keys<C> {
-    Keys::new(self.core.map.iter())
-  }
-
-  /// Gets an iterator over the values of the `OrderWal`, in sorted order.
-  #[inline]
-  pub fn values(&self) -> Values<C> {
-    Values::new(self.core.map.iter())
-  }
-}
-
 impl<C, S> WalSealed<C, S> for OrderWal<C, S>
 where
   C: 'static,
@@ -166,7 +152,33 @@ impl<C, S> Wal<C, S> for OrderWal<C, S>
 where
   C: 'static,
 {
-  type Iter<'a> = Iter<'a, C> where Self: 'a;
+  type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
+  type Range<'a, Q, R> = Range<'a, C>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized + crossbeam_skiplist::Comparable<[u8]>,
+    Self: 'a,
+    C: Comparator;
+  type Keys<'a> = Keys<'a, C> where Self: 'a, C: Comparator;
+
+  type RangeKeys<'a, Q, R> = RangeKeys<'a, C>
+      where
+        R: core::ops::RangeBounds<Q>,
+        [u8]: Borrow<Q>,
+        Q: Ord + ?Sized,
+        Self: 'a,
+        C: Comparator;
+
+  type Values<'a> = Values<'a, C> where Self: 'a, C: Comparator;
+
+  type RangeValues<'a, Q, R> = RangeValues<'a, C>
+      where
+        R: core::ops::RangeBounds<Q>,
+        [u8]: Borrow<Q>,
+        Q: Ord + ?Sized,
+        Self: 'a,
+        C: Comparator;
 
   #[inline]
   fn read_only(&self) -> bool {
@@ -225,6 +237,74 @@ where
     C: Comparator,
   {
     Iter::new(self.core.map.iter())
+  }
+
+  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    Range::new(self.core.map.range(range))
+  }
+
+  fn keys(&self) -> Self::Keys<'_>
+  where
+    C: Comparator,
+  {
+    Keys::new(self.core.map.iter())
+  }
+
+  fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    RangeKeys::new(self.core.map.range(range))
+  }
+
+  fn values(&self) -> Self::Values<'_>
+  where
+    C: Comparator,
+  {
+    Values::new(self.core.map.iter())
+  }
+
+  fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    RangeValues::new(self.core.map.range(range))
+  }
+
+  #[inline]
+  fn first(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator,
+  {
+    self
+      .core
+      .map
+      .first()
+      .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
+  }
+
+  #[inline]
+  fn last(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator,
+  {
+    self
+      .core
+      .map
+      .last()
+      .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
   }
 
   fn get<Q>(&self, key: &Q) -> Option<&[u8]>

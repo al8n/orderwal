@@ -15,9 +15,6 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-mod entry;
-pub use entry::*;
-
 #[cfg(test)]
 mod tests;
 
@@ -208,7 +205,33 @@ impl<C, S> Wal<C, S> for OrderWal<C, S>
 where
   C: Send + 'static,
 {
-  type Iter<'a> = Iter<'a, C> where Self: 'a;
+  type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
+  type Range<'a, Q, R> = Range<'a, Q, R, C>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
+  type Keys<'a> = Keys<'a, C> where Self: 'a, C: Comparator;
+
+  type RangeKeys<'a, Q, R> = RangeKeys<'a, Q, R, C>
+      where
+        R: core::ops::RangeBounds<Q>,
+        [u8]: Borrow<Q>,
+        Q: Ord + ?Sized,
+        Self: 'a,
+        C: Comparator;
+
+  type Values<'a> = Values<'a, C> where Self: 'a, C: Comparator;
+
+  type RangeValues<'a, Q, R> = RangeValues<'a, Q, R, C>
+      where
+        R: core::ops::RangeBounds<Q>,
+        [u8]: Borrow<Q>,
+        Q: Ord + ?Sized,
+        Self: 'a,
+        C: Comparator;
 
   #[inline]
   fn read_only(&self) -> bool {
@@ -235,6 +258,7 @@ where
     self.core.opts.maximum_value_size()
   }
 
+  #[inline]
   fn flush(&self) -> Result<(), Error> {
     if self.ro {
       return Err(error::Error::read_only());
@@ -243,6 +267,7 @@ where
     self.core.arena.flush().map_err(Into::into)
   }
 
+  #[inline]
   fn flush_async(&self) -> Result<(), Error> {
     if self.ro {
       return Err(error::Error::read_only());
@@ -251,6 +276,7 @@ where
     self.core.arena.flush_async().map_err(Into::into)
   }
 
+  #[inline]
   fn contains_key<Q>(&self, key: &Q) -> bool
   where
     [u8]: Borrow<Q>,
@@ -260,6 +286,7 @@ where
     self.core.map.contains(key)
   }
 
+  #[inline]
   fn iter(&self) -> Self::Iter<'_>
   where
     C: Comparator,
@@ -267,6 +294,77 @@ where
     self.core.iter()
   }
 
+  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized + crossbeam_skiplist::Comparable<[u8]>,
+    C: Comparator,
+  {
+    Range::new(self.core.map.range(range))
+  }
+
+  #[inline]
+  fn keys(&self) -> Self::Keys<'_>
+  where
+    C: Comparator,
+  {
+    Keys::new(self.core.map.iter())
+  }
+
+  fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    RangeKeys::new(self.core.map.range(range))
+  }
+
+  #[inline]
+  fn values(&self) -> Self::Values<'_>
+  where
+    C: Comparator,
+  {
+    Values::new(self.core.map.iter())
+  }
+
+  fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    RangeValues::new(self.core.map.range(range))
+  }
+
+  #[inline]
+  fn first(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator,
+  {
+    self
+      .core
+      .map
+      .front()
+      .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
+  }
+
+  #[inline]
+  fn last(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator,
+  {
+    self
+      .core
+      .map
+      .back()
+      .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
+  }
+
+  #[inline]
   fn get<Q>(&self, key: &Q) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,

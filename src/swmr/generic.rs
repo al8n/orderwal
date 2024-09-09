@@ -1,4 +1,4 @@
-use core::{cmp, marker::PhantomData, slice};
+use core::{cmp, marker::PhantomData, ops::Bound, slice};
 use std::{
   path::{Path, PathBuf},
   sync::Arc,
@@ -34,7 +34,8 @@ pub use iter::*;
 #[cfg(test)]
 mod tests;
 
-struct Pointer<K, V> {
+#[doc(hidden)]
+pub struct Pointer<K, V> {
   /// The pointer to the start of the entry.
   ptr: *const u8,
   /// The length of the key.
@@ -317,12 +318,66 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
+  fn first(&self) -> Option<EntryRef<K, V>>
+  where
+    K: Type + Ord,
+    for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  {
+    self.map.front().map(EntryRef::new)
+  }
+
+  #[inline]
+  fn last(&self) -> Option<EntryRef<K, V>>
+  where
+    K: Type + Ord,
+    for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  {
+    self.map.back().map(EntryRef::new)
+  }
+
+  #[inline]
   fn iter(&self) -> Iter<K, V>
   where
     K: Type + Ord,
     for<'b> K::Ref<'b>: KeyRef<'b, K>,
   {
     Iter::new(self.map.iter())
+  }
+
+  #[inline]
+  fn range_by_ref<'a, Q>(
+    &'a self,
+    start_bound: Bound<&'a Q>,
+    end_bound: Bound<&'a Q>,
+  ) -> RefRange<'a, Q, K, V>
+  where
+    K: Type + Ord,
+    for<'b> K::Ref<'b>: KeyRef<'b, K>,
+    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
+  {
+    RefRange::new(
+      self
+        .map
+        .range((start_bound.map(Ref::new), end_bound.map(Ref::new))),
+    )
+  }
+
+  #[inline]
+  fn range<'a, Q>(
+    &'a self,
+    start_bound: Bound<&'a Q>,
+    end_bound: Bound<&'a Q>,
+  ) -> Range<'a, Q, K, V>
+  where
+    K: Type + Ord,
+    for<'b> K::Ref<'b>: KeyRef<'b, K>,
+    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+  {
+    Range::new(
+      self
+        .map
+        .range((start_bound.map(Owned::new), end_bound.map(Owned::new))),
+    )
   }
 
   #[inline]
@@ -514,10 +569,48 @@ where
   K: Type + Ord + 'static,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
 {
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  #[inline]
+  pub fn first(&self) -> Option<EntryRef<K, V>> {
+    self.core.first()
+  }
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  #[inline]
+  pub fn last(&self) -> Option<EntryRef<K, V>> {
+    self.core.last()
+  }
+
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   pub fn iter(&self) -> Iter<K, V> {
     self.core.iter()
+  }
+
+  /// Returns an iterator over a subset of the entries in the WAL.
+  #[inline]
+  pub fn range_by_ref<'a, Q>(
+    &'a self,
+    start_bound: Bound<&'a Q>,
+    end_bound: Bound<&'a Q>,
+  ) -> RefRange<'a, Q, K, V>
+  where
+    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self.core.range_by_ref(start_bound, end_bound)
+  }
+
+  /// Returns an iterator over a subset of the entries in the WAL.
+  #[inline]
+  pub fn range<'a, Q>(
+    &'a self,
+    start_bound: Bound<&'a Q>,
+    end_bound: Bound<&'a Q>,
+  ) -> Range<'a, Q, K, V>
+  where
+    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+  {
+    self.core.range(start_bound, end_bound)
   }
 }
 

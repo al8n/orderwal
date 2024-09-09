@@ -1,3 +1,5 @@
+use core::ops::RangeBounds;
+
 use super::*;
 
 mod builder;
@@ -8,9 +10,49 @@ pub(crate) mod sealed;
 /// An abstract layer for the write-ahead log.
 pub trait Wal<C, S>: Sized + sealed::WalSealed<C, S> {
   /// The iterator type.
-  type Iter<'a>
+  type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])>
   where
-    Self: 'a;
+    Self: 'a,
+    C: Comparator;
+
+  /// The iterator type over a subset of entries in the WAL.
+  type Range<'a, Q, R>: Iterator<Item = (&'a [u8], &'a [u8])>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
+
+  /// The keys iterator type.
+  type Keys<'a>: Iterator<Item = &'a [u8]>
+  where
+    Self: 'a,
+    C: Comparator;
+
+  /// The iterator type over a subset of keys in the WAL.
+  type RangeKeys<'a, Q, R>: Iterator<Item = &'a [u8]>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
+
+  /// The values iterator type.
+  type Values<'a>: Iterator<Item = &'a [u8]>
+  where
+    Self: 'a,
+    C: Comparator;
+
+  /// The iterator type over a subset of values in the WAL.
+  type RangeValues<'a, Q, R>: Iterator<Item = &'a [u8]>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
 
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///
@@ -168,6 +210,50 @@ pub trait Wal<C, S>: Sized + sealed::WalSealed<C, S> {
 
   /// Returns an iterator over the entries in the WAL.
   fn iter(&self) -> Self::Iter<'_>
+  where
+    C: Comparator;
+
+  /// Returns an iterator over a subset of entries in the WAL.
+  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator;
+
+  /// Returns an iterator over the keys in the WAL.
+  fn keys(&self) -> Self::Keys<'_>
+  where
+    C: Comparator;
+
+  /// Returns an iterator over a subset of keys in the WAL.
+  fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator;
+
+  /// Returns an iterator over the values in the WAL.
+  fn values(&self) -> Self::Values<'_>
+  where
+    C: Comparator;
+
+  /// Returns an iterator over a subset of values in the WAL.
+  fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator;
+
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  fn first(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator;
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  fn last(&self) -> Option<(&[u8], &[u8])>
   where
     C: Comparator;
 
