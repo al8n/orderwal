@@ -1,5 +1,6 @@
 use super::*;
 
+/// An [`OrderWal`] reader.
 pub struct OrderWalReader<C, S>(OrderWal<C, S>);
 
 impl<C, S> OrderWalReader<C, S> {
@@ -12,7 +13,9 @@ impl<C, S> OrderWalReader<C, S> {
       _s: PhantomData,
     })
   }
+}
 
+impl<C: Send + 'static, S> OrderWalReader<C, S> {
   /// Returns number of entries in the WAL.
   #[inline]
   pub fn len(&self) -> usize {
@@ -26,7 +29,7 @@ impl<C, S> OrderWalReader<C, S> {
   }
 }
 
-impl<C: Comparator, S> OrderWalReader<C, S> {
+impl<C: Comparator + Send + 'static, S> OrderWalReader<C, S> {
   /// Returns `true` if the WAL contains the specified key.
   #[inline]
   pub fn contains_key<Q>(&self, key: &Q) -> bool

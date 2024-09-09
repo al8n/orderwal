@@ -381,8 +381,8 @@ where
           break;
         }
 
-        let header = arena.get_bytes(cursor, STATUS_SIZE);
-        let flag = Flags::from_bits_unchecked(header[0]);
+        let header = arena.get_u8(cursor).unwrap();
+        let flag = Flags::from_bits_unchecked(header);
 
         let (kvsize, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|_e| {
           #[cfg(feature = "tracing")]
@@ -405,12 +405,7 @@ where
           break;
         }
 
-        let cks = u64::from_le_bytes(
-          arena
-            .get_bytes(cursor + cks_offset, CHECKSUM_SIZE)
-            .try_into()
-            .unwrap(),
-        );
+        let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
 
         if cks != checksumer.checksum(arena.get_bytes(cursor, cks_offset)) {
           return Err(Error::corrupted());
