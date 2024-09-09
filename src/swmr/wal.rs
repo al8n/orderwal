@@ -3,7 +3,7 @@ use super::super::*;
 use among::Among;
 use either::Either;
 use error::Error;
-use sealed::{Base, WalCore, WalSealed};
+use wal::sealed::{Base, WalCore, WalSealed};
 
 use core::ptr::NonNull;
 use rarena_allocator::{sync::Arena, Error as ArenaError};
@@ -115,37 +115,6 @@ where
     }
   }
 
-  #[inline]
-  fn check(&self, klen: usize, vlen: usize) -> Result<(), error::Error> {
-    let elen = klen as u64 + vlen as u64;
-
-    if self.core.opts.maximum_key_size < klen as u32 {
-      return Err(error::Error::key_too_large(
-        klen as u32,
-        self.core.opts.maximum_key_size,
-      ));
-    }
-
-    if self.core.opts.maximum_value_size < vlen as u32 {
-      return Err(error::Error::value_too_large(
-        vlen as u32,
-        self.core.opts.maximum_value_size,
-      ));
-    }
-
-    if elen + FIXED_RECORD_SIZE as u64 > u32::MAX as u64 {
-      return Err(error::Error::entry_too_large(
-        elen,
-        min_u64(
-          self.core.opts.maximum_key_size as u64 + self.core.opts.maximum_value_size as u64,
-          u32::MAX as u64,
-        ),
-      ));
-    }
-
-    Ok(())
-  }
-
   fn insert_with_in<KE, VE>(
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
@@ -214,7 +183,7 @@ where
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.core.opts.sync_on_write && self.core.arena.is_ondisk() {
+          if self.core.opts.sync_on_write() && self.core.arena.is_ondisk() {
             self
               .core
               .arena
@@ -246,16 +215,24 @@ where
     self.ro
   }
 
-  /// Returns the number of entries in the WAL.
   #[inline]
   fn len(&self) -> usize {
     self.core.map.len()
   }
 
-  /// Returns `true` if the WAL is empty.
   #[inline]
   fn is_empty(&self) -> bool {
     self.core.map.is_empty()
+  }
+
+  #[inline]
+  fn maximum_key_size(&self) -> u32 {
+    self.core.opts.maximum_key_size()
+  }
+
+  #[inline]
+  fn maximum_value_size(&self) -> u32 {
+    self.core.opts.maximum_value_size()
   }
 
   fn flush(&self) -> Result<(), Error> {
@@ -313,7 +290,12 @@ where
     }
 
     self
-      .check(key.len(), vb.size() as usize)
+      .check(
+        key.len(),
+        vb.size() as usize,
+        self.maximum_key_size(),
+        self.maximum_value_size(),
+      )
       .map_err(Either::Right)?;
 
     if let Some(ent) = self.core.map.get(key) {

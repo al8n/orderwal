@@ -13,10 +13,10 @@ use rarena_allocator::{
 };
 
 use crate::{
-  arena_options, entry_size,
+  arena_options, check, entry_size,
   error::{self, Error},
-  split_lengths, Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE, HEADER_SIZE, KEY_LEN_SIZE,
-  MAGIC_TEXT, STATUS_SIZE, VALUE_LEN_SIZE,
+  split_lengths, Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT,
+  STATUS_SIZE,
 };
 
 mod entry;
@@ -108,7 +108,7 @@ impl<K, V> Pointer<K, V> {
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(STATUS_SIZE + KEY_LEN_SIZE), self.key_len) }
+    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
   }
 
   #[inline]
@@ -118,14 +118,7 @@ impl<K, V> Pointer<K, V> {
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe {
-      slice::from_raw_parts(
-        self
-          .ptr
-          .add(STATUS_SIZE + KEY_LEN_SIZE + self.key_len + VALUE_LEN_SIZE),
-        self.value_len,
-      )
-    }
+    unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
   }
 }
 
@@ -180,7 +173,7 @@ impl<K> PartialPointer<K> {
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(STATUS_SIZE + KEY_LEN_SIZE), self.key_len) }
+    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
   }
 }
 
@@ -358,7 +351,7 @@ where
       return Err(Error::magic_text_mismatch());
     }
 
-    if magic_version != opts.magic_version {
+    if magic_version != opts.magic_version() {
       return Err(Error::magic_version_mismatch());
     }
 
@@ -611,9 +604,9 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// let wal = GenericOrderWal::with_checksumer(Options::new(), Crc32::default());
   /// ```
   pub fn with_checksumer(opts: Options, cks: S) -> Self {
-    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.cap));
+    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity()));
 
-    GenericOrderWalCore::new(arena, opts.magic_version, false)
+    GenericOrderWalCore::new(arena, opts.magic_version(), false)
       .map(|core| Self::from_core(core, opts, cks, false))
       .unwrap()
   }
@@ -630,10 +623,10 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   pub fn map_anon_with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
     let arena = Arena::map_anon(
       arena_options(opts.reserved()),
-      MmapOptions::new().len(opts.cap),
+      MmapOptions::new().len(opts.capacity()),
     )?;
 
-    GenericOrderWalCore::new(arena, opts.magic_version, true)
+    GenericOrderWalCore::new(arena, opts.magic_version(), true)
       .map(|core| Self::from_core(core, opts, cks, false))
   }
 
@@ -707,7 +700,7 @@ where
     .map_err(|e| e.map_right(Into::into))?;
 
     if !exist {
-      return GenericOrderWalCore::new(arena, opts.magic_version, true)
+      return GenericOrderWalCore::new(arena, opts.magic_version(), true)
         .map(|core| Self::from_core(core, opts, cks, false))
         .map_err(Either::Right);
     }
@@ -1278,6 +1271,8 @@ where
     let klen = key.encoded_len();
     let vlen = val.encoded_len();
 
+    self.check(klen, vlen).map_err(Among::Right)?;
+
     let (len_size, kvlen, elen) = entry_size(klen as u32, vlen as u32);
 
     let buf = self.core.arena.alloc_bytes(elen);
@@ -1328,7 +1323,7 @@ where
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.opts.sync_on_write && self.core.arena.is_ondisk() {
+          if self.opts.sync_on_write() && self.core.arena.is_ondisk() {
             self
               .core
               .arena
@@ -1339,13 +1334,13 @@ where
 
           let mut p = Pointer::new(klen, vlen, buf.as_ptr().add(ko));
           if let Among::Left(k) = key {
-            if self.opts.cache_key {
+            if self.opts.cache_key() {
               p = p.with_cached_key(k);
             }
           }
 
           if let Among::Left(v) = val {
-            if self.opts.cache_value {
+            if self.opts.cache_value() {
               p = p.with_cached_value(v);
             }
           }
@@ -1355,5 +1350,15 @@ where
         }
       }
     }
+  }
+
+  #[inline]
+  fn check(&self, klen: usize, vlen: usize) -> Result<(), error::Error> {
+    check(
+      klen,
+      vlen,
+      self.opts.maximum_key_size(),
+      self.opts.maximum_value_size(),
+    )
   }
 }
