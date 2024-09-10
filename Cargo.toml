@@ -16,11 +16,10 @@ harness = false
 
 [features]
 default = ["std"]
-alloc = ["rarena-allocator/alloc", "crossbeam-skiplist/alloc", "dbutils/alloc"]
 std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/default", "dbutils/default", "among/default", "faststr?/default", "bytes?/default", "smol_str?/default"]
 
-xxhash3 = ["dbutils/xxhash3"]
-xxhash64 = ["dbutils/xxhash64"]
+xxhash3 = ["dbutils/xxhash3", "std"]
+xxhash64 = ["dbutils/xxhash64", "std"]
 
 [dependencies]
 among = { version = "0.1", default-features = false }

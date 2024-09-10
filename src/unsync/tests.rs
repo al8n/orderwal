@@ -1,3 +1,5 @@
+use tempfile::tempdir;
+
 use crate::tests::*;
 
 use super::*;
@@ -15,7 +17,7 @@ fn test_construct_map_anon() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_construct_map_file() {
-  construct_map_file::<OrderWal<Ascend, Crc32>>("swmr");
+  construct_map_file::<OrderWal<Ascend, Crc32>>("unsync");
 }
 
 #[test]
@@ -31,5 +33,27 @@ fn test_construct_with_small_capacity_map_anon() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_construct_with_small_capacity_map_file() {
-  construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>("swmr");
+  construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>("unsync");
+}
+
+#[test]
+fn test_insert_inmemory() {
+  insert(OrderWal::new(Builder::new().with_capacity(1024 * 1024)).unwrap());
+}
+
+#[test]
+fn test_insert_map_anon() {
+  insert(OrderWal::map_anon(Builder::new().with_capacity(1024 * 1024)).unwrap());
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_insert_map_file() {
+  let dir = tempdir().unwrap();
+  insert(OrderWal::map_mut(
+    dir.path().join("test_unsync_insert_map_file"),
+    Builder::new(),
+    OpenOptions::new().create_new(Some(1024 * 1024)).write(true).read(true),
+  )
+  .unwrap());
 }

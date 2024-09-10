@@ -16,12 +16,6 @@ use rarena_allocator::{
   Allocator, ArenaOptions, Freelist, Memory, MmapOptions, OpenOptions,
 };
 
-#[cfg(not(any(feature = "std", feature = "alloc")))]
-compile_error!("`orderwal` requires either the 'std' or 'alloc' feature to be enabled");
-
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
-
 #[cfg(feature = "std")]
 extern crate std;
 

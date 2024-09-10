@@ -81,3 +81,13 @@ pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(pref
     _ => panic!("unexpected error"),
   }
 }
+
+pub(crate) fn insert<W: Wal<Ascend, Crc32>>(mut wal: W) {
+  for i in 0..1000u32 {
+    wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
+  }
+
+  for i in 0..1000u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
