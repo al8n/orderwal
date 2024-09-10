@@ -4,6 +4,8 @@ use crate::tests::*;
 
 use super::*;
 
+const MB: u32 = 1024 * 1024;
+
 #[test]
 fn test_construct_inmemory() {
   construct_inmemory::<OrderWal<Ascend, Crc32>>();
@@ -38,12 +40,12 @@ fn test_construct_with_small_capacity_map_file() {
 
 #[test]
 fn test_insert_inmemory() {
-  insert(OrderWal::new(Builder::new().with_capacity(1024 * 1024)).unwrap());
+  insert(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
 }
 
 #[test]
 fn test_insert_map_anon() {
-  insert(OrderWal::map_anon(Builder::new().with_capacity(1024 * 1024)).unwrap());
+  insert(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
 }
 
 #[test]
@@ -55,7 +57,7 @@ fn test_insert_map_file() {
       dir.path().join("test_unsync_insert_map_file"),
       Builder::new(),
       OpenOptions::new()
-        .create_new(Some(1024 * 1024))
+        .create_new(Some(MB))
         .write(true)
         .read(true),
     )
@@ -65,12 +67,12 @@ fn test_insert_map_file() {
 
 #[test]
 fn test_iter_inmemory() {
-  iter(OrderWal::new(Builder::new().with_capacity(1024 * 1024)).unwrap());
+  iter(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
 }
 
 #[test]
 fn test_iter_map_anon() {
-  iter(OrderWal::map_anon(Builder::new().with_capacity(1024 * 1024)).unwrap());
+  iter(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
 }
 
 #[test]
@@ -82,7 +84,7 @@ fn test_iter_map_file() {
       dir.path().join("test_unsync_iter_map_file"),
       Builder::new(),
       OpenOptions::new()
-        .create_new(Some(1024 * 1024))
+        .create_new(Some(MB))
         .write(true)
         .read(true),
     )
@@ -92,12 +94,12 @@ fn test_iter_map_file() {
 
 #[test]
 fn test_range() {
-  range(OrderWal::new(Builder::new().with_capacity(1024 * 1024)).unwrap());
+  range(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
 }
 
 #[test]
 fn test_range_map_anon() {
-  range(OrderWal::map_anon(Builder::new().with_capacity(1024 * 1024)).unwrap());
+  range(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
 }
 
 #[test]
@@ -109,7 +111,7 @@ fn test_range_map_file() {
       dir.path().join("test_unsync_range_map_file"),
       Builder::new(),
       OpenOptions::new()
-        .create_new(Some(1024 * 1024))
+        .create_new(Some(MB))
         .write(true)
         .read(true),
     )
