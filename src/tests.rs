@@ -1,5 +1,6 @@
 use super::*;
 use tempfile::tempdir;
+use wal::ImmutableWal;
 
 const MB: usize = 1024 * 1024;
 

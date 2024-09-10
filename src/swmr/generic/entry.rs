@@ -1,5 +1,4 @@
 use crossbeam_skiplist::set::Entry;
-use rarena_allocator::either::Either;
 
 use super::{Pointer, Type, TypeRef};
 
@@ -31,23 +30,15 @@ where
 {
   /// Returns the key of the entry.
   #[inline]
-  pub fn key(&self) -> Either<&K, K::Ref<'a>> {
+  pub fn key(&self) -> K::Ref<'a> {
     let p = self.ent.value();
-    if let Some(k) = &p.cached_key {
-      Either::Left(k)
-    } else {
-      Either::Right(TypeRef::from_slice(p.as_key_slice()))
-    }
+    TypeRef::from_slice(p.as_key_slice())
   }
 
   /// Returns the value of the entry.
   #[inline]
-  pub fn value(&self) -> Either<&V, V::Ref<'a>> {
+  pub fn value(&self) -> V::Ref<'a> {
     let p = self.ent.value();
-    if let Some(v) = &p.cached_value {
-      Either::Left(v)
-    } else {
-      Either::Right(TypeRef::from_slice(p.as_value_slice()))
-    }
+    TypeRef::from_slice(p.as_value_slice())
   }
 }

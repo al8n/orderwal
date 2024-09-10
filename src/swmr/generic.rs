@@ -42,9 +42,7 @@ pub struct Pointer<K, V> {
   key_len: usize,
   /// The length of the value.
   value_len: usize,
-
-  cached_key: Option<K>,
-  cached_value: Option<V>,
+  _m: PhantomData<(K, V)>,
 }
 
 impl<K: Type, V> PartialEq for Pointer<K, V> {
@@ -85,21 +83,8 @@ impl<K, V> Pointer<K, V> {
       ptr,
       key_len,
       value_len,
-      cached_key: None,
-      cached_value: None,
+      _m: PhantomData,
     }
-  }
-
-  #[inline]
-  fn with_cached_key(mut self, key: K) -> Self {
-    self.cached_key = Some(key);
-    self
-  }
-
-  #[inline]
-  fn with_cached_value(mut self, value: V) -> Self {
-    self.cached_value = Some(value);
-    self
   }
 
   #[inline]
@@ -273,13 +258,8 @@ where
   Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
-    match p.cached_key.as_ref() {
-      Some(k) => Comparable::compare(self.key, k),
-      None => {
-        let kr = <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice());
-        KeyRef::compare(&kr, self.key).reverse()
-      }
-    }
+    let kr = <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice());
+    KeyRef::compare(&kr, self.key).reverse()
   }
 }
 
@@ -897,19 +877,19 @@ where
   #[inline]
   pub fn get_or_insert(
     &mut self,
-    key: K,
-    value: V,
+    key: &K,
+    value: &V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
     let ent = self
       .core
       .map
-      .get(&Owned::new(&key))
+      .get(&Owned::new(key))
       .map(|e| Either::Left(EntryRef::new(e)));
 
     match ent {
       Some(e) => e,
       None => {
-        let p = self.insert_in(Among::Left(key), Among::Left(value));
+        let p = self.insert_in(Among::Middle(key), Among::Middle(value));
         Either::Right(p)
       }
     }
@@ -917,7 +897,7 @@ where
 
   /// Gets or insert the key value pair.
   #[inline]
-  pub fn get_or_insert_ref_with(
+  pub fn get_or_insert_with(
     &mut self,
     key: &K,
     value: impl FnOnce() -> V,
@@ -938,99 +918,11 @@ where
   }
 
   /// Gets or insert the key value pair.
-  #[inline]
-  pub fn get_or_insert_with(
-    &mut self,
-    key: K,
-    value: impl FnOnce() -> V,
-  ) -> Either<EntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
-    let ent = self
-      .core
-      .map
-      .get(&Owned::new(&key))
-      .map(|e| Either::Left(EntryRef::new(e)));
-
-    match ent {
-      Some(e) => e,
-      None => {
-        let p = self.insert_in(Among::Left(key), Among::Left(value()));
-        Either::Right(p)
-      }
-    }
-  }
-
-  /// Gets or insert the key value pair.
-  #[inline]
-  pub fn get_or_insert_refs<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b K,
-    value: &'b V,
-  ) -> Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
-    let ent = self
-      .core
-      .map
-      .get(&Ref::new(key))
-      .map(|e| Either::Left(EntryRef::new(e)));
-
-    match ent {
-      Some(e) => e,
-      None => {
-        let p = self.insert_in(Among::Middle(key), Among::Middle(value));
-        Either::Right(p)
-      }
-    }
-  }
-
-  /// Gets or insert the key value pair.
-  #[inline]
-  pub fn get_by_ref_or_insert_with<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b K,
-    value: impl FnOnce() -> V,
-  ) -> Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
-    let ent = self
-      .core
-      .map
-      .get(&Ref::new(key))
-      .map(|e| Either::Left(EntryRef::new(e)));
-
-    match ent {
-      Some(e) => e,
-      None => {
-        let p = self.insert_in(Among::Middle(key), Among::Left(value()));
-        Either::Right(p)
-      }
-    }
-  }
-
-  /// Gets or insert the key value pair.
-  #[inline]
-  pub fn get_by_ref_or_insert<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b K,
-    value: V,
-  ) -> Either<EntryRef<'a, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
-    let ent = self
-      .core
-      .map
-      .get(&Ref::new(key))
-      .map(|e| Either::Left(EntryRef::new(e)));
-
-    match ent {
-      Some(e) => e,
-      None => {
-        let p = self.insert_in(Among::Middle(key), Among::Left(value));
-        Either::Right(p)
-      }
-    }
-  }
-
-  /// Gets or insert the key value pair.
   ///
   /// # Safety
   /// - The given `key` and `value` must be valid to construct to `K::Ref` and `V::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes_or_insert_bytes(
+  pub unsafe fn get_by_bytes_or_insert_value_bytes(
     &mut self,
     key: &[u8],
     value: &[u8],
@@ -1056,33 +948,7 @@ where
   /// # Safety
   /// - The given `value` must be valid to construct to `V::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_or_insert_bytes(
-    &mut self,
-    key: K,
-    value: &[u8],
-  ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
-    let ent = self
-      .core
-      .map
-      .get(&Owned::new(&key))
-      .map(|e| Either::Left(EntryRef::new(e)));
-
-    match ent {
-      Some(e) => e,
-      None => match self.insert_in(Among::Left(key), Among::Right(value)) {
-        Ok(_) => Either::Right(Ok(())),
-        Err(Among::Right(e)) => Either::Right(Err(e)),
-        _ => unreachable!(),
-      },
-    }
-  }
-
-  /// Gets or insert the key value pair.
-  ///
-  /// # Safety
-  /// - The given `value` must be valid to construct to `V::Ref` without remaining.
-  #[inline]
-  pub unsafe fn get_by_ref_or_insert_bytes(
+  pub unsafe fn get_or_insert_value_bytes(
     &mut self,
     key: &K,
     value: &[u8],
@@ -1108,10 +974,10 @@ where
   /// # Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes_or_insert(
+  pub unsafe fn get_by_key_bytes_or_insert(
     &mut self,
     key: &[u8],
-    value: V,
+    value: &V,
   ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
     let ent = self
       .core
@@ -1121,7 +987,7 @@ where
 
     match ent {
       Some(e) => e,
-      None => match self.insert_in(Among::Right(key), Among::Left(value)) {
+      None => match self.insert_in(Among::Right(key), Among::Middle(value)) {
         Ok(_) => Either::Right(Ok(())),
         Err(Among::Right(e)) => Either::Right(Err(e)),
         _ => unreachable!(),
@@ -1134,7 +1000,7 @@ where
   /// # Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes_or_insert_with(
+  pub unsafe fn get_by_key_bytes_or_insert_with(
     &mut self,
     key: &[u8],
     value: impl FnOnce() -> V,
@@ -1168,17 +1034,7 @@ where
   ///
   /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
   #[inline]
-  pub fn insert(&mut self, key: K, val: V) -> Result<(), Among<K::Error, V::Error, Error>> {
-    self.insert_in(Among::Left(key), Among::Left(val))
-  }
-
-  /// Inserts a key-value pair into the write-ahead log.
-  ///
-  /// Not like [`insert`](GenericOrderWal::insert), this method does not cache the key or value in memory even if the `cache_key` or `cache_value` is enabled.
-  ///
-  /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
-  #[inline]
-  pub fn insert_refs(&mut self, key: &K, val: &V) -> Result<(), Among<K::Error, V::Error, Error>> {
+  pub fn insert(&mut self, key: &K, val: &V) -> Result<(), Among<K::Error, V::Error, Error>> {
     self.insert_in(Among::Middle(key), Among::Middle(val))
   }
 
@@ -1268,10 +1124,10 @@ where
   /// let wal2 = GenericOrderWal::new(Options::new().with_capacity(1024));
   ///
   /// // Insert the key-value pair in bytes format directly.
-  /// unsafe { wal2.insert_bytes(ent.key(), ent.value().as_ref()).unwrap(); }
+  /// unsafe { wal2.insert_value_bytes(ent.key(), ent.value().as_ref()).unwrap(); }
   /// ```
   #[inline]
-  pub unsafe fn insert_bytes(&mut self, key: &[u8], val: &[u8]) -> Result<(), Error> {
+  pub unsafe fn insert_value_bytes(&mut self, key: &[u8], val: &[u8]) -> Result<(), Error> {
     self
       .insert_in(Among::Right(key), Among::Right(val))
       .map_err(|e| match e {
@@ -1287,11 +1143,11 @@ where
   ///
   /// # Example
   ///
-  /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
+  /// See [`insert_value_bytes`](GenericOrderWal::insert_value_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_key_with_bytes(&mut self, key: K, value: &[u8]) -> Result<(), Error> {
+  pub unsafe fn insert_key_with_value_bytes(&mut self, key: &K, value: &[u8]) -> Result<(), Error> {
     self
-      .insert_in(Among::Left(key), Among::Right(value))
+      .insert_in(Among::Middle(key), Among::Right(value))
       .map_err(|e| match e {
         Among::Right(e) => e,
         _ => unreachable!(),
@@ -1305,45 +1161,9 @@ where
   ///
   /// # Example
   ///
-  /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
+  /// See [`insert_value_bytes`](GenericOrderWal::insert_value_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_bytes_with_value(&mut self, key: &[u8], value: V) -> Result<(), Error> {
-    self
-      .insert_in(Among::Right(key), Among::Left(value))
-      .map_err(|e| match e {
-        Among::Right(e) => e,
-        _ => unreachable!(),
-      })
-  }
-
-  /// Inserts a key in structured reaference format and value in bytes format into the write-ahead log directly.
-  ///
-  /// # Safety
-  /// - The given `value` must be valid to construct to `V::Ref` without remaining.
-  ///
-  /// # Example
-  ///
-  /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
-  #[inline]
-  pub unsafe fn insert_ref_and_bytes(&mut self, key: &K, value: &[u8]) -> Result<(), Error> {
-    self
-      .insert_in(Among::Middle(key), Among::Right(value))
-      .map_err(|e| match e {
-        Among::Right(e) => e,
-        _ => unreachable!(),
-      })
-  }
-
-  /// Inserts a key in bytes format and value in structured reference format into the write-ahead log directly.
-  ///
-  /// # Safety
-  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
-  ///
-  /// # Example
-  ///
-  /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
-  #[inline]
-  pub unsafe fn insert_bytes_and_ref(&mut self, key: &[u8], value: &V) -> Result<(), Error> {
+  pub unsafe fn insert_key_bytes_with_value(&mut self, key: &[u8], value: &V) -> Result<(), Error> {
     self
       .insert_in(Among::Right(key), Among::Middle(value))
       .map_err(|e| match e {
@@ -1425,19 +1245,7 @@ where
           }
           buf.detach();
 
-          let mut p = Pointer::new(klen, vlen, buf.as_ptr().add(ko));
-          if let Among::Left(k) = key {
-            if self.opts.cache_key() {
-              p = p.with_cached_key(k);
-            }
-          }
-
-          if let Among::Left(v) = val {
-            if self.opts.cache_value() {
-              p = p.with_cached_value(v);
-            }
-          }
-
+          let p = Pointer::new(klen, vlen, buf.as_ptr().add(ko));
           self.core.map.insert(p);
           Ok(())
         }

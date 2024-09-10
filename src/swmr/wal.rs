@@ -3,7 +3,10 @@ use super::super::*;
 use among::Among;
 use either::Either;
 use error::Error;
-use wal::sealed::{Base, WalCore, WalSealed};
+use wal::{
+  sealed::{Base, Constructor, Sealed, WalCore},
+  ImmutableWal,
+};
 
 use core::ptr::NonNull;
 use rarena_allocator::{sync::Arena, Error as ArenaError};
@@ -68,19 +71,19 @@ impl<C: Send + 'static, S> WalCore<C, S> for OrderWalCore<C, S> {
 ///
 /// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
 // ```text
-// +----------------------+-------------------------+--------------------+
-// | magic text (6 bytes) | magic version (2 bytes) |  header (8 bytes)  |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------|--------------------+
-// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
-// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
+// +----------------------+--------------------------+--------------------+
+// | magic text (6 bytes) | magic version (2 bytes)  |  header (8 bytes)  |
+// +----------------------+--------------------------+--------------------+-----------------+--------------------+
+// |     flag (1 byte)    | klen & vlen (1-10 bytes) |    key (n bytes)   | value (n bytes) | checksum (8 bytes) |
+// +----------------------+--------------------------+--------------------+-----------------|--------------------+
+// |     flag (1 byte)    | klen & vlen (1-10 bytes) |    key (n bytes)   | value (n bytes) | checksum (8 bytes) |
+// +----------------------+--------------------------+--------------------+-----------------+--------------------+
+// |     flag (1 byte)    | klen & vlen (1-10 bytes) |    key (n bytes)   | value (n bytes) | checksum (8 bytes) |
+// +----------------------+--------------------------+--------------------+-----------------+-----------------+--------------------+
+// |         ...          |            ...           |         ...        |        ...      |        ...      |         ...        |
+// +----------------------+--------------------------+--------------------+-----------------+-----------------+--------------------+
+// |         ...          |            ...           |         ...        |        ...      |        ...      |         ...        |
+// +----------------------+--------------------------+--------------------+-----------------+-----------------+--------------------+
 // ```
 pub struct OrderWal<C = Ascend, S = Crc32> {
   core: Arc<OrderWalCore<C, S>>,
@@ -88,15 +91,7 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
   _s: PhantomData<S>,
 }
 
-impl<C, S> OrderWal<C, S> {
-  /// Returns a read-only view of the WAL.
-  #[inline]
-  pub fn reader(&self) -> OrderWalReader<C, S> {
-    OrderWalReader::new(self.core.clone())
-  }
-}
-
-impl<C, S> WalSealed<C, S> for OrderWal<C, S>
+impl<C, S> Constructor<C, S> for OrderWal<C, S>
 where
   C: Send + 'static,
 {
@@ -111,7 +106,12 @@ where
       _s: PhantomData,
     }
   }
+}
 
+impl<C, S> Sealed<C, S> for OrderWal<C, S>
+where
+  C: Send + 'static,
+{
   fn insert_with_in<KE, VE>(
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
@@ -201,7 +201,15 @@ where
   }
 }
 
-impl<C, S> Wal<C, S> for OrderWal<C, S>
+impl<C, S> OrderWal<C, S> {
+  /// Returns the read-only view for the WAL.
+  #[inline]
+  pub fn reader(&self) -> OrderWalReader<C, S> {
+    OrderWalReader::new(self.core.clone())
+  }
+}
+
+impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
 where
   C: Send + 'static,
 {
@@ -244,11 +252,6 @@ where
   }
 
   #[inline]
-  fn is_empty(&self) -> bool {
-    self.core.map.is_empty()
-  }
-
-  #[inline]
   fn maximum_key_size(&self) -> u32 {
     self.core.opts.maximum_key_size()
   }
@@ -256,24 +259,6 @@ where
   #[inline]
   fn maximum_value_size(&self) -> u32 {
     self.core.opts.maximum_value_size()
-  }
-
-  #[inline]
-  fn flush(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush().map_err(Into::into)
-  }
-
-  #[inline]
-  fn flush_async(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush_async().map_err(Into::into)
   }
 
   #[inline]
@@ -372,6 +357,31 @@ where
     C: Comparator,
   {
     self.core.map.get(key).map(|ent| ent.as_value_slice())
+  }
+}
+
+impl<C, S> Wal<C, S> for OrderWal<C, S>
+where
+  C: Send + 'static,
+{
+  type Reader = OrderWalReader<C, S>;
+
+  #[inline]
+  fn flush(&self) -> Result<(), Error> {
+    if self.ro {
+      return Err(error::Error::read_only());
+    }
+
+    self.core.arena.flush().map_err(Into::into)
+  }
+
+  #[inline]
+  fn flush_async(&self) -> Result<(), Error> {
+    if self.ro {
+      return Err(error::Error::read_only());
+    }
+
+    self.core.arena.flush_async().map_err(Into::into)
   }
 
   fn get_or_insert_with_value_builder<E>(

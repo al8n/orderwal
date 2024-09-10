@@ -15,7 +15,28 @@ pub trait WalCore<C, S> {
   fn construct(arena: Self::Allocator, base: Self::Base, opts: Options, cmp: C, cks: S) -> Self;
 }
 
-pub trait WalSealed<C, S>: Sized {
+pub trait Sealed<C, S>: Constructor<C, S> {
+  fn check(
+    &self,
+    klen: usize,
+    vlen: usize,
+    max_key_size: u32,
+    max_value_size: u32,
+  ) -> Result<(), Error> {
+    crate::check(klen, vlen, max_key_size, max_value_size)
+  }
+
+  fn insert_with_in<KE, VE>(
+    &mut self,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
+  ) -> Result<(), Among<KE, VE, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: Checksumer;
+}
+
+pub trait Constructor<C, S>: Sized {
   type Allocator: Allocator;
   type Core: WalCore<C, S, Allocator = Self::Allocator>;
 
@@ -129,23 +150,4 @@ pub trait WalSealed<C, S>: Sized {
   }
 
   fn from_core(core: Self::Core, ro: bool) -> Self;
-
-  fn check(
-    &self,
-    klen: usize,
-    vlen: usize,
-    max_key_size: u32,
-    max_value_size: u32,
-  ) -> Result<(), Error> {
-    crate::check(klen, vlen, max_key_size, max_value_size)
-  }
-
-  fn insert_with_in<KE, VE>(
-    &mut self,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>>
-  where
-    C: Comparator + CheapClone,
-    S: Checksumer;
 }

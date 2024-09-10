@@ -3,7 +3,10 @@ use super::*;
 use among::Among;
 use either::Either;
 use error::Error;
-use wal::sealed::WalSealed;
+use wal::{
+  sealed::{Constructor, Sealed},
+  ImmutableWal,
+};
 
 use core::ptr::NonNull;
 use rarena_allocator::{unsync::Arena, Error as ArenaError};
@@ -43,7 +46,7 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
   _s: PhantomData<S>,
 }
 
-impl<C, S> WalSealed<C, S> for OrderWal<C, S>
+impl<C, S> Constructor<C, S> for OrderWal<C, S>
 where
   C: 'static,
 {
@@ -58,7 +61,12 @@ where
       _s: PhantomData,
     }
   }
+}
 
+impl<C, S> Sealed<C, S> for OrderWal<C, S>
+where
+  C: 'static,
+{
   fn insert_with_in<KE, VE>(
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
@@ -148,7 +156,7 @@ where
   }
 }
 
-impl<C, S> Wal<C, S> for OrderWal<C, S>
+impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
 where
   C: 'static,
 {
@@ -205,22 +213,6 @@ where
   #[inline]
   fn maximum_value_size(&self) -> u32 {
     self.core.opts.maximum_value_size()
-  }
-
-  fn flush(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush().map_err(Into::into)
-  }
-
-  fn flush_async(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush_async().map_err(Into::into)
   }
 
   fn contains_key<Q>(&self, key: &Q) -> bool
@@ -314,6 +306,31 @@ where
     C: Comparator,
   {
     self.core.map.get(key).map(|ent| ent.as_value_slice())
+  }
+}
+
+impl<C, S> Wal<C, S> for OrderWal<C, S>
+where
+  C: 'static,
+{
+  type Reader = Self;
+
+  #[inline]
+  fn flush(&self) -> Result<(), Error> {
+    if self.ro {
+      return Err(error::Error::read_only());
+    }
+
+    self.core.arena.flush().map_err(Into::into)
+  }
+
+  #[inline]
+  fn flush_async(&self) -> Result<(), Error> {
+    if self.ro {
+      return Err(error::Error::read_only());
+    }
+
+    self.core.arena.flush_async().map_err(Into::into)
   }
 
   fn get_or_insert_with_value_builder<E>(

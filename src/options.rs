@@ -6,8 +6,6 @@ pub struct Options {
   maximum_key_size: u32,
   maximum_value_size: u32,
   sync_on_write: bool,
-  cache_key: bool,
-  cache_value: bool,
   magic_version: u16,
   huge: Option<u8>,
   cap: u32,
@@ -40,8 +38,6 @@ impl Options {
       maximum_key_size: u16::MAX as u32,
       maximum_value_size: u32::MAX,
       sync_on_write: true,
-      cache_key: false,
-      cache_value: false,
       magic_version: 0,
       huge: None,
       cap: 0,
@@ -179,40 +175,6 @@ impl Options {
     self.sync_on_write
   }
 
-  /// Returns `true`, when inserting an new entry, the owned `K` will be cached in memory.
-  ///
-  /// The default value is `false`.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use orderwal::Options;
-  ///
-  /// let options = Options::new();
-  /// assert_eq!(options.cache_key(), false);
-  /// ```
-  #[inline]
-  pub const fn cache_key(&self) -> bool {
-    self.cache_key
-  }
-
-  /// Returns `true`, when inserting an new entry, the owned `V` will be cached in memory.
-  ///
-  /// The default value is `false`.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use orderwal::Options;
-  ///
-  /// let options = Options::new();
-  /// assert_eq!(options.cache_value(), false);
-  /// ```
-  #[inline]
-  pub const fn cache_value(&self) -> bool {
-    self.cache_value
-  }
-
   /// Returns the bits of the page size.
   ///
   /// Configures the anonymous memory map to be allocated using huge pages.
@@ -289,46 +251,6 @@ impl Options {
   #[inline]
   pub const fn with_maximum_value_size(mut self, size: u32) -> Self {
     self.maximum_value_size = size;
-    self
-  }
-
-  /// Sets the cache key to `true`, when inserting an new entry, the owned version `K` will be cached in memory.
-  ///
-  /// Only useful when using [`GenericOrderWal`](swmr::GenericOrderWal).
-  ///
-  /// The default value is `false`.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use orderwal::Options;
-  ///
-  /// let options = Options::new().with_cache_key(true);
-  /// assert_eq!(options.cache_key(), true);
-  /// ```
-  #[inline]
-  pub const fn with_cache_key(mut self, cache: bool) -> Self {
-    self.cache_key = cache;
-    self
-  }
-
-  /// Sets the cache value to `true`, when inserting an new entry, the owned version `V` will be cached in memory.
-  ///
-  /// Only useful when using [`GenericOrderWal`](swmr::GenericOrderWal).
-  ///
-  /// The default value is `false`.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use orderwal::Options;
-  ///
-  /// let options = Options::new().with_cache_value(true);
-  /// assert_eq!(options.cache_value(), true);
-  /// ```
-  #[inline]
-  pub const fn with_cache_value(mut self, cache: bool) -> Self {
-    self.cache_value = cache;
     self
   }
 
