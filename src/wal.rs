@@ -184,7 +184,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   /// ```
   fn map_anon(b: Builder<C, S>) -> Result<Self, Error> {
     let Builder { opts, cmp, cks } = b;
-    let mmap_opts = MmapOptions::new().len(opts.capacity()).huge(opts.huge());
+    let mmap_opts = MmapOptions::new().len(opts.capacity());
     <Self::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
       .map_err(Into::into)
       .and_then(|arena| {
