@@ -1,3 +1,5 @@
+use core::ops::Bound;
+
 use super::*;
 use tempfile::tempdir;
 use wal::ImmutableWal;
@@ -105,16 +107,19 @@ pub(crate) fn iter<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-// pub(crate) fn range<W: Wal<Ascend, Crc32>>(mut wal: W) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+pub(crate) fn range<W: Wal<Ascend, Crc32>>(mut wal: W) {
+  for i in 0..1000u32 {
+    wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
+  }
 
-//   let x = 500u32.to_be_bytes().as_slice();
-//   let mut iter = wal.range(x..);
-//   for i in 500..1000u32 {
-//     let (key, value) = iter.next().unwrap();
-//     assert_eq!(key, i.to_be_bytes());
-//     assert_eq!(value, i.to_be_bytes());
-//   }
-// }
+  let x = 500u32.to_be_bytes();
+
+  let mut iter = wal.range((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in 500..1000u32 {
+    let (key, value) = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+}

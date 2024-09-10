@@ -89,3 +89,30 @@ fn test_iter_map_file() {
     .unwrap(),
   );
 }
+
+#[test]
+fn test_range_inmemory() {
+  range(OrderWal::new(Builder::new().with_capacity(1024 * 1024)).unwrap());
+}
+
+#[test]
+fn test_range_map_anon() {
+  range(OrderWal::map_anon(Builder::new().with_capacity(1024 * 1024)).unwrap());
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_range_map_file() {
+  let dir = tempdir().unwrap();
+  range(
+    OrderWal::map_mut(
+      dir.path().join("test_swmr_range_map_file"),
+      Builder::new(),
+      OpenOptions::new()
+        .create_new(Some(1024 * 1024))
+        .write(true)
+        .read(true),
+    )
+    .unwrap(),
+  );
+}

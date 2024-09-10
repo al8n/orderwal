@@ -8,7 +8,7 @@ use wal::{
   ImmutableWal,
 };
 
-use core::ptr::NonNull;
+use core::{ops::RangeBounds, ptr::NonNull};
 use rarena_allocator::{unsync::Arena, Error as ArenaError};
 use std::collections::BTreeSet;
 
@@ -170,16 +170,17 @@ where
   type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
   type Range<'a, Q, R> = Range<'a, C>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
-    Q: Ord + ?Sized + crossbeam_skiplist::Comparable<[u8]>,
+    Q: Ord + ?Sized,
     Self: 'a,
     C: Comparator;
+
   type Keys<'a> = Keys<'a, C> where Self: 'a, C: Comparator;
 
   type RangeKeys<'a, Q, R> = RangeKeys<'a, C>
       where
-        R: core::ops::RangeBounds<Q>,
+        R: RangeBounds<Q>,
         [u8]: Borrow<Q>,
         Q: Ord + ?Sized,
         Self: 'a,
@@ -189,7 +190,7 @@ where
 
   type RangeValues<'a, Q, R> = RangeValues<'a, C>
       where
-        R: core::ops::RangeBounds<Q>,
+        R: RangeBounds<Q>,
         [u8]: Borrow<Q>,
         Q: Ord + ?Sized,
         Self: 'a,
@@ -251,7 +252,7 @@ where
   #[inline]
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator,
@@ -270,7 +271,7 @@ where
   #[inline]
   fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator,
@@ -289,7 +290,7 @@ where
   #[inline]
   fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator,
