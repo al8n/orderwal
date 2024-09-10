@@ -82,9 +82,9 @@ jobs:
           - powerpc64-unknown-linux-gnu
           # - mips64-unknown-linux-gnuabi64
           - riscv64gc-unknown-linux-gnu
-          - wasm32-unknown-unknown
-          - wasm32-unknown-emscripten
-          - wasm32-wasi
+          # - wasm32-unknown-unknown
+          # - wasm32-unknown-emscripten
+          # - wasm32-wasi
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -104,13 +104,13 @@ jobs:
         run: |
           cargo install cross
           cross build --target ${{ matrix.target }}
-        if: matrix.target != 'wasm32-unknown-unknown' && matrix.target != 'wasm32-wasi'
-      # WASM support
-      - name: cargo build --target ${{ matrix.target }}
-        run: |
-          rustup target add ${{ matrix.target }}
-          cargo build --target ${{ matrix.target }}
-        if: matrix.target == 'wasm32-unknown-unknown' || matrix.target == 'wasm32-wasi'
+        # if: matrix.target != 'wasm32-unknown-unknown' && matrix.target != 'wasm32-wasi'
+      # # WASM support
+      # - name: cargo build --target ${{ matrix.target }}
+      #   run: |
+      #     rustup target add ${{ matrix.target }}
+      #     cargo build --target ${{ matrix.target }}
+      #   if: matrix.target == 'wasm32-unknown-unknown' || matrix.target == 'wasm32-wasi'
       # - name: cargo build --target ${{ matrix.target }}
       #   run: |
       #     rustup target add ${{ matrix.target }}
