@@ -215,6 +215,7 @@ where
     self.core.opts.maximum_value_size()
   }
 
+  #[inline]
   fn contains_key<Q>(&self, key: &Q) -> bool
   where
     [u8]: Borrow<Q>,
@@ -224,6 +225,7 @@ where
     self.core.map.contains(key)
   }
 
+  #[inline]
   fn iter(&self) -> Self::Iter<'_>
   where
     C: Comparator,
@@ -231,6 +233,7 @@ where
     Iter::new(self.core.map.iter())
   }
 
+  #[inline]
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -241,6 +244,7 @@ where
     Range::new(self.core.map.range(range))
   }
 
+  #[inline]
   fn keys(&self) -> Self::Keys<'_>
   where
     C: Comparator,
@@ -248,6 +252,7 @@ where
     Keys::new(self.core.map.iter())
   }
 
+  #[inline]
   fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -258,6 +263,7 @@ where
     RangeKeys::new(self.core.map.range(range))
   }
 
+  #[inline]
   fn values(&self) -> Self::Values<'_>
   where
     C: Comparator,
@@ -265,6 +271,7 @@ where
     Values::new(self.core.map.iter())
   }
 
+  #[inline]
   fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -299,6 +306,7 @@ where
       .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
   }
 
+  #[inline]
   fn get<Q>(&self, key: &Q) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,

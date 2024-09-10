@@ -279,6 +279,7 @@ where
     self.core.iter()
   }
 
+  #[inline]
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -297,6 +298,7 @@ where
     Keys::new(self.core.map.iter())
   }
 
+  #[inline]
   fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -315,6 +317,7 @@ where
     Values::new(self.core.map.iter())
   }
 
+  #[inline]
   fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,

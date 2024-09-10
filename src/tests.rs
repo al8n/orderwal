@@ -39,3 +39,45 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
   let wal = W::map(&path, WalBuidler::new()).unwrap();
   assert_eq!(wal.get(b"key1").unwrap(), b"value1");
 }
+
+pub(crate) fn construct_with_small_capacity_inmemory<W: Wal<Ascend, Crc32>>() {
+  let wal = W::new(WalBuidler::new().with_capacity(1));
+
+  assert!(wal.is_err());
+  match wal {
+    Err(e) => println!("error: {:?}", e),
+    _ => panic!("unexpected error"),
+  }
+}
+
+pub(crate) fn construct_with_small_capacity_map_anon<W: Wal<Ascend, Crc32>>() {
+  let wal = W::map_anon(WalBuidler::new().with_capacity(1));
+
+  assert!(wal.is_err());
+  match wal {
+    Err(e) => println!("error: {:?}", e),
+    _ => panic!("unexpected error"),
+  }
+}
+
+pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
+  let dir = tempdir().unwrap();
+  let path = dir
+    .path()
+    .join(format!("{prefix}_construct_with_small_capacity_map_file"));
+
+  let wal = W::map_mut(
+    &path,
+    WalBuidler::new(),
+    OpenOptions::new()
+      .create_new(Some(1))
+      .write(true)
+      .read(true),
+  );
+
+  assert!(wal.is_err());
+  match wal {
+    Err(e) => println!("error: {:?}", e),
+    _ => panic!("unexpected error"),
+  }
+}
