@@ -63,6 +63,13 @@ where
   }
 }
 
+impl<C, S> OrderWal<C, S> {
+  /// Returns the path of the WAL if it is backed by a file.
+  pub fn path(&self) -> Option<&std::rc::Rc<std::path::PathBuf>> {
+    self.core.arena.path()
+  }
+}
+
 impl<C, S> Sealed<C, S> for OrderWal<C, S>
 where
   C: 'static,
@@ -187,6 +194,14 @@ where
         Q: Ord + ?Sized,
         Self: 'a,
         C: Comparator;
+
+  unsafe fn reserved_slice(&self) -> &[u8] {
+    if self.core.opts.reserved() == 0 {
+      return &[];
+    }
+
+    &self.core.arena.reserved_slice()[HEADER_SIZE..]
+  }
 
   #[inline]
   fn read_only(&self) -> bool {
@@ -322,6 +337,15 @@ where
   C: 'static,
 {
   type Reader = Self;
+
+  #[inline]
+  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
+    if self.core.opts.reserved() == 0 {
+      return &mut [];
+    }
+
+    &mut self.core.arena.reserved_slice_mut()[HEADER_SIZE..]
+  }
 
   #[inline]
   fn flush(&self) -> Result<(), Error> {

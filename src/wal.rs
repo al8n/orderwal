@@ -1,5 +1,7 @@
 use core::ops::RangeBounds;
 
+use rarena_allocator::Error as ArenaError;
+
 use super::*;
 
 mod builder;
@@ -52,6 +54,13 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     Q: Ord + ?Sized,
     Self: 'a,
     C: Comparator;
+
+  /// Returns the reserved space in the WAL.
+  ///
+  /// # Safety
+  /// - The writer must ensure that the returned slice is not modified.
+  /// - This method is not thread-safe, so be careful when using it.
+  unsafe fn reserved_slice(&self) -> &[u8];
 
   /// Returns `true` if this WAL instance is read-only.
   fn read_only(&self) -> bool;
@@ -152,7 +161,14 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     let WalBuidler { opts, cmp, cks } = b;
     let arena = <Self::Allocator as Allocator>::new(
       arena_options(opts.reserved()).with_capacity(opts.capacity()),
-    );
+    )
+    .map_err(|e| match e {
+      ArenaError::InsufficientSpace {
+        requested,
+        available,
+      } => Error::insufficient_space(requested, available),
+      _ => unreachable!(),
+    })?;
     <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
       .map(|core| Self::from_core(core, false))
   }
@@ -184,7 +200,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     S: Checksumer,
     P: AsRef<std::path::Path>,
   {
-    Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), b)
+    <Self as Wal<C, S>>::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), b)
       .map_err(|e| e.unwrap_right())
   }
 
@@ -223,8 +239,12 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     S: Checksumer,
     P: AsRef<std::path::Path>,
   {
-    Self::map_mut_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), b, open_opts)
-      .map_err(|e| e.unwrap_right())
+    <Self as Wal<C, S>>::map_mut_with_path_builder::<_, ()>(
+      || Ok(path.as_ref().to_path_buf()),
+      b,
+      open_opts,
+    )
+    .map_err(|e| e.unwrap_right())
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
@@ -262,6 +282,13 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     })
     .map_err(Either::Right)
   }
+
+  /// Returns the mutable reference to the reserved slice.
+  ///
+  /// # Safety
+  /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
+  /// - This method is not thread-safe, so be careful when using it.
+  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8];
 
   /// Flushes the to disk.
   fn flush(&self) -> Result<(), Error>;

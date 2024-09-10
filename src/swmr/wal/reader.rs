@@ -58,22 +58,32 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
         Self: 'a,
         C: Comparator;
 
+  #[inline]
+  unsafe fn reserved_slice(&self) -> &[u8] {
+    self.0.reserved_slice()
+  }
+
+  #[inline]
   fn read_only(&self) -> bool {
     self.0.read_only()
   }
 
+  #[inline]
   fn len(&self) -> usize {
     self.0.len()
   }
 
+  #[inline]
   fn maximum_key_size(&self) -> u32 {
     self.0.maximum_key_size()
   }
 
+  #[inline]
   fn maximum_value_size(&self) -> u32 {
     self.0.maximum_value_size()
   }
 
+  #[inline]
   fn contains_key<Q>(&self, key: &Q) -> bool
   where
     [u8]: Borrow<Q>,
@@ -83,6 +93,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.contains_key(key)
   }
 
+  #[inline]
   fn iter(&self) -> Self::Iter<'_>
   where
     C: Comparator,
@@ -90,6 +101,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.iter()
   }
 
+  #[inline]
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -100,6 +112,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.range(range)
   }
 
+  #[inline]
   fn keys(&self) -> Self::Keys<'_>
   where
     C: Comparator,
@@ -107,6 +120,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.keys()
   }
 
+  #[inline]
   fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -117,6 +131,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.range_keys(range)
   }
 
+  #[inline]
   fn values(&self) -> Self::Values<'_>
   where
     C: Comparator,
@@ -124,6 +139,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.values()
   }
 
+  #[inline]
   fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
   where
     R: core::ops::RangeBounds<Q>,
@@ -134,6 +150,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.range_values(range)
   }
 
+  #[inline]
   fn first(&self) -> Option<(&[u8], &[u8])>
   where
     C: Comparator,
@@ -141,6 +158,7 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
     self.0.first()
   }
 
+  #[inline]
   fn last(&self) -> Option<(&[u8], &[u8])>
   where
     C: Comparator,

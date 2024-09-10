@@ -14,6 +14,26 @@ impl<K, V> GenericWalReader<K, V> {
     Self(wal)
   }
 
+  /// Returns the path of the WAL if it is backed by a file.
+  #[inline]
+  pub fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+    self.0.arena.path()
+  }
+
+  /// Returns the reserved space in the WAL.
+  ///
+  /// # Safety
+  /// - The writer must ensure that the returned slice is not modified.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  pub unsafe fn reserved_slice(&self) -> &[u8] {
+    if self.0.reserved == 0 {
+      return &[];
+    }
+
+    &self.0.arena.reserved_slice()[HEADER_SIZE..]
+  }
+
   /// Returns number of entries in the WAL.
   #[inline]
   pub fn len(&self) -> usize {

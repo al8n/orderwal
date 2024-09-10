@@ -122,7 +122,7 @@ impl<'a> Borrow<[u8]> for FooRef<'a> {
 
 #[test]
 fn generic_order_wal_flexible_lookup() {
-  let wal = GenericOrderWal::<Foo, ()>::new(Options::new().with_capacity(1000));
+  let wal = GenericOrderWal::<Foo, ()>::new(Options::new().with_capacity(1000)).unwrap();
   assert!(wal
     .get(&FooRef {
       data: &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

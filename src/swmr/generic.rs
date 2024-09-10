@@ -266,6 +266,7 @@ where
 struct GenericOrderWalCore<K, V> {
   arena: Arena,
   map: SkipSet<Pointer<K, V>>,
+  reserved: u32,
 }
 
 impl<K, V> GenericOrderWalCore<K, V> {
@@ -280,7 +281,7 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
-  fn new(arena: Arena, magic_version: u16, flush: bool) -> Result<Self, Error> {
+  fn new(arena: Arena, magic_version: u16, flush: bool, reserved: u32) -> Result<Self, Error> {
     unsafe {
       let slice = arena.reserved_slice_mut();
       slice[0..6].copy_from_slice(&MAGIC_TEXT);
@@ -288,12 +289,12 @@ impl<K, V> GenericOrderWalCore<K, V> {
     }
 
     if !flush {
-      return Ok(Self::construct(arena, SkipSet::new()));
+      return Ok(Self::construct(arena, SkipSet::new(), reserved));
     }
 
     arena
       .flush_range(0, HEADER_SIZE)
-      .map(|_| Self::construct(arena, SkipSet::new()))
+      .map(|_| Self::construct(arena, SkipSet::new(), reserved))
       .map_err(Into::into)
   }
 
@@ -361,8 +362,12 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
-  fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>) -> Self {
-    Self { arena, map: set }
+  fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>, reserved: u32) -> Self {
+    Self {
+      arena,
+      map: set,
+      reserved,
+    }
   }
 }
 
@@ -458,7 +463,7 @@ where
       }
     }
 
-    Ok(Self::construct(arena, map))
+    Ok(Self::construct(arena, map, opts.reserved()))
   }
 }
 
@@ -525,7 +530,7 @@ impl<K, V> GenericOrderWal<K, V> {
   /// let wal = GenericOrderWal::new(Options::new()).unwrap();
   /// ```
   #[inline]
-  pub fn new(opts: Options) -> Self {
+  pub fn new(opts: Options) -> Result<Self, Error> {
     Self::with_checksumer(opts, Crc32::default())
   }
 
@@ -544,7 +549,7 @@ impl<K, V> GenericOrderWal<K, V> {
   }
 }
 
-impl<K, V> GenericOrderWal<K, V>
+impl<K, V, S> GenericOrderWal<K, V, S>
 where
   K: Type + Ord + 'static,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
@@ -655,6 +660,40 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
     GenericWalReader::new(self.core.clone())
   }
 
+  /// Returns the path of the WAL if it is backed by a file.
+  #[inline]
+  pub fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+    self.core.arena.path()
+  }
+
+  /// Returns the reserved space in the WAL.
+  ///
+  /// # Safety
+  /// - The writer must ensure that the returned slice is not modified.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  pub unsafe fn reserved_slice(&self) -> &[u8] {
+    if self.opts.reserved() == 0 {
+      return &[];
+    }
+
+    &self.core.arena.reserved_slice()[HEADER_SIZE..]
+  }
+
+  /// Returns the mutable reference to the reserved slice.
+  ///
+  /// # Safety
+  /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  pub unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
+    if self.opts.reserved() == 0 {
+      return &mut [];
+    }
+
+    &mut self.core.arena.reserved_slice_mut()[HEADER_SIZE..]
+  }
+
   /// Returns number of entries in the WAL.
   #[inline]
   pub fn len(&self) -> usize {
@@ -676,12 +715,19 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   ///
   /// let wal = GenericOrderWal::with_checksumer(Options::new(), Crc32::default());
   /// ```
-  pub fn with_checksumer(opts: Options, cks: S) -> Self {
-    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity()));
+  pub fn with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
+    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity())).map_err(
+      |e| match e {
+        ArenaError::InsufficientSpace {
+          requested,
+          available,
+        } => Error::insufficient_space(requested, available),
+        _ => unreachable!(),
+      },
+    )?;
 
-    GenericOrderWalCore::new(arena, opts.magic_version(), false)
+    GenericOrderWalCore::new(arena, opts.magic_version(), false, opts.reserved())
       .map(|core| Self::from_core(core, opts, cks, false))
-      .unwrap()
   }
 
   /// Creates a new in-memory write-ahead log backed by an anonymous memory map with the given options and [`Checksumer`].
@@ -699,7 +745,7 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
       MmapOptions::new().len(opts.capacity()),
     )?;
 
-    GenericOrderWalCore::new(arena, opts.magic_version(), true)
+    GenericOrderWalCore::new(arena, opts.magic_version(), true, opts.reserved())
       .map(|core| Self::from_core(core, opts, cks, false))
   }
 
@@ -773,7 +819,7 @@ where
     .map_err(|e| e.map_right(Into::into))?;
 
     if !exist {
-      return GenericOrderWalCore::new(arena, opts.magic_version(), true)
+      return GenericOrderWalCore::new(arena, opts.magic_version(), true, opts.reserved())
         .map(|core| Self::from_core(core, opts, cks, false))
         .map_err(Either::Right);
     }

@@ -207,6 +207,11 @@ impl<C, S> OrderWal<C, S> {
   pub fn reader(&self) -> OrderWalReader<C, S> {
     OrderWalReader::new(self.core.clone())
   }
+
+  /// Returns the path of the WAL if it is backed by a file.
+  pub fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+    self.core.arena.path()
+  }
 }
 
 impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
@@ -240,6 +245,15 @@ where
         Q: Ord + ?Sized,
         Self: 'a,
         C: Comparator;
+
+  #[inline]
+  unsafe fn reserved_slice(&self) -> &[u8] {
+    if self.core.opts.reserved() == 0 {
+      return &[];
+    }
+
+    &self.core.arena.reserved_slice()[HEADER_SIZE..]
+  }
 
   #[inline]
   fn read_only(&self) -> bool {
@@ -385,6 +399,15 @@ where
     }
 
     self.core.arena.flush_async().map_err(Into::into)
+  }
+
+  #[inline]
+  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
+    if self.core.opts.reserved() == 0 {
+      return &mut [];
+    }
+
+    &mut self.core.arena.reserved_slice_mut()[HEADER_SIZE..]
   }
 
   fn get_or_insert_with_value_builder<E>(
