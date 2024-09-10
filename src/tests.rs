@@ -91,3 +91,30 @@ pub(crate) fn insert<W: Wal<Ascend, Crc32>>(mut wal: W) {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
+
+pub(crate) fn iter<W: Wal<Ascend, Crc32>>(mut wal: W) {
+  for i in 0..1000u32 {
+    wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
+  }
+
+  let mut iter = wal.iter();
+  for i in 0..1000u32 {
+    let (key, value) = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+}
+
+// pub(crate) fn range<W: Wal<Ascend, Crc32>>(mut wal: W) {
+//   for i in 0..1000u32 {
+//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
+//   }
+
+//   let x = 500u32.to_be_bytes().as_slice();
+//   let mut iter = wal.range(x..);
+//   for i in 500..1000u32 {
+//     let (key, value) = iter.next().unwrap();
+//     assert_eq!(key, i.to_be_bytes());
+//     assert_eq!(value, i.to_be_bytes());
+//   }
+// }
