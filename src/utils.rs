@@ -30,6 +30,8 @@ pub(crate) const fn arena_options(reserved: u32) -> ArenaOptions {
     .with_magic_version(CURRENT_VERSION)
     .with_freelist(Freelist::None)
     .with_reserved((HEADER_SIZE + reserved as usize) as u32)
+    // clear capacity
+    .with_capacity(0)
     .with_unify(true)
 }
 

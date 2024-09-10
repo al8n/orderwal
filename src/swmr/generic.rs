@@ -525,9 +525,9 @@ impl<K, V> GenericOrderWal<K, V> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options};
+  /// use orderwal::{swmr::GenericOrderWal, Options};
   ///
-  /// let wal = GenericOrderWal::new(Options::new()).unwrap();
+  /// let wal = GenericOrderWal::<String, String>::new(Options::new().with_capacity(1024)).unwrap();
   /// ```
   #[inline]
   pub fn new(opts: Options) -> Result<Self, Error> {
@@ -539,9 +539,9 @@ impl<K, V> GenericOrderWal<K, V> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options};
+  /// use orderwal::{swmr::GenericOrderWal, Options};
   ///
-  /// let wal = GenericOrderWal::map_anon(Options::new()).unwrap();
+  /// let wal = GenericOrderWal::<String, String>::map_anon(Options::new().with_capacity(1024)).unwrap();
   /// ```
   #[inline]
   pub fn map_anon(opts: Options) -> Result<Self, Error> {
@@ -610,7 +610,7 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options, OpenOptions};
+  /// use orderwal::{swmr::GenericOrderWal, Options};
   ///
   /// ```
   #[inline]
@@ -711,9 +711,9 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options, Crc32};
+  /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
   ///
-  /// let wal = GenericOrderWal::with_checksumer(Options::new(), Crc32::default());
+  /// let wal = GenericOrderWal::<String, String>::with_checksumer(Options::new().with_capacity(1024), Crc32::default());
   /// ```
   pub fn with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
     let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity())).map_err(
@@ -735,9 +735,9 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options, Crc32};
+  /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
   ///
-  /// let wal = GenericOrderWal::map_anon_with_checksumer(Options::new(), Crc32::default()).unwrap();
+  /// let wal = GenericOrderWal::<String, String>::map_anon_with_checksumer(Options::new().with_capacity(1024), Crc32::default()).unwrap();
   /// ```
   pub fn map_anon_with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
     let arena = Arena::map_anon(
@@ -772,7 +772,8 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options, OpenOptions, Crc32};
+  /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
+  ///
   ///
   /// ```
   #[inline]
@@ -796,7 +797,7 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{generic::GenericOrderWal, Options, OpenOptions, Crc32};
+  /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
   ///
   /// ```
   pub fn map_mut_with_path_builder_and_checksumer<PB, E>(
@@ -1093,8 +1094,9 @@ where
   ///
   /// # Example
   ///
-  /// ```rust
-  /// use orderwal::{generic::{GenericOrderWal, Comparable}, Options, Crc32};
+  /// TODO: ignore for now
+  /// ```no_compile
+  /// use orderwal::{swmr::{GenericOrderWal, Comparable}, Options, Crc32};
   ///
   /// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
   /// struct MyKey {

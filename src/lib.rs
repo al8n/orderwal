@@ -51,7 +51,7 @@ mod utils;
 use utils::*;
 
 mod wal;
-pub use wal::{Wal, WalBuidler};
+pub use wal::{Builder, Wal};
 
 mod options;
 pub use options::Options;

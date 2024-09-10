@@ -1,20 +1,20 @@
 use super::*;
 
 /// A write-ahead log builder.
-pub struct WalBuidler<C = Ascend, S = Crc32> {
+pub struct Builder<C = Ascend, S = Crc32> {
   pub(super) opts: Options,
   pub(super) cmp: C,
   pub(super) cks: S,
 }
 
-impl Default for WalBuidler {
+impl Default for Builder {
   #[inline]
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl WalBuidler {
+impl Builder {
   /// Returns a new write-ahead log builder with the given options.
   #[inline]
   pub fn new() -> Self {
@@ -26,11 +26,11 @@ impl WalBuidler {
   }
 }
 
-impl<C, S> WalBuidler<C, S> {
+impl<C, S> Builder<C, S> {
   /// Returns a new write-ahead log builder with the new comparator
   #[inline]
-  pub fn with_comparator<NC>(self, cmp: NC) -> WalBuidler<NC, S> {
-    WalBuidler {
+  pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC, S> {
+    Builder {
       opts: self.opts,
       cmp,
       cks: self.cks,
@@ -39,8 +39,8 @@ impl<C, S> WalBuidler<C, S> {
 
   /// Returns a new write-ahead log builder with the new checksumer
   #[inline]
-  pub fn with_checksumer<NS>(self, cks: NS) -> WalBuidler<C, NS> {
-    WalBuidler {
+  pub fn with_checksumer<NS>(self, cks: NS) -> Builder<C, NS> {
+    Builder {
       opts: self.opts,
       cmp: self.cmp,
       cks,
@@ -50,7 +50,7 @@ impl<C, S> WalBuidler<C, S> {
   /// Returns a new write-ahead log builder with the new options
   #[inline]
   pub fn with_options(self, opts: Options) -> Self {
-    WalBuidler {
+    Builder {
       opts,
       cmp: self.cmp,
       cks: self.cks,
@@ -67,9 +67,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let opts = WalBuilder::new().with_reserved(8);
+  /// let opts = Builder::new().with_reserved(8);
   /// ```
   #[inline]
   pub const fn with_reserved(mut self, reserved: u32) -> Self {
@@ -87,9 +87,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let opts = WalBuilder::new().with_reserved(8);
+  /// let opts = Builder::new().with_reserved(8);
   ///
   /// assert_eq!(opts.reserved(), 8);
   /// ```
@@ -105,9 +105,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_magic_version(1);
+  /// let options = Builder::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]
@@ -122,9 +122,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_capacity(1000);
+  /// let options = Builder::new().with_capacity(1000);
   /// assert_eq!(options.capacity(), 1000);
   /// ```
   #[inline]
@@ -139,9 +139,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_maximum_key_size(1024);
+  /// let options = Builder::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
@@ -156,9 +156,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_maximum_value_size(1024);
+  /// let options = Builder::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
   #[inline]
@@ -173,9 +173,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = Options::new();
+  /// let options = Builder::new();
   /// assert_eq!(options.sync_on_write(), true);
   /// ```
   #[inline]
@@ -200,9 +200,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_huge(Some(64));
+  /// let options = Builder::new().with_huge(64);
   /// assert_eq!(options.huge(), Some(64));
   /// ```
   #[inline]
@@ -219,9 +219,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_capacity(100);
+  /// let options = Builder::new().with_capacity(100);
   /// assert_eq!(options.capacity(), 100);
   /// ```
   #[inline]
@@ -235,9 +235,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_maximum_key_size(1024);
+  /// let options = Builder::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
@@ -251,9 +251,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_maximum_value_size(1024);
+  /// let options = Builder::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
   #[inline]
@@ -279,9 +279,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_huge(64);
+  /// let options = Builder::new().with_huge(64);
   /// assert_eq!(options.huge(), Some(64));
   /// ```
   #[inline]
@@ -297,9 +297,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuilder;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuilder::new().with_sync_on_write(false);
+  /// let options = Builder::new().with_sync_on_write(false);
   /// assert_eq!(options.sync_on_write(), false);
   /// ```
   #[inline]
@@ -315,9 +315,9 @@ impl<C, S> WalBuidler<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::WalBuidler;
+  /// use orderwal::Builder;
   ///
-  /// let options = WalBuidler::new().with_magic_version(1);
+  /// let options = Builder::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]

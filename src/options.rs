@@ -1,5 +1,3 @@
-use super::HEADER_SIZE;
-
 /// Options for the WAL.
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -61,11 +59,7 @@ impl Options {
   /// ```
   #[inline]
   pub const fn with_reserved(mut self, reserved: u32) -> Self {
-    self.reserved = if self.cap as u64 <= reserved as u64 + HEADER_SIZE as u64 {
-      self.cap
-    } else {
-      reserved
-    };
+    self.reserved = reserved;
     self
   }
 
@@ -194,7 +188,7 @@ impl Options {
   /// ```rust
   /// use orderwal::Options;
   ///
-  /// let options = Options::new().with_huge(Some(64));
+  /// let options = Options::new().with_huge(64);
   /// assert_eq!(options.huge(), Some(64));
   /// ```
   #[inline]

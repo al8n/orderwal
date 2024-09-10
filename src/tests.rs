@@ -5,13 +5,13 @@ use wal::ImmutableWal;
 const MB: usize = 1024 * 1024;
 
 pub(crate) fn construct_inmemory<W: Wal<Ascend, Crc32>>() {
-  let mut wal = W::new(WalBuidler::new().with_capacity(MB as u32)).unwrap();
+  let mut wal = W::new(Builder::new().with_capacity(MB as u32)).unwrap();
   let wal = &mut wal;
   wal.insert(b"key1", b"value1").unwrap();
 }
 
 pub(crate) fn construct_map_anon<W: Wal<Ascend, Crc32>>() {
-  let mut wal = W::map_anon(WalBuidler::new().with_capacity(MB as u32)).unwrap();
+  let mut wal = W::map_anon(Builder::new().with_capacity(MB as u32)).unwrap();
   let wal = &mut wal;
   wal.insert(b"key1", b"value1").unwrap();
 }
@@ -23,7 +23,7 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
   {
     let mut wal = W::map_mut(
       &path,
-      WalBuidler::new(),
+      Builder::new(),
       OpenOptions::new()
         .create_new(Some(MB as u32))
         .write(true)
@@ -36,12 +36,12 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
     assert_eq!(wal.get(b"key1").unwrap(), b"value1");
   }
 
-  let wal = W::map(&path, WalBuidler::new()).unwrap();
+  let wal = W::map(&path, Builder::new()).unwrap();
   assert_eq!(wal.get(b"key1").unwrap(), b"value1");
 }
 
 pub(crate) fn construct_with_small_capacity_inmemory<W: Wal<Ascend, Crc32>>() {
-  let wal = W::new(WalBuidler::new().with_capacity(1));
+  let wal = W::new(Builder::new().with_capacity(1));
 
   assert!(wal.is_err());
   match wal {
@@ -51,7 +51,7 @@ pub(crate) fn construct_with_small_capacity_inmemory<W: Wal<Ascend, Crc32>>() {
 }
 
 pub(crate) fn construct_with_small_capacity_map_anon<W: Wal<Ascend, Crc32>>() {
-  let wal = W::map_anon(WalBuidler::new().with_capacity(1));
+  let wal = W::map_anon(Builder::new().with_capacity(1));
 
   assert!(wal.is_err());
   match wal {
@@ -68,7 +68,7 @@ pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(pref
 
   let wal = W::map_mut(
     &path,
-    WalBuidler::new(),
+    Builder::new(),
     OpenOptions::new()
       .create_new(Some(1))
       .write(true)
@@ -77,7 +77,7 @@ pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(pref
 
   assert!(wal.is_err());
   match wal {
-    Err(e) => println!("error: {:?}", e),
+    Err(e) => println!("{:?}", e),
     _ => panic!("unexpected error"),
   }
 }

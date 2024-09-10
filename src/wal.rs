@@ -153,12 +153,12 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, WalBuilder, Options};
+  /// use orderwal::{swmr::OrderWal, Builder, Options, Wal};
   ///
-  /// let wal = OrderWal::new(WalBuilder::new(Options::new())).unwrap();
+  /// let wal = OrderWal::new(Builder::new().with_capacity(1024)).unwrap();
   /// ```
-  fn new(b: WalBuidler<C, S>) -> Result<Self, Error> {
-    let WalBuidler { opts, cmp, cks } = b;
+  fn new(b: Builder<C, S>) -> Result<Self, Error> {
+    let Builder { opts, cmp, cks } = b;
     let arena = <Self::Allocator as Allocator>::new(
       arena_options(opts.reserved()).with_capacity(opts.capacity()),
     )
@@ -178,12 +178,12 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, WalBuilder, Options};
+  /// use orderwal::{swmr::OrderWal, Builder, Wal};
   ///
-  /// let wal = OrderWal::map_anon(WalBuidler::new(Options::new())).unwrap();
+  /// let wal = OrderWal::map_anon(Builder::new().with_capacity(1024)).unwrap();
   /// ```
-  fn map_anon(b: WalBuidler<C, S>) -> Result<Self, Error> {
-    let WalBuidler { opts, cmp, cks } = b;
+  fn map_anon(b: Builder<C, S>) -> Result<Self, Error> {
+    let Builder { opts, cmp, cks } = b;
     let mmap_opts = MmapOptions::new().len(opts.capacity()).huge(opts.huge());
     <Self::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
       .map_err(Into::into)
@@ -194,7 +194,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  fn map<P>(path: P, b: WalBuidler<C, S>) -> Result<Self::Reader, Error>
+  fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
   where
     C: Comparator + CheapClone,
     S: Checksumer,
@@ -207,7 +207,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
   fn map_with_path_builder<PB, E>(
     path_builder: PB,
-    b: WalBuidler<C, S>,
+    b: Builder<C, S>,
   ) -> Result<Self::Reader, Either<E, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
@@ -216,7 +216,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   {
     let open_options = OpenOptions::default().read(true);
 
-    let WalBuidler { opts, cmp, cks } = b;
+    let Builder { opts, cmp, cks } = b;
 
     <<Self::Reader as sealed::Constructor<C, S>>::Allocator as Allocator>::map_with_path_builder(
       path_builder,
@@ -233,7 +233,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
-  fn map_mut<P>(path: P, b: WalBuidler<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
+  fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
   where
     C: Comparator + CheapClone,
     S: Checksumer,
@@ -250,7 +250,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   /// Opens a write-ahead log backed by a file backed memory map.
   fn map_mut_with_path_builder<PB, E>(
     path_builder: PB,
-    b: WalBuidler<C, S>,
+    b: Builder<C, S>,
     open_options: OpenOptions,
   ) -> Result<Self, Either<E, Error>>
   where
@@ -262,7 +262,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
 
     let exist = path.exists();
 
-    let WalBuidler { opts, cmp, cks } = b;
+    let Builder { opts, cmp, cks } = b;
 
     <Self::Allocator as Allocator>::map_mut(
       path,

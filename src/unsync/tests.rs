@@ -29,7 +29,7 @@ fn test_construct_with_small_capacity_map_anon() {
 }
 
 #[test]
-// #[cfg_attr(miri, ignore)]
+#[cfg_attr(miri, ignore)]
 fn test_construct_with_small_capacity_map_file() {
   construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>("swmr");
 }
