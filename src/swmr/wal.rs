@@ -209,7 +209,7 @@ impl<C, S> OrderWal<C, S> {
   }
 
   /// Returns the path of the WAL if it is backed by a file.
-  pub fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+  pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
     self.core.arena.path()
   }
 }
@@ -253,6 +253,11 @@ where
     }
 
     &self.core.arena.reserved_slice()[HEADER_SIZE..]
+  }
+
+  #[inline]
+  fn path(&self) -> Option<&std::path::Path> {
+    self.core.arena.path().map(|p| p.as_ref().as_path())
   }
 
   #[inline]

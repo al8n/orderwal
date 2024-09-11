@@ -62,6 +62,9 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// - This method is not thread-safe, so be careful when using it.
   unsafe fn reserved_slice(&self) -> &[u8];
 
+  /// Returns the path of the WAL if it is backed by a file.
+  fn path(&self) -> Option<&std::path::Path>;
+
   /// Returns `true` if this WAL instance is read-only.
   fn read_only(&self) -> bool;
 

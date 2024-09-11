@@ -42,13 +42,40 @@ macro_rules! common_unittests {
       }
 
       #[test]
+      fn test_insert_to_full_inmemory() {
+        insert_to_full(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_insert_to_full_map_anon() {
+        insert_to_full(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_to_full_map_file() {
+        let dir = tempdir().unwrap();
+        insert_to_full(
+          &mut OrderWal::map_mut(
+            dir.path().join(concat!("test_", stringify!($prefix), "_insert_to_full_map_file")),
+            Builder::new(),
+            OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap(),
+        );
+      }
+
+      #[test]
       fn test_insert_inmemory() {
-        insert(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        insert(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_insert_map_anon() {
-        insert(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        insert(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -56,7 +83,7 @@ macro_rules! common_unittests {
       fn test_insert_map_file() {
         let dir = tempdir().unwrap();
         insert(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -70,12 +97,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_with_key_builder_inmemory() {
-        insert_with_key_builder(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        insert_with_key_builder(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_insert_with_key_builder_map_anon() {
-        insert_with_key_builder(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        insert_with_key_builder(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -83,7 +110,7 @@ macro_rules! common_unittests {
       fn test_insert_with_key_builder_map_file() {
         let dir = tempdir().unwrap();
         insert_with_key_builder(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_key_builder_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -97,12 +124,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_with_value_builder_inmemory() {
-        insert_with_value_builder(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        insert_with_value_builder(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_insert_with_value_builder_map_anon() {
-        insert_with_value_builder(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        insert_with_value_builder(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -110,7 +137,7 @@ macro_rules! common_unittests {
       fn test_insert_with_value_builder_map_file() {
         let dir = tempdir().unwrap();
         insert_with_value_builder(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_value_builder_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -124,12 +151,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_with_builders_inmemory() {
-        insert_with_builders(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        insert_with_builders(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_insert_with_builders_map_anon() {
-        insert_with_builders(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        insert_with_builders(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -137,7 +164,7 @@ macro_rules! common_unittests {
       fn test_insert_with_builders_map_file() {
         let dir = tempdir().unwrap();
         insert_with_builders(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_builders_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -151,12 +178,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_iter_inmemory() {
-        iter(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        iter(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_iter_map_anon() {
-        iter(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        iter(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -164,7 +191,7 @@ macro_rules! common_unittests {
       fn test_iter_map_file() {
         let dir = tempdir().unwrap();
         iter(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_iter_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -178,12 +205,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_range() {
-        range(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        range(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_range_map_anon() {
-        range(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        range(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -191,7 +218,7 @@ macro_rules! common_unittests {
       fn test_range_map_file() {
         let dir = tempdir().unwrap();
         range(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_range_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -205,12 +232,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_keys() {
-        keys(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        keys(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_keys_map_anon() {
-        keys(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        keys(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -218,7 +245,7 @@ macro_rules! common_unittests {
       fn test_keys_map_file() {
         let dir = tempdir().unwrap();
         keys(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_keys_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -232,12 +259,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_values() {
-        values(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        values(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_values_map_anon() {
-        values(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        values(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -245,7 +272,7 @@ macro_rules! common_unittests {
       fn test_values_map_file() {
         let dir = tempdir().unwrap();
         values(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_values_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -259,12 +286,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_range_keys() {
-        range_keys(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        range_keys(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_range_keys_map_anon() {
-        range_keys(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        range_keys(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -272,7 +299,7 @@ macro_rules! common_unittests {
       fn test_range_keys_map_file() {
         let dir = tempdir().unwrap();
         range_keys(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_range_keys_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -286,12 +313,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_range_values() {
-        range_values(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        range_values(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_range_values_map_anon() {
-        range_values(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        range_values(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -299,7 +326,7 @@ macro_rules! common_unittests {
       fn test_range_values_map_file() {
         let dir = tempdir().unwrap();
         range_values(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test", stringify!($prefix), "_range_values_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -313,12 +340,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_first_inmemory() {
-        first(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        first(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_first_map_anon() {
-        first(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        first(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -326,7 +353,7 @@ macro_rules! common_unittests {
       fn test_first_map_file() {
         let dir = tempdir().unwrap();
         first(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_first_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -340,12 +367,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_last_inmemory() {
-        last(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        last(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_last_map_anon() {
-        last(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        last(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
@@ -353,7 +380,7 @@ macro_rules! common_unittests {
       fn test_last_map_file() {
         let dir = tempdir().unwrap();
         last(
-          OrderWal::map_mut(
+          &mut OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_last_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -367,21 +394,86 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_get_or_insert_inmemory() {
-        get_or_insert(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        get_or_insert(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       fn test_get_or_insert_map_anon() {
-        get_or_insert(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        get_or_insert(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_get_or_insert_map_file() {
         let dir = tempdir().unwrap();
+
+        let mut wal = OrderWal::map_mut(
+          dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_map_file")),
+          Builder::new(),
+          OpenOptions::new()
+            .create_new(Some(MB))
+            .write(true)
+            .read(true),
+        )
+        .unwrap();
+
         get_or_insert(
-          OrderWal::map_mut(
-            dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_map_file")),
+          &mut wal,
+        );
+
+        wal.flush().unwrap();
+      }
+
+      #[test]
+      fn test_get_or_insert_with_value_builder_inmemory() {
+        get_or_insert_with_value_builder(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_get_or_insert_with_value_builder_map_anon() {
+        get_or_insert_with_value_builder(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_get_or_insert_with_value_builder_map_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_with_value_builder_map_file"));
+        let mut wal = OrderWal::map_mut(
+          &path,
+          Builder::new(),
+          OpenOptions::new()
+            .create_new(Some(MB))
+            .write(true)
+            .read(true),
+        )
+        .unwrap();
+        get_or_insert_with_value_builder(
+          &mut wal,
+        );
+
+        wal.flush_async().unwrap();
+
+        assert_eq!(wal.path().unwrap(), path);
+      }
+
+      #[test]
+      fn test_zero_reserved_inmemory() {
+        zero_reserved(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_zero_reserved_map_anon() {
+        zero_reserved(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_zero_reserved_map_file() {
+        let dir = tempdir().unwrap();
+        zero_reserved(
+          &mut OrderWal::map_mut(
+            dir.path().join(concat!("test_", stringify!($prefix), "_zero_reserved_map_file")),
             Builder::new(),
             OpenOptions::new()
               .create_new(Some(MB))
@@ -393,23 +485,23 @@ macro_rules! common_unittests {
       }
 
       #[test]
-      fn test_get_or_insert_with_value_builder_inmemory() {
-        get_or_insert_with_value_builder(OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      fn test_reserved_inmemory() {
+        reserved(&mut OrderWal::new(Builder::new().with_capacity(MB).with_reserved(4)).unwrap());
       }
 
       #[test]
-      fn test_get_or_insert_with_value_builder_map_anon() {
-        get_or_insert_with_value_builder(OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      fn test_reserved_map_anon() {
+        reserved(&mut OrderWal::map_anon(Builder::new().with_capacity(MB).with_reserved(4)).unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
-      fn test_get_or_insert_with_value_builder_map_file() {
+      fn test_reserved_map_file() {
         let dir = tempdir().unwrap();
-        get_or_insert_with_value_builder(
-          OrderWal::map_mut(
-            dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_with_value_builder_map_file")),
-            Builder::new(),
+        reserved(
+          &mut OrderWal::map_mut(
+            dir.path().join(concat!("test_", stringify!($prefix), "_reserved_map_file")),
+            Builder::new().with_reserved(4),
             OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
@@ -500,7 +592,24 @@ pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(pref
   }
 }
 
-pub(crate) fn insert<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn insert_to_full<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  let mut full = false;
+  for i in 0u32.. {
+    match wal.insert(&i.to_be_bytes(), &i.to_be_bytes()) {
+      Ok(_) => {}
+      Err(e) => match e {
+        Error::InsufficientSpace { .. } => {
+          full = true;
+          break;
+        }
+        _ => panic!("unexpected error"),
+      },
+    }
+  }
+  assert!(full);
+}
+
+pub(crate) fn insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -513,7 +622,7 @@ pub(crate) fn insert<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal
       .insert_with_key_builder::<()>(
@@ -531,7 +640,7 @@ pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal
       .insert_with_value_builder::<()>(
@@ -549,7 +658,7 @@ pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal
       .insert_with_builders::<(), ()>(
@@ -570,7 +679,7 @@ pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn iter<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn iter<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -583,7 +692,7 @@ pub(crate) fn iter<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn range<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn range<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -600,7 +709,7 @@ pub(crate) fn range<W: Wal<Ascend, Crc32>>(mut wal: W) {
   assert!(iter.next().is_none());
 }
 
-pub(crate) fn keys<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -612,7 +721,7 @@ pub(crate) fn keys<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn range_keys<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn range_keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -628,7 +737,7 @@ pub(crate) fn range_keys<W: Wal<Ascend, Crc32>>(mut wal: W) {
   assert!(iter.next().is_none());
 }
 
-pub(crate) fn values<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -640,7 +749,7 @@ pub(crate) fn values<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn range_values<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn range_values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -656,7 +765,7 @@ pub(crate) fn range_values<W: Wal<Ascend, Crc32>>(mut wal: W) {
   assert!(iter.next().is_none());
 }
 
-pub(crate) fn first<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn first<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -666,7 +775,7 @@ pub(crate) fn first<W: Wal<Ascend, Crc32>>(mut wal: W) {
   assert_eq!(value, 0u32.to_be_bytes());
 }
 
-pub(crate) fn last<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn last<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
@@ -676,7 +785,7 @@ pub(crate) fn last<W: Wal<Ascend, Crc32>>(mut wal: W) {
   assert_eq!(value, 999u32.to_be_bytes());
 }
 
-pub(crate) fn get_or_insert<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn get_or_insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal
       .get_or_insert(&i.to_be_bytes(), &i.to_be_bytes())
@@ -694,7 +803,7 @@ pub(crate) fn get_or_insert<W: Wal<Ascend, Crc32>>(mut wal: W) {
   }
 }
 
-pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
+pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..1000u32 {
     wal
       .get_or_insert_with_value_builder::<()>(
@@ -721,5 +830,21 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W
 
   for i in 0..1000u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn zero_reserved<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  unsafe {
+    assert_eq!(wal.reserved_slice(), &[]);
+    assert_eq!(wal.reserved_slice_mut(), &mut []);
+  }
+}
+
+pub(crate) fn reserved<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  unsafe {
+    let buf = wal.reserved_slice_mut();
+    buf.copy_from_slice(b"al8n");
+    assert_eq!(wal.reserved_slice(), b"al8n");
+    assert_eq!(wal.reserved_slice_mut(), b"al8n");
   }
 }
