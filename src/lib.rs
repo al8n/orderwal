@@ -54,6 +54,8 @@ pub use wal::{Builder, Wal};
 mod options;
 pub use options::Options;
 
+pub use dbutils::equivalent::*;
+
 /// A single writer multiple readers ordered write-ahead Log implementation.
 pub mod swmr;
 

@@ -309,7 +309,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       .get_or_insert_with_value_builder::<()>(
         key,
         ValueBuilder::new(value.len() as u32, |buf| {
-          buf.write(value).unwrap();
+          buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
@@ -356,7 +356,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       .insert_with_in::<E, ()>(
         kb,
         ValueBuilder::new(value.len() as u32, |buf| {
-          buf.write(value).unwrap();
+          buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
@@ -396,7 +396,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in::<(), E>(
         KeyBuilder::new(key.len() as u32, |buf| {
-          buf.write(key).unwrap();
+          buf.put_slice(key).unwrap();
           Ok(())
         }),
         vb,
@@ -455,11 +455,11 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in::<(), ()>(
         KeyBuilder::new(key.len() as u32, |buf| {
-          buf.write(key).unwrap();
+          buf.put_slice(key).unwrap();
           Ok(())
         }),
         ValueBuilder::new(value.len() as u32, |buf| {
-          buf.write(value).unwrap();
+          buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
