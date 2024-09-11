@@ -35,6 +35,10 @@ const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 
+#[cfg(test)]
+#[macro_use]
+mod tests;
+
 /// Error types.
 pub mod error;
 
@@ -55,9 +59,6 @@ pub mod swmr;
 
 /// An ordered write-ahead Log implementation.
 pub mod unsync;
-
-#[cfg(test)]
-mod tests;
 
 bitflags::bitflags! {
   /// The flags of the entry.
