@@ -519,7 +519,7 @@ pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
     wal
       .insert_with_key_builder::<()>(
         KeyBuilder::<_>::new(4, |buf| {
-          buf.copy_from_slice(&i.to_be_bytes());
+          let _ = buf.write(&i.to_be_bytes());
           Ok(())
         }),
         &i.to_be_bytes(),
@@ -538,7 +538,7 @@ pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W) {
       .insert_with_value_builder::<()>(
         &i.to_be_bytes(),
         ValueBuilder::<_>::new(4, |buf| {
-          buf.copy_from_slice(&i.to_be_bytes());
+          let _ = buf.write(&i.to_be_bytes());
           Ok(())
         }),
       )
@@ -555,11 +555,11 @@ pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(mut wal: W) {
     wal
       .insert_with_builders::<(), ()>(
         KeyBuilder::<_>::new(4, |buf| {
-          buf.copy_from_slice(&i.to_be_bytes());
+          let _ = buf.write(&i.to_be_bytes());
           Ok(())
         }),
         ValueBuilder::<_>::new(4, |buf| {
-          buf.copy_from_slice(&i.to_be_bytes());
+          let _ = buf.write(&i.to_be_bytes());
           Ok(())
         }),
       )
@@ -701,7 +701,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
         ValueBuilder::<_>::new(4, |buf| {
-          buf.copy_from_slice(&i.to_be_bytes());
+          let _ = buf.write(&i.to_be_bytes());
           Ok(())
         }),
       )
@@ -713,7 +713,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(mut wal: W
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
         ValueBuilder::<_>::new(4, |buf| {
-          buf.copy_from_slice(&(i * 2).to_be_bytes());
+          let _ = buf.write(&(i * 2).to_be_bytes());
           Ok(())
         }),
       )
