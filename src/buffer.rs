@@ -1,8 +1,11 @@
 use core::{
+  borrow::Borrow,
   marker::PhantomData,
   ptr::{self, NonNull},
   slice,
 };
+
+use crossbeam_skiplist::{Comparable, Equivalent};
 
 /// Returns when the bytes are too large to be written to the vacant buffer.
 #[derive(Debug, Default, Clone, Copy)]
@@ -166,9 +169,44 @@ impl<'a> AsMut<[u8]> for VacantBuffer<'a> {
   }
 }
 
-impl<'a> PartialEq<[u8]> for VacantBuffer<'a> {
-  fn eq(&self, other: &[u8]) -> bool {
-    self.as_ref().eq(other)
+impl<'a, Q> PartialEq<Q> for VacantBuffer<'a>
+where
+  [u8]: Borrow<Q>,
+  Q: ?Sized + Eq,
+{
+  fn eq(&self, other: &Q) -> bool {
+    self.as_ref().borrow().eq(other)
+  }
+}
+
+impl<'a, Q> PartialOrd<Q> for VacantBuffer<'a>
+where
+  [u8]: Borrow<Q>,
+  Q: ?Sized + Ord,
+{
+  fn partial_cmp(&self, other: &Q) -> Option<core::cmp::Ordering> {
+    #[allow(clippy::needless_borrow)]
+    Some(self.as_ref().borrow().cmp(&other))
+  }
+}
+
+impl<'a, Q> Equivalent<Q> for VacantBuffer<'a>
+where
+  [u8]: Borrow<Q>,
+  Q: ?Sized + Eq,
+{
+  fn equivalent(&self, key: &Q) -> bool {
+    self.as_ref().borrow().eq(key)
+  }
+}
+
+impl<'a, Q> Comparable<Q> for VacantBuffer<'a>
+where
+  [u8]: Borrow<Q>,
+  Q: ?Sized + Ord,
+{
+  fn compare(&self, other: &Q) -> core::cmp::Ordering {
+    self.as_ref().borrow().compare(other)
   }
 }
 
@@ -178,9 +216,21 @@ impl<'a> PartialEq<VacantBuffer<'a>> for [u8] {
   }
 }
 
+impl<'a> PartialOrd<VacantBuffer<'a>> for [u8] {
+  fn partial_cmp(&self, other: &VacantBuffer<'a>) -> Option<core::cmp::Ordering> {
+    Some(self.as_ref().cmp(other.as_ref()))
+  }
+}
+
 impl<'a> PartialEq<[u8]> for &VacantBuffer<'a> {
   fn eq(&self, other: &[u8]) -> bool {
     self.as_ref().eq(other)
+  }
+}
+
+impl<'a> PartialOrd<[u8]> for &VacantBuffer<'a> {
+  fn partial_cmp(&self, other: &[u8]) -> Option<core::cmp::Ordering> {
+    Some(self.as_ref().cmp(other))
   }
 }
 
@@ -190,15 +240,21 @@ impl<'a> PartialEq<&VacantBuffer<'a>> for [u8] {
   }
 }
 
-impl<'a, const N: usize> PartialEq<[u8; N]> for VacantBuffer<'a> {
-  fn eq(&self, other: &[u8; N]) -> bool {
-    self.as_ref().eq(other.as_ref())
+impl<'a> PartialOrd<&VacantBuffer<'a>> for [u8] {
+  fn partial_cmp(&self, other: &&VacantBuffer<'a>) -> Option<core::cmp::Ordering> {
+    Some(self.cmp(other.as_ref()))
   }
 }
 
 impl<'a, const N: usize> PartialEq<VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &VacantBuffer<'a>) -> bool {
     self.as_ref().eq(other.as_ref())
+  }
+}
+
+impl<'a, const N: usize> PartialOrd<VacantBuffer<'a>> for [u8; N] {
+  fn partial_cmp(&self, other: &VacantBuffer<'a>) -> Option<core::cmp::Ordering> {
+    Some(self.as_ref().cmp(other.as_ref()))
   }
 }
 

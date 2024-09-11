@@ -6,7 +6,6 @@ use wal::ImmutableWal;
 
 const MB: usize = 1024 * 1024;
 
-#[macro_export]
 macro_rules! common_unittests {
   ($prefix:ident::$wal:ident) => {
     paste::paste! {
