@@ -197,7 +197,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
   where
     C: Comparator + CheapClone,
     S: Checksumer,
@@ -208,7 +216,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  fn map_with_path_builder<PB, E>(
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map_with_path_builder<PB, E>(
     path_builder: PB,
     b: Builder<C, S>,
   ) -> Result<Self::Reader, Either<E, Error>>
@@ -236,7 +252,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
-  fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
+  ///  
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
   where
     C: Comparator + CheapClone,
     S: Checksumer,
@@ -251,7 +275,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
-  fn map_mut_with_path_builder<PB, E>(
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map_mut_with_path_builder<PB, E>(
     path_builder: PB,
     b: Builder<C, S>,
     open_options: OpenOptions,

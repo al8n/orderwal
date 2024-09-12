@@ -607,6 +607,14 @@ where
 {
   /// Creates a new write-ahead log backed by a file backed memory map with the given options.
   ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
   /// # Example
   ///
   /// ```rust
@@ -614,7 +622,7 @@ where
   ///
   /// ```
   #[inline]
-  pub fn map_mut<P: AsRef<Path>>(
+  pub unsafe fn map_mut<P: AsRef<Path>>(
     path: P,
     opts: Options,
     open_options: OpenOptions,
@@ -624,8 +632,16 @@ where
   }
 
   /// Creates a new write-ahead log backed by a file backed memory map with the given options.
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
   #[inline]
-  pub fn map_mut_with_path_builder<PB, E>(
+  pub unsafe fn map_mut_with_path_builder<PB, E>(
     pb: PB,
     opts: Options,
     open_options: OpenOptions,
@@ -637,15 +653,34 @@ where
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode.
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
   #[inline]
-  pub fn map<P: AsRef<Path>>(path: P, opts: Options) -> Result<Self, Error> {
+  pub unsafe fn map<P: AsRef<Path>>(path: P, opts: Options) -> Result<Self, Error> {
     Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts)
       .map_err(|e| e.unwrap_right())
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode.
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
   #[inline]
-  pub fn map_with_path_builder<PB, E>(pb: PB, opts: Options) -> Result<Self, Either<E, Error>>
+  pub unsafe fn map_with_path_builder<PB, E>(
+    pb: PB,
+    opts: Options,
+  ) -> Result<Self, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
   {
@@ -769,6 +804,14 @@ where
 {
   /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Checksumer`].
   ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
   /// # Example
   ///
   /// ```rust
@@ -777,7 +820,7 @@ where
   ///
   /// ```
   #[inline]
-  pub fn map_mut_with_checksumer<P: AsRef<Path>>(
+  pub unsafe fn map_mut_with_checksumer<P: AsRef<Path>>(
     path: P,
     opts: Options,
     open_options: OpenOptions,
@@ -794,13 +837,21 @@ where
 
   /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Checksumer`].
   ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
   /// # Example
   ///
   /// ```rust
   /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
   ///
   /// ```
-  pub fn map_mut_with_path_builder_and_checksumer<PB, E>(
+  pub unsafe fn map_mut_with_path_builder_and_checksumer<PB, E>(
     path_builder: PB,
     opts: Options,
     open_options: OpenOptions,
@@ -831,8 +882,16 @@ where
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
   #[inline]
-  pub fn map_with_checksumer<P: AsRef<Path>>(
+  pub unsafe fn map_with_checksumer<P: AsRef<Path>>(
     path: P,
     opts: Options,
     cks: S,
@@ -846,8 +905,16 @@ where
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
   #[inline]
-  pub fn map_with_path_builder_and_checksumer<PB, E>(
+  pub unsafe fn map_with_path_builder_and_checksumer<PB, E>(
     path_builder: PB,
     opts: Options,
     mut cks: S,

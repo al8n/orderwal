@@ -56,7 +56,7 @@ macro_rules! common_unittests {
       fn test_insert_to_full_map_file() {
         let dir = tempdir().unwrap();
         insert_to_full(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_to_full_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -64,7 +64,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -83,7 +83,7 @@ macro_rules! common_unittests {
       fn test_insert_map_file() {
         let dir = tempdir().unwrap();
         insert(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -91,7 +91,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -110,7 +110,7 @@ macro_rules! common_unittests {
       fn test_insert_with_key_builder_map_file() {
         let dir = tempdir().unwrap();
         insert_with_key_builder(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_key_builder_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -118,7 +118,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -137,7 +137,7 @@ macro_rules! common_unittests {
       fn test_insert_with_value_builder_map_file() {
         let dir = tempdir().unwrap();
         insert_with_value_builder(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_value_builder_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -145,7 +145,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -164,7 +164,7 @@ macro_rules! common_unittests {
       fn test_insert_with_builders_map_file() {
         let dir = tempdir().unwrap();
         insert_with_builders(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_builders_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -172,7 +172,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -191,7 +191,7 @@ macro_rules! common_unittests {
       fn test_iter_map_file() {
         let dir = tempdir().unwrap();
         iter(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_iter_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -199,7 +199,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -218,7 +218,7 @@ macro_rules! common_unittests {
       fn test_range_map_file() {
         let dir = tempdir().unwrap();
         range(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_range_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -226,7 +226,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -245,7 +245,7 @@ macro_rules! common_unittests {
       fn test_keys_map_file() {
         let dir = tempdir().unwrap();
         keys(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_keys_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -253,7 +253,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -272,7 +272,7 @@ macro_rules! common_unittests {
       fn test_values_map_file() {
         let dir = tempdir().unwrap();
         values(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_values_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -280,7 +280,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -299,7 +299,7 @@ macro_rules! common_unittests {
       fn test_range_keys_map_file() {
         let dir = tempdir().unwrap();
         range_keys(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_range_keys_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -307,7 +307,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -326,7 +326,7 @@ macro_rules! common_unittests {
       fn test_range_values_map_file() {
         let dir = tempdir().unwrap();
         range_values(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test", stringify!($prefix), "_range_values_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -334,7 +334,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -353,7 +353,7 @@ macro_rules! common_unittests {
       fn test_first_map_file() {
         let dir = tempdir().unwrap();
         first(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_first_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -361,7 +361,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -380,7 +380,7 @@ macro_rules! common_unittests {
       fn test_last_map_file() {
         let dir = tempdir().unwrap();
         last(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_last_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -388,7 +388,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -407,7 +407,7 @@ macro_rules! common_unittests {
       fn test_get_or_insert_map_file() {
         let dir = tempdir().unwrap();
 
-        let mut wal = OrderWal::map_mut(
+        let mut wal = unsafe { OrderWal::map_mut(
           dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_map_file")),
           Builder::new(),
           OpenOptions::new()
@@ -415,7 +415,7 @@ macro_rules! common_unittests {
             .write(true)
             .read(true),
         )
-        .unwrap();
+        .unwrap() };
 
         get_or_insert(
           &mut wal,
@@ -439,7 +439,7 @@ macro_rules! common_unittests {
       fn test_get_or_insert_with_value_builder_map_file() {
         let dir = tempdir().unwrap();
         let path = dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_with_value_builder_map_file"));
-        let mut wal = OrderWal::map_mut(
+        let mut wal = unsafe { OrderWal::map_mut(
           &path,
           Builder::new(),
           OpenOptions::new()
@@ -447,7 +447,7 @@ macro_rules! common_unittests {
             .write(true)
             .read(true),
         )
-        .unwrap();
+        .unwrap() };
         get_or_insert_with_value_builder(
           &mut wal,
         );
@@ -472,7 +472,7 @@ macro_rules! common_unittests {
       fn test_zero_reserved_map_file() {
         let dir = tempdir().unwrap();
         zero_reserved(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_zero_reserved_map_file")),
             Builder::new(),
             OpenOptions::new()
@@ -480,7 +480,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
 
@@ -499,7 +499,7 @@ macro_rules! common_unittests {
       fn test_reserved_map_file() {
         let dir = tempdir().unwrap();
         reserved(
-          &mut OrderWal::map_mut(
+          &mut unsafe { OrderWal::map_mut(
             dir.path().join(concat!("test_", stringify!($prefix), "_reserved_map_file")),
             Builder::new().with_reserved(4),
             OpenOptions::new()
@@ -507,7 +507,7 @@ macro_rules! common_unittests {
               .write(true)
               .read(true),
           )
-          .unwrap(),
+          .unwrap() },
         );
       }
     }
@@ -530,7 +530,7 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
   let dir = tempdir().unwrap();
   let path = dir.path().join(format!("{prefix}_construct_map_file"));
 
-  {
+  unsafe {
     let mut wal = W::map_mut(
       &path,
       Builder::new(),
@@ -546,7 +546,7 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
     assert_eq!(wal.get(b"key1").unwrap(), b"value1");
   }
 
-  let wal = W::map(&path, Builder::new()).unwrap();
+  let wal = unsafe { W::map(&path, Builder::new()).unwrap() };
   assert_eq!(wal.get(b"key1").unwrap(), b"value1");
 }
 
@@ -576,14 +576,16 @@ pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(pref
     .path()
     .join(format!("{prefix}_construct_with_small_capacity_map_file"));
 
-  let wal = W::map_mut(
-    &path,
-    Builder::new(),
-    OpenOptions::new()
-      .create_new(Some(1))
-      .write(true)
-      .read(true),
-  );
+  let wal = unsafe {
+    W::map_mut(
+      &path,
+      Builder::new(),
+      OpenOptions::new()
+        .create_new(Some(1))
+        .write(true)
+        .read(true),
+    )
+  };
 
   assert!(wal.is_err());
   match wal {
