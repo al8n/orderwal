@@ -490,6 +490,14 @@ where
   }
 
   #[inline]
+  unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
+    self
+      .map
+      .get(&PartialPointer::new(key.len(), key.as_ptr()))
+      .is_some()
+  }
+
+  #[inline]
   fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
@@ -950,6 +958,15 @@ where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
     self.core.contains_key(key)
+  }
+
+  /// Returns `true` if the key exists in the WAL.
+  ///
+  /// # Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
+    self.core.contains_key_by_bytes(key)
   }
 
   /// Returns `true` if the key exists in the WAL.

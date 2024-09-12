@@ -1,4 +1,4 @@
-use dbutils::leb128;
+pub use dbutils::leb128::*;
 
 use super::*;
 
@@ -18,7 +18,7 @@ pub(crate) const fn split_lengths(len: u64) -> (u32, u32) {
 #[inline]
 pub(crate) const fn entry_size(key_len: u32, value_len: u32) -> (usize, u64, u32) {
   let len = merge_lengths(key_len, value_len);
-  let len_size = leb128::encoded_u64_varint_len(len);
+  let len_size = encoded_u64_varint_len(len);
   let elen = STATUS_SIZE as u32 + len_size as u32 + key_len + value_len + CHECKSUM_SIZE as u32;
 
   (len_size, len, elen)

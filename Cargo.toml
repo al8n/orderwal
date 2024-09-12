@@ -38,7 +38,10 @@ faststr = { version = "0.2", default-features = false, optional = true }
 tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]
+arbitrary = { version = "1", features = ["derive"] }
 criterion = "0.5"
+names = "0.14"
+rand = "0.8"
 tempfile = "3"
 
 [profile.bench]

@@ -45,7 +45,8 @@ pub mod error;
 mod buffer;
 pub use buffer::*;
 
-mod utils;
+/// Utilities.
+pub mod utils;
 use utils::*;
 
 mod wal;
