@@ -1150,14 +1150,17 @@ fn reserved(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn reserved_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal =
+    GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB).with_reserved(4))
+      .unwrap();
   reserved(&mut wal);
 }
 
 #[test]
 fn reserved_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB).with_reserved(4))
+      .unwrap();
   reserved(&mut wal);
 }
 
@@ -1170,7 +1173,7 @@ fn reserved_map_file() {
   let mut wal = unsafe {
     GenericOrderWal::<Person, String>::map_mut(
       &path,
-      Options::new(),
+      Options::new().with_reserved(4),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
