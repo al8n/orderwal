@@ -45,6 +45,14 @@ pub struct Pointer<K, V> {
   _m: PhantomData<(K, V)>,
 }
 
+impl<K, V> Clone for Pointer<K, V> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<K, V> Copy for Pointer<K, V> {}
+
 impl<K: Type, V> PartialEq for Pointer<K, V> {
   fn eq(&self, other: &Self) -> bool {
     self.as_key_slice() == other.as_key_slice()
@@ -259,7 +267,7 @@ where
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
     let kr = <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice());
-    KeyRef::compare(&kr, self.key).reverse()
+    KeyRef::compare(&kr, self.key)
   }
 }
 
@@ -478,7 +486,7 @@ where
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
-    self.map.get::<Owned<K, Q>>(&Owned::new(key)).is_some()
+    self.map.contains::<Owned<K, Q>>(&Owned::new(key))
   }
 
   #[inline]
@@ -486,15 +494,14 @@ where
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
-    self.map.get::<Ref<K, Q>>(&Ref::new(key)).is_some()
+    self.map.contains::<Ref<K, Q>>(&Ref::new(key))
   }
 
   #[inline]
   unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
     self
       .map
-      .get(&PartialPointer::new(key.len(), key.as_ptr()))
-      .is_some()
+      .contains(&PartialPointer::new(key.len(), key.as_ptr()))
   }
 
   #[inline]
@@ -670,7 +677,10 @@ where
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
   #[inline]
-  pub unsafe fn map<P: AsRef<Path>>(path: P, opts: Options) -> Result<Self, Error> {
+  pub unsafe fn map<P: AsRef<Path>>(
+    path: P,
+    opts: Options,
+  ) -> Result<GenericWalReader<K, V>, Error> {
     Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts)
       .map_err(|e| e.unwrap_right())
   }
@@ -688,7 +698,7 @@ where
   pub unsafe fn map_with_path_builder<PB, E>(
     pb: PB,
     opts: Options,
-  ) -> Result<Self, Either<E, Error>>
+  ) -> Result<GenericWalReader<K, V>, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
   {
@@ -903,7 +913,7 @@ where
     path: P,
     opts: Options,
     cks: S,
-  ) -> Result<Self, Error> {
+  ) -> Result<GenericWalReader<K, V>, Error> {
     Self::map_with_path_builder_and_checksumer::<_, ()>(
       || Ok(path.as_ref().to_path_buf()),
       opts,
@@ -926,7 +936,7 @@ where
     path_builder: PB,
     opts: Options,
     mut cks: S,
-  ) -> Result<Self, Either<E, Error>>
+  ) -> Result<GenericWalReader<K, V>, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
   {
@@ -940,7 +950,7 @@ where
     .map_err(|e| e.map_right(Into::into))?;
 
     GenericOrderWalCore::replay(arena, &opts, true, &mut cks)
-      .map(|core| Self::from_core(core, opts, cks, true))
+      .map(|core| GenericWalReader::new(Arc::new(core)))
       .map_err(Either::Right)
   }
 }
@@ -1280,6 +1290,20 @@ where
   pub unsafe fn insert_key_with_value_bytes(&mut self, key: &K, value: &[u8]) -> Result<(), Error> {
     self
       .insert_in(Among::Middle(key), Among::Right(value))
+      .map_err(|e| match e {
+        Among::Right(e) => e,
+        _ => unreachable!(),
+      })
+  }
+
+  /// Inserts a key in bytes format and value in structured format into the write-ahead log directly.
+  ///
+  /// # Safety
+  /// - The given `key` and `value` must be valid to construct to `K::Ref` and `V::Ref` without remaining.
+  #[inline]
+  pub unsafe fn insert_bytes(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
+    self
+      .insert_in(Among::Right(key), Among::Right(value))
       .map_err(|e| match e {
         Among::Right(e) => e,
         _ => unreachable!(),
