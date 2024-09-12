@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use arbitrary::Arbitrary;
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
 use tempfile::tempdir;
@@ -155,7 +157,7 @@ impl<'a> TypeRef<'a> for PersonRef<'a> {
 }
 
 #[test]
-fn test_owned_comparable() {
+fn owned_comparable() {
   let p1 = Person {
     id: 3127022870678870148,
     name: "enthusiastic-magic".into(),
@@ -193,7 +195,7 @@ fn test_owned_comparable() {
 }
 
 #[test]
-fn test_ref_comparable() {
+fn ref_comparable() {
   let p1 = PersonRef {
     id: 3127022870678870148,
     name: "enthusiastic-magic",
@@ -281,6 +283,7 @@ fn construct_map_anon() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn construct_map_file() {
   let dir = tempdir().unwrap();
   let path = dir.path().join("generic_wal_construct_map_file");
@@ -742,6 +745,13 @@ fn iter(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
     assert_eq!(pwal.1, pvec.value());
   }
 
+  let mut rev_iter = wal.iter().rev();
+
+  for (pwal, pvec) in people.iter().rev().zip(rev_iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
+
   people
 }
 
@@ -787,98 +797,258 @@ fn iter_map_file() {
   }
 }
 
-// pub(crate) fn range(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+fn range(wal: &mut GenericOrderWal<Person, String>) {
+  let mut mid = Person::random();
+  let people = (0..1000)
+    .map(|idx| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal.insert(&p, &v).unwrap();
 
-//   let x = 500u32.to_be_bytes();
+      if idx == 500 {
+        mid = p.clone();
+      }
+      (p, v)
+    })
+    .collect::<BTreeMap<_, _>>();
 
-//   let mut iter = wal.range((Bound::Included(x.as_slice()), Bound::Unbounded));
-//   for i in 500..1000u32 {
-//     let (key, value) = iter.next().unwrap();
-//     assert_eq!(key, i.to_be_bytes());
-//     assert_eq!(value, i.to_be_bytes());
-//   }
+  let mut iter = wal.range(Bound::Included(&mid), Bound::Unbounded);
 
-//   assert!(iter.next().is_none());
-// }
+  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
 
-// pub(crate) fn keys(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+  assert!(iter.next().is_none());
 
-//   let mut iter = wal.keys();
-//   for i in 0..1000u32 {
-//     let key = iter.next().unwrap();
-//     assert_eq!(key, i.to_be_bytes());
-//   }
-// }
+  let wal = wal.reader();
+  let mut iter = wal.range(Bound::Included(&mid), Bound::Unbounded);
 
-// pub(crate) fn range_keys(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
 
-//   let x = 500u32.to_be_bytes();
+  let mut rev_iter = wal.range(Bound::Included(&mid), Bound::Unbounded).rev();
 
-//   let mut iter = wal.range_keys((Bound::Included(x.as_slice()), Bound::Unbounded));
-//   for i in 500..1000u32 {
-//     let key = iter.next().unwrap();
-//     assert_eq!(key, i.to_be_bytes());
-//   }
+  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
+}
 
-//   assert!(iter.next().is_none());
-// }
+#[test]
+fn range_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  range(&mut wal);
+}
 
-// pub(crate) fn values(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+#[test]
+fn range_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  range(&mut wal);
+}
 
-//   let mut iter = wal.values();
-//   for i in 0..1000u32 {
-//     let value = iter.next().unwrap();
-//     assert_eq!(value, i.to_be_bytes());
-//   }
-// }
+#[test]
+#[cfg_attr(miri, ignore)]
+fn range_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_range_map_file");
 
-// pub(crate) fn range_values(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
 
-//   let x = 500u32.to_be_bytes();
+  range(&mut wal);
+}
 
-//   let mut iter = wal.range_values((Bound::Included(x.as_slice()), Bound::Unbounded));
-//   for i in 500..1000u32 {
-//     let value = iter.next().unwrap();
-//     assert_eq!(value, i.to_be_bytes());
-//   }
+fn range_ref(wal: &mut GenericOrderWal<Person, String>) {
+  let mut mid = Person::random();
+  let people = (0..1000)
+    .map(|idx| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal.insert(&p, &v).unwrap();
 
-//   assert!(iter.next().is_none());
-// }
+      if idx == 500 {
+        mid = p.clone();
+      }
+      (p, v)
+    })
+    .collect::<BTreeMap<_, _>>();
 
-// pub(crate) fn first(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+  let mid_ref = mid.as_ref();
+  let mut iter = wal.range_by_ref(Bound::Included(&mid_ref), Bound::Unbounded);
 
-//   let (key, value) = wal.first().unwrap();
-//   assert_eq!(key, 0u32.to_be_bytes());
-//   assert_eq!(value, 0u32.to_be_bytes());
-// }
+  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
 
-// pub(crate) fn last(wal: &mut GenericOrderWal<Person, String>) {
-//   for i in 0..1000u32 {
-//     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
-//   }
+  assert!(iter.next().is_none());
 
-//   let (key, value) = wal.last().unwrap();
-//   assert_eq!(key, 999u32.to_be_bytes());
-//   assert_eq!(value, 999u32.to_be_bytes());
-// }
+  let wal = wal.reader();
+  let mut iter = wal.range_by_ref(Bound::Included(&mid), Bound::Unbounded);
+
+  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
+
+  let mut rev_iter = wal
+    .range_by_ref(Bound::Included(&mid), Bound::Unbounded)
+    .rev();
+
+  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
+    assert!(pwal.0.equivalent(&pvec.key()));
+    assert_eq!(pwal.1, pvec.value());
+  }
+}
+
+#[test]
+fn range_ref_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  range(&mut wal);
+}
+
+#[test]
+fn range_ref_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  range_ref(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn range_ref_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_range_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  range_ref(&mut wal);
+}
+
+fn first(wal: &mut GenericOrderWal<Person, String>) {
+  let people = (0..10)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal.insert(&p, &v).unwrap();
+
+      (p, v)
+    })
+    .collect::<BTreeMap<_, _>>();
+
+  let ent = wal.first().unwrap();
+  let (p, v) = people.first_key_value().unwrap();
+  assert!(ent.key().equivalent(p));
+  assert_eq!(ent.value(), v);
+}
+
+#[test]
+fn first_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  first(&mut wal);
+}
+
+#[test]
+fn first_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  first(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn first_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_first_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  first(&mut wal);
+}
+
+fn last(wal: &mut GenericOrderWal<Person, String>) {
+  let people = (0..10)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal.insert(&p, &v).unwrap();
+
+      (p, v)
+    })
+    .collect::<BTreeMap<_, _>>();
+
+  let ent = wal.last().unwrap();
+  let (p, v) = people.last_key_value().unwrap();
+  assert!(ent.key().equivalent(p));
+  assert_eq!(ent.value(), v);
+}
+
+#[test]
+fn last_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  last(&mut wal);
+}
+
+#[test]
+fn last_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  last(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn last_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_last_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  last(&mut wal);
+}
 
 // pub(crate) fn get_or_insert(wal: &mut GenericOrderWal<Person, String>) {
 //   for i in 0..1000u32 {
@@ -928,18 +1098,86 @@ fn iter_map_file() {
 //   }
 // }
 
-// pub(crate) fn zero_reserved(wal: &mut GenericOrderWal<Person, String>) {
-//   unsafe {
-//     assert_eq!(wal.reserved_slice(), &[]);
-//     assert_eq!(wal.reserved_slice_mut(), &mut []);
-//   }
-// }
+fn zero_reserved(wal: &mut GenericOrderWal<Person, String>) {
+  unsafe {
+    assert_eq!(wal.reserved_slice(), &[]);
+    assert_eq!(wal.reserved_slice_mut(), &mut []);
+  }
+}
 
-// pub(crate) fn reserved(wal: &mut GenericOrderWal<Person, String>) {
-//   unsafe {
-//     let buf = wal.reserved_slice_mut();
-//     buf.copy_from_slice(b"al8n");
-//     assert_eq!(wal.reserved_slice(), b"al8n");
-//     assert_eq!(wal.reserved_slice_mut(), b"al8n");
-//   }
-// }
+#[test]
+fn zero_reserved_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  zero_reserved(&mut wal);
+}
+
+#[test]
+fn zero_reserved_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  zero_reserved(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn zero_reserved_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_zero_reserved_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  zero_reserved(&mut wal);
+}
+
+fn reserved(wal: &mut GenericOrderWal<Person, String>) {
+  unsafe {
+    let buf = wal.reserved_slice_mut();
+    buf.copy_from_slice(b"al8n");
+    assert_eq!(wal.reserved_slice(), b"al8n");
+    assert_eq!(wal.reserved_slice_mut(), b"al8n");
+  }
+}
+
+#[test]
+fn reserved_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  reserved(&mut wal);
+}
+
+#[test]
+fn reserved_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  reserved(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn reserved_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_reserved_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  reserved(&mut wal);
+}
