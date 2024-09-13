@@ -5,6 +5,7 @@ use crossbeam_skiplist::Comparable;
 use rarena_allocator::either::Either;
 
 mod impls;
+pub use impls::*;
 
 /// The type trait for limiting the types that can be used as keys and values in the [`GenericOrderWal`].
 ///

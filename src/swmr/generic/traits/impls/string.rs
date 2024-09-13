@@ -9,65 +9,62 @@ macro_rules! impls {
   ($( $(#[cfg($cfg:meta)])? $ty:ty),+ $(,)?) => {
     $(
       $(#[cfg($cfg)])?
-      impl Type for $ty {
-        type Ref<'a> = Str<'a>;
-        type Error = ();
+      const _: () = {
+        impl Type for $ty {
+          type Ref<'a> = Str<'a>;
+          type Error = ();
 
-        fn encoded_len(&self) -> usize {
-          self.len()
+          fn encoded_len(&self) -> usize {
+            self.len()
+          }
+
+          fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+            buf.copy_from_slice(self.as_bytes());
+            Ok(())
+          }
         }
 
-        fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-          buf.copy_from_slice(self.as_bytes());
-          Ok(())
-        }
-      }
+        impl<'a> KeyRef<'a, $ty> for Str<'a> {
+          fn compare<Q>(&self, a: &Q) -> cmp::Ordering
+          where
+            Q: ?Sized + Ord + Comparable<Self>,
+          {
+            Comparable::compare(a, self).reverse()
+          }
 
-      $(#[cfg($cfg)])?
-      impl<'a> KeyRef<'a, $ty> for Str<'a> {
-        fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-        where
-          Q: ?Sized + Ord + Comparable<Self>,
-        {
-          Comparable::compare(a, self).reverse()
+          fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering {
+            a.cmp(b)
+          }
         }
 
-        fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering {
-          a.cmp(b)
+        impl Equivalent<Str<'_>> for $ty {
+          fn equivalent(&self, key: &Str<'_>) -> bool {
+            let this: &str = self.as_ref();
+            this.eq(key.0)
+          }
         }
-      }
 
-      $(#[cfg($cfg)])?
-      impl Equivalent<Str<'_>> for $ty {
-        fn equivalent(&self, key: &Str<'_>) -> bool {
-          let this: &str = self.as_ref();
-          this.eq(key.0)
+        impl Comparable<Str<'_>> for $ty {
+          fn compare(&self, other: &Str<'_>) -> cmp::Ordering {
+            let this: &str = self.as_ref();
+            this.cmp(other.0)
+          }
         }
-      }
 
-      $(#[cfg($cfg)])?
-      impl Comparable<Str<'_>> for $ty {
-        fn compare(&self, other: &Str<'_>) -> cmp::Ordering {
-          let this: &str = self.as_ref();
-          this.cmp(other.0)
+        impl Equivalent<$ty> for Str<'_> {
+          fn equivalent(&self, key: &$ty) -> bool {
+            let that: &str = key.as_ref();
+            self.0.eq(that)
+          }
         }
-      }
 
-      $(#[cfg($cfg)])?
-      impl Equivalent<$ty> for Str<'_> {
-        fn equivalent(&self, key: &$ty) -> bool {
-          let that: &str = key.as_ref();
-          self.0.eq(that)
+        impl Comparable<$ty> for Str<'_> {
+          fn compare(&self, other: &$ty) -> cmp::Ordering {
+            let that: &str = other.as_ref();
+            self.0.cmp(that)
+          }
         }
-      }
-
-      $(#[cfg($cfg)])?
-      impl Comparable<$ty> for Str<'_> {
-        fn compare(&self, other: &$ty) -> cmp::Ordering {
-          let that: &str = other.as_ref();
-          self.0.cmp(that)
-        }
-      }
+      };
     )*
   };
 }
@@ -81,6 +78,18 @@ impl<'a> TypeRef<'a> for &'a str {
 /// A wrapper type for `&'a str`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Str<'a>(&'a str);
+
+impl<'a> From<&'a str> for Str<'a> {
+  fn from(src: &'a str) -> Self {
+    Self(src)
+  }
+}
+
+impl<'a> From<Str<'a>> for &'a str {
+  fn from(src: Str<'a>) -> Self {
+    src.0
+  }
+}
 
 impl<'a> TypeRef<'a> for Str<'a> {
   fn from_slice(src: &'a [u8]) -> Self {
