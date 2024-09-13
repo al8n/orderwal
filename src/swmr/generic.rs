@@ -523,6 +523,14 @@ where
   {
     self.map.get::<Ref<K, Q>>(&Ref::new(key)).map(EntryRef::new)
   }
+
+  #[inline]
+  unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+    self
+      .map
+      .get(&PartialPointer::new(key.len(), key.as_ptr()))
+      .map(EntryRef::new)
+  }
 }
 
 /// Generic ordered write-ahead log implementation, which supports structured keys and values.
@@ -1008,6 +1016,15 @@ where
   {
     self.core.get_by_ref(key)
   }
+
+  /// Gets the value associated with the key.
+  ///
+  /// # Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+    self.core.get_by_bytes(key)
+  }
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S>
@@ -1205,7 +1222,8 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::*;
+  /// use orderwal::{swmr::{*, generic::*}, utils::*, Options};
+  /// use std::cmp;
   ///
   /// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
   /// struct Person {

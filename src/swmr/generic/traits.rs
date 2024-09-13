@@ -94,6 +94,7 @@ impl<T: Type> InsertAmongExt<T> for Among<T, &T, &[u8]> {
   }
 }
 
+/// The reference type trait for the [`Type`] trait.
 pub trait TypeRef<'a> {
   /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
   /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
