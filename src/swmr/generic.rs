@@ -1113,7 +1113,7 @@ where
     &mut self,
     key: &K,
     value: &[u8],
-  ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
+  ) -> Either<EntryRef<'_, K, V>, Result<(), Either<K::Error, Error>>> {
     let ent = self
       .core
       .map
@@ -1124,7 +1124,8 @@ where
       Some(e) => e,
       None => match self.insert_in(Among::Middle(key), Among::Right(value)) {
         Ok(_) => Either::Right(Ok(())),
-        Err(Among::Right(e)) => Either::Right(Err(e)),
+        Err(Among::Left(e)) => Either::Right(Err(Either::Left(e))),
+        Err(Among::Right(e)) => Either::Right(Err(Either::Right(e))),
         _ => unreachable!(),
       },
     }
@@ -1139,7 +1140,7 @@ where
     &mut self,
     key: &[u8],
     value: &V,
-  ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
+  ) -> Either<EntryRef<'_, K, V>, Result<(), Either<V::Error, Error>>> {
     let ent = self
       .core
       .map
@@ -1150,7 +1151,8 @@ where
       Some(e) => e,
       None => match self.insert_in(Among::Right(key), Among::Middle(value)) {
         Ok(_) => Either::Right(Ok(())),
-        Err(Among::Right(e)) => Either::Right(Err(e)),
+        Err(Among::Middle(e)) => Either::Right(Err(Either::Left(e))),
+        Err(Among::Right(e)) => Either::Right(Err(Either::Right(e))),
         _ => unreachable!(),
       },
     }
@@ -1165,7 +1167,7 @@ where
     &mut self,
     key: &[u8],
     value: impl FnOnce() -> V,
-  ) -> Either<EntryRef<'_, K, V>, Result<(), Error>> {
+  ) -> Either<EntryRef<'_, K, V>, Result<(), Either<V::Error, Error>>> {
     let ent = self
       .core
       .map
@@ -1176,7 +1178,8 @@ where
       Some(e) => e,
       None => match self.insert_in(Among::Right(key), Among::Left(value())) {
         Ok(_) => Either::Right(Ok(())),
-        Err(Among::Right(e)) => Either::Right(Err(e)),
+        Err(Among::Middle(e)) => Either::Right(Err(Either::Left(e))),
+        Err(Among::Right(e)) => Either::Right(Err(Either::Right(e))),
         _ => unreachable!(),
       },
     }
@@ -1205,11 +1208,16 @@ where
   ///
   /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_key_with_value_bytes(&mut self, key: &K, value: &[u8]) -> Result<(), Error> {
+  pub unsafe fn insert_key_with_value_bytes(
+    &mut self,
+    key: &K,
+    value: &[u8],
+  ) -> Result<(), Either<K::Error, Error>> {
     self
       .insert_in(Among::Middle(key), Among::Right(value))
       .map_err(|e| match e {
-        Among::Right(e) => e,
+        Among::Left(e) => Either::Left(e),
+        Among::Right(e) => Either::Right(e),
         _ => unreachable!(),
       })
   }
@@ -1312,7 +1320,7 @@ where
   ///
   /// impl Type for Person {
   ///   type Ref<'a> = PersonRef<'a>;
-  ///   type Error = dbutils::leb128::EncodeVarintError;
+  ///   type Error = EncodeVarintError;
   ///
   ///   fn encoded_len(&self) -> usize {
   ///     encoded_u64_varint_len(self.id) + self.name.len()
@@ -1335,17 +1343,18 @@ where
   ///
   /// let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(1024)).unwrap();
   ///
-  /// let key = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
+  /// # let key = Person {
+  /// #  id: 1,
+  /// #  name: "Alice".to_string(),
+  /// # };
   ///
-  /// let mut pb = vec![0; key.encoded_len()];
-  /// key.encode(&mut pb).unwrap();
   ///
-  /// // Safety: we know `pb` is valid to construct to `Person::Ref` without remaining.
+  /// # let mut person = vec![0; key.encoded_len()];
+  /// # key.encode(&mut person).unwrap();
+  ///
+  /// // Assume `person` comes from somewhere else, e.g. from the network.
   /// unsafe {
-  ///   wal.insert_bytes(pb.as_ref(), b"Hello, Alice!").unwrap();
+  ///   wal.insert_bytes(person.as_ref(), b"Hello, Alice!").unwrap();
   /// }
   /// ```
   #[inline]
@@ -1367,11 +1376,16 @@ where
   ///
   /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
-  pub unsafe fn insert_key_bytes_with_value(&mut self, key: &[u8], value: &V) -> Result<(), Error> {
+  pub unsafe fn insert_key_bytes_with_value(
+    &mut self,
+    key: &[u8],
+    value: &V,
+  ) -> Result<(), Either<V::Error, Error>> {
     self
       .insert_in(Among::Right(key), Among::Middle(value))
       .map_err(|e| match e {
-        Among::Right(e) => e,
+        Among::Middle(e) => Either::Left(e),
+        Among::Right(e) => Either::Right(e),
         _ => unreachable!(),
       })
   }
