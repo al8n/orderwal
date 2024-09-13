@@ -2,7 +2,6 @@ use core::cmp;
 
 use among::Among;
 use crossbeam_skiplist::Comparable;
-use rarena_allocator::either::Either;
 
 mod impls;
 pub use impls::*;
@@ -23,48 +22,6 @@ pub trait Type {
 
   /// Encodes the type into a binary slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error>;
-}
-
-impl<T: Type> Type for Either<T, &T> {
-  type Ref<'a> = T::Ref<'a>;
-  type Error = T::Error;
-
-  #[inline]
-  fn encoded_len(&self) -> usize {
-    match self {
-      Either::Left(t) => t.encoded_len(),
-      Either::Right(t) => t.encoded_len(),
-    }
-  }
-
-  #[inline]
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-    match self {
-      Either::Left(t) => t.encode(buf),
-      Either::Right(t) => t.encode(buf),
-    }
-  }
-}
-
-impl<T: Type> Type for Either<&T, T> {
-  type Ref<'a> = T::Ref<'a>;
-  type Error = T::Error;
-
-  #[inline]
-  fn encoded_len(&self) -> usize {
-    match self {
-      Either::Left(t) => t.encoded_len(),
-      Either::Right(t) => t.encoded_len(),
-    }
-  }
-
-  #[inline]
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-    match self {
-      Either::Left(t) => t.encode(buf),
-      Either::Right(t) => t.encode(buf),
-    }
-  }
 }
 
 pub(super) trait InsertAmongExt<T: Type> {

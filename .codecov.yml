@@ -7,6 +7,10 @@ ignore:
   - "**/benches/"
   - "src/swmr/traits/impls/"
   - "src/swmr/traits/impls.rs"
+  - "src/tests.rs"
+  - "src/swmr/generic/tests.rs"
+  - "src/swmr/wal/tests.rs"
+  - "src/unsync/tests.rs"
 
 coverage:
   status:
