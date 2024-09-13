@@ -517,6 +517,7 @@ macro_rules! common_unittests {
 pub(crate) fn construct_inmemory<W: Wal<Ascend, Crc32>>() {
   let mut wal = W::new(Builder::new().with_capacity(MB as u32)).unwrap();
   let wal = &mut wal;
+  assert!(wal.is_empty());
   wal.insert(b"key1", b"value1").unwrap();
 }
 
@@ -543,6 +544,20 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
 
     let wal = &mut wal;
     wal.insert(b"key1", b"value1").unwrap();
+    assert_eq!(wal.get(b"key1").unwrap(), b"value1");
+  }
+
+  unsafe {
+    let wal = W::map_mut(
+      &path,
+      Builder::new(),
+      OpenOptions::new()
+        .create(Some(MB as u32))
+        .write(true)
+        .read(true),
+    )
+    .unwrap();
+
     assert_eq!(wal.get(b"key1").unwrap(), b"value1");
   }
 

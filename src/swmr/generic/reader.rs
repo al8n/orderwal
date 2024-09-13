@@ -147,4 +147,13 @@ where
   {
     self.0.get_by_ref(key)
   }
+
+  /// Gets the value associated with the key.
+  ///
+  /// # Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+    self.0.get_by_bytes(key)
+  }
 }

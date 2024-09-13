@@ -1136,7 +1136,7 @@ where
   /// # Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_key_bytes_or_insert(
+  pub unsafe fn get_by_bytes_or_insert(
     &mut self,
     key: &[u8],
     value: &V,
@@ -1163,7 +1163,7 @@ where
   /// # Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_key_bytes_or_insert_with(
+  pub unsafe fn get_by_bytes_or_insert_with(
     &mut self,
     key: &[u8],
     value: impl FnOnce() -> V,

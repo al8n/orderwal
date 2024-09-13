@@ -262,9 +262,16 @@ fn construct_inmemory() {
     name: "Alice".to_string(),
   };
 
+  assert!(wal.is_empty());
+
   wal
     .insert(&person, &"My name is Alice!".to_string())
     .unwrap();
+
+  let wal = wal.reader();
+
+  assert_eq!(wal.len(), 1);
+  assert!(!wal.is_empty());
 }
 
 #[test]
@@ -309,12 +316,22 @@ fn construct_map_file() {
     assert_eq!(wal.get(&person).unwrap().value(), "My name is Alice!");
   }
 
-  let wal = unsafe { GenericOrderWal::<Person, String>::map(&path, Options::new()).unwrap() };
-
   let pr = PersonRef {
     id: 1,
     name: "Alice",
   };
+
+  unsafe {
+    let wal = GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new().create(Some(MB)).write(true).read(true),
+    )
+    .unwrap();
+    assert_eq!(wal.get(&pr).unwrap().value(), "My name is Alice!");
+  }
+
+  let wal = unsafe { GenericOrderWal::<Person, String>::map(&path, Options::new()).unwrap() };
   assert_eq!(wal.get(&pr).unwrap().value(), "My name is Alice!");
 }
 
@@ -510,6 +527,11 @@ fn insert_key_bytes_with_value(
       wal.get(p).unwrap().value(),
       format!("My name is {}", p.name)
     );
+
+    assert_eq!(
+      unsafe { wal.get_by_bytes(pbytes).unwrap().value() },
+      format!("My name is {}", p.name)
+    );
   }
 
   people
@@ -560,6 +582,10 @@ fn insert_key_bytes_with_value_map_file() {
       wal.get(p).unwrap().value(),
       format!("My name is {}", p.name)
     );
+    assert_eq!(
+      unsafe { wal.get_by_bytes(pbytes).unwrap().value() },
+      format!("My name is {}", p.name)
+    );
   }
 
   let wal = unsafe { GenericOrderWal::<Person, String>::map(&path, Options::new()).unwrap() };
@@ -571,6 +597,10 @@ fn insert_key_bytes_with_value_map_file() {
     }
     assert_eq!(
       wal.get(&p).unwrap().value(),
+      format!("My name is {}", p.name)
+    );
+    assert_eq!(
+      unsafe { wal.get_by_bytes(&pbytes).unwrap().value() },
       format!("My name is {}", p.name)
     );
   }
@@ -963,6 +993,12 @@ fn first(wal: &mut GenericOrderWal<Person, String>) {
   let (p, v) = people.first_key_value().unwrap();
   assert!(ent.key().equivalent(p));
   assert_eq!(ent.value(), v);
+
+  let wal = wal.reader().clone();
+  let ent = wal.first().unwrap();
+  let (p, v) = people.first_key_value().unwrap();
+  assert!(ent.key().equivalent(p));
+  assert_eq!(ent.value(), v);
 }
 
 #[test]
@@ -1012,6 +1048,11 @@ fn last(wal: &mut GenericOrderWal<Person, String>) {
 
   let ent = wal.last().unwrap();
   let (p, v) = people.last_key_value().unwrap();
+  assert!(ent.key().equivalent(p));
+  assert_eq!(ent.value(), v);
+
+  let wal = wal.reader();
+  let ent = wal.last().unwrap();
   assert!(ent.key().equivalent(p));
   assert_eq!(ent.value(), v);
 }
@@ -1114,6 +1155,73 @@ fn get_or_insert_map_file() {
   get_or_insert(&mut wal);
 }
 
+fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal
+        .get_or_insert_with(&p, || v.clone())
+        .unwrap_right()
+        .unwrap();
+      (p, v)
+    })
+    .collect::<Vec<_>>();
+
+  assert_eq!(wal.len(), 100);
+
+  for (p, pv) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+    assert_eq!(
+      wal
+        .get_or_insert_with(p, || format!("Hello! {}!", p.name))
+        .unwrap_left()
+        .value(),
+      pv
+    );
+  }
+
+  for (p, _) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+  }
+}
+
+#[test]
+fn get_or_insert_with_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  get_or_insert_with(&mut wal);
+}
+
+#[test]
+fn get_or_insert_with_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  get_or_insert_with(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn get_or_insert_with_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_get_or_insert_with_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  get_or_insert_with(&mut wal);
+}
+
 fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
   let people = (0..100)
     .map(|_| {
@@ -1122,7 +1230,7 @@ fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>)
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .get_by_key_bytes_or_insert(pvec.as_ref(), &v)
+          .get_by_bytes_or_insert(pvec.as_ref(), &v)
           .unwrap_right()
           .unwrap();
       }
@@ -1186,10 +1294,234 @@ fn get_or_insert_key_with_value_bytes_map_file() {
   get_or_insert_key_with_value_bytes(&mut wal);
 }
 
+fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      unsafe {
+        wal
+          .get_or_insert_bytes(&p, v.as_bytes())
+          .unwrap_right()
+          .unwrap();
+      }
+      (p, v)
+    })
+    .collect::<Vec<_>>();
+
+  assert_eq!(wal.len(), 100);
+
+  for (p, pv) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+    unsafe {
+      assert_eq!(
+        wal
+          .get_or_insert_bytes(p, pv.as_bytes())
+          .unwrap_left()
+          .value(),
+        pv
+      );
+    }
+  }
+
+  for (p, _) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+  }
+}
+
+#[test]
+fn get_or_insert_value_bytes_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  get_or_insert_value_bytes(&mut wal);
+}
+
+#[test]
+fn get_or_insert_value_bytes_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  get_or_insert_value_bytes(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn get_or_insert_value_bytes_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir
+    .path()
+    .join("generic_wal_get_or_insert_value_bytes_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  get_or_insert_value_bytes(&mut wal);
+}
+
+fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let pvec = p.to_vec();
+      let v = format!("My name is {}", p.name);
+      unsafe {
+        wal
+          .get_by_bytes_or_insert_with(pvec.as_ref(), || v.clone())
+          .unwrap_right()
+          .unwrap();
+      }
+      (p, pvec, v)
+    })
+    .collect::<Vec<_>>();
+
+  assert_eq!(wal.len(), 100);
+
+  for (p, pvec, pv) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+    unsafe {
+      assert_eq!(
+        wal
+          .get_by_bytes_or_insert_with(pvec, || format!("Hello! {}!", p.name))
+          .unwrap_left()
+          .value(),
+        pv
+      );
+    }
+  }
+
+  for (p, _, _) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+  }
+}
+
+#[test]
+fn get_by_bytes_or_insert_with_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  get_by_bytes_or_insert_with(&mut wal);
+}
+
+#[test]
+fn get_by_bytes_or_insert_with_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  get_by_bytes_or_insert_with(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn get_by_bytes_or_insert_with_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir
+    .path()
+    .join("generic_wal_get_by_bytes_or_insert_with_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  get_by_bytes_or_insert_with(&mut wal);
+}
+
+fn get_by_bytes_or_insert_bytes(wal: &mut GenericOrderWal<Person, String>) {
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let pvec = p.to_vec();
+      let v = format!("My name is {}", p.name);
+      unsafe {
+        wal
+          .get_by_bytes_or_insert_bytes(pvec.as_ref(), v.as_bytes())
+          .unwrap_right()
+          .unwrap();
+      }
+      (p, pvec, v)
+    })
+    .collect::<Vec<_>>();
+
+  assert_eq!(wal.len(), 100);
+
+  for (p, pvec, pv) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+    unsafe {
+      assert_eq!(
+        wal
+          .get_by_bytes_or_insert_bytes(pvec, pv.as_bytes())
+          .unwrap_left()
+          .value(),
+        pv
+      );
+    }
+  }
+
+  for (p, _, _) in &people {
+    assert!(wal.contains_key(p));
+    assert!(wal.contains_key_by_ref(&p.as_ref()));
+  }
+}
+
+#[test]
+fn get_by_bytes_or_insert_bytes_inmemory() {
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  get_by_bytes_or_insert_bytes(&mut wal);
+}
+
+#[test]
+fn get_by_bytes_or_insert_bytes_map_anon() {
+  let mut wal =
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  get_by_bytes_or_insert_bytes(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn get_by_bytes_or_insert_bytes_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir
+    .path()
+    .join("generic_wal_get_by_bytes_or_insert_bytes_map_file");
+
+  let mut wal = unsafe {
+    GenericOrderWal::<Person, String>::map_mut(
+      &path,
+      Options::new(),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  get_by_bytes_or_insert_bytes(&mut wal);
+}
+
 fn zero_reserved(wal: &mut GenericOrderWal<Person, String>) {
   unsafe {
     assert_eq!(wal.reserved_slice(), &[]);
     assert_eq!(wal.reserved_slice_mut(), &mut []);
+
+    let wal = wal.reader();
+    assert_eq!(wal.reserved_slice(), &[]);
   }
 }
 
@@ -1233,6 +1565,9 @@ fn reserved(wal: &mut GenericOrderWal<Person, String>) {
     buf.copy_from_slice(b"al8n");
     assert_eq!(wal.reserved_slice(), b"al8n");
     assert_eq!(wal.reserved_slice_mut(), b"al8n");
+
+    let wal = wal.reader();
+    assert_eq!(wal.reserved_slice(), b"al8n");
   }
 }
 
