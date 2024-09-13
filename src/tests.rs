@@ -783,8 +783,8 @@ pub(crate) fn last<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   }
 
   let (key, value) = wal.last().unwrap();
-  assert_eq!(key, 999u32.to_be_bytes());
-  assert_eq!(value, 999u32.to_be_bytes());
+  assert_eq!(key, 99u32.to_be_bytes());
+  assert_eq!(value, 99u32.to_be_bytes());
 }
 
 pub(crate) fn get_or_insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
