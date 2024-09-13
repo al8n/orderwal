@@ -644,8 +644,24 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::GenericOrderWal, Options};
+  /// use orderwal::{swmr::{GenericOrderWal, generic::*}, OpenOptions, Options};
   ///
+  /// # let dir = tempfile::tempdir().unwrap();
+  /// # let path = dir
+  /// #  .path()
+  /// #  .join("generic_wal_map_mut");
+  ///
+  /// let mut wal = unsafe {
+  ///  GenericOrderWal::<String, String>::map_mut(
+  ///    &path,
+  ///    Options::new(),
+  ///    OpenOptions::new()
+  ///      .create_new(Some(1024))
+  ///      .write(true)
+  ///      .read(true),
+  ///  )
+  ///  .unwrap()
+  /// };
   /// ```
   #[inline]
   pub unsafe fn map_mut<P: AsRef<Path>>(
@@ -666,6 +682,28 @@ where
   /// out of process. Applications must consider the risk and take appropriate precautions when
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::{GenericOrderWal, generic::*}, OpenOptions, Options};
+  ///
+  /// let dir = tempfile::tempdir().unwrap();
+  ///
+  /// let mut wal = unsafe {
+  ///  GenericOrderWal::<String, String>::map_mut_with_path_builder::<_, ()>(
+  ///    || {
+  ///       Ok(dir.path().join("generic_wal_map_mut_with_path_builder"))
+  ///    },
+  ///    Options::new(),
+  ///    OpenOptions::new()
+  ///      .create_new(Some(1024))
+  ///      .write(true)
+  ///      .read(true),
+  ///  )
+  ///  .unwrap()
+  /// };
+  /// ```
   #[inline]
   pub unsafe fn map_mut_with_path_builder<PB, E>(
     pb: PB,
@@ -844,9 +882,25 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
+  /// use orderwal::{swmr::{GenericOrderWal, generic::*}, Crc32, OpenOptions, Options};
   ///
+  /// # let dir = tempfile::tempdir().unwrap();
+  /// # let path = dir
+  /// #  .path()
+  /// #  .join("generic_wal_map_mut_with_checksumer");
   ///
+  /// let mut wal = unsafe {
+  ///  GenericOrderWal::<String, String, Crc32>::map_mut_with_checksumer(
+  ///    &path,
+  ///    Options::new(),
+  ///    OpenOptions::new()
+  ///      .create_new(Some(1024))
+  ///      .write(true)
+  ///      .read(true),
+  ///    Crc32::default(),
+  ///  )
+  ///  .unwrap()
+  /// };
   /// ```
   #[inline]
   pub unsafe fn map_mut_with_checksumer<P: AsRef<Path>>(
@@ -877,8 +931,24 @@ where
   /// # Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::GenericOrderWal, Options, Crc32};
+  /// use orderwal::{swmr::{GenericOrderWal, generic::*}, Crc32, OpenOptions, Options};
   ///
+  /// let dir = tempfile::tempdir().unwrap();
+  ///
+  /// let mut wal = unsafe {
+  ///  GenericOrderWal::<String, String, Crc32>::map_mut_with_path_builder_and_checksumer::<_, ()>(
+  ///    || {
+  ///       Ok(dir.path().join("generic_wal_map_mut_with_path_builder_and_checksumer"))
+  ///    },
+  ///    Options::new(),
+  ///    OpenOptions::new()
+  ///      .create_new(Some(1024))
+  ///      .write(true)
+  ///      .read(true),
+  ///    Crc32::default(),
+  ///  )
+  ///  .unwrap()
+  /// };
   /// ```
   pub unsafe fn map_mut_with_path_builder_and_checksumer<PB, E>(
     path_builder: PB,
@@ -919,6 +989,32 @@ where
   /// out of process. Applications must consider the risk and take appropriate precautions when
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::{GenericOrderWal, generic::*}, Crc32, OpenOptions, Options};
+  ///
+  /// # let dir = tempfile::tempdir().unwrap();
+  /// # let path = dir
+  /// #  .path()
+  /// #  .join("generic_wal_map_mut_with_checksumer");
+  ///
+  /// # let mut wal = unsafe {
+  /// # GenericOrderWal::<String, String, Crc32>::map_mut_with_checksumer(
+  /// #   &path,
+  /// #   Options::new(),
+  /// #   OpenOptions::new()
+  /// #     .create_new(Some(1024))
+  /// #     .write(true)
+  /// #     .read(true),
+  /// #   Crc32::default(),
+  /// # )
+  /// # .unwrap()
+  /// # };
+  ///
+  /// let reader = unsafe { GenericOrderWal::<String, String, Crc32>::map_with_checksumer(&path, Options::new(), Crc32::default()).unwrap() };
+  /// ```
   #[inline]
   pub unsafe fn map_with_checksumer<P: AsRef<Path>>(
     path: P,
