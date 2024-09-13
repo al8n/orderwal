@@ -21,6 +21,11 @@ std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/defau
 xxhash3 = ["dbutils/xxhash3", "std"]
 xxhash64 = ["dbutils/xxhash64", "std"]
 
+## only for miri testing
+test-unsync = ["std"]
+test-swmr = ["std"]
+test-swmr-generic = ["std"]
+
 [dependencies]
 among = { version = "0.1", default-features = false }
 bitflags = { version = "1", default-features = false }

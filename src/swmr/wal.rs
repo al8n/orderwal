@@ -18,7 +18,7 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-swmr"))]
 mod tests;
 
 pub struct OrderWalCore<C, S> {

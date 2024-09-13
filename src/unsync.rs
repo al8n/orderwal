@@ -19,7 +19,7 @@ use iter::*;
 mod c;
 use c::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-unsync"))]
 mod tests;
 
 /// An ordered write-ahead log implementation for single thread environments.
