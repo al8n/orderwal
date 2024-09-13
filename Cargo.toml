@@ -16,11 +16,15 @@ harness = false
 
 [features]
 default = ["std"]
-alloc = ["rarena-allocator/alloc", "crossbeam-skiplist/alloc", "dbutils/alloc"]
 std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/default", "dbutils/default", "among/default", "faststr?/default", "bytes?/default", "smol_str?/default"]
 
-xxhash3 = ["dbutils/xxhash3"]
-xxhash64 = ["dbutils/xxhash64"]
+xxhash3 = ["dbutils/xxhash3", "std"]
+xxhash64 = ["dbutils/xxhash64", "std"]
+
+## only for miri testing
+test-unsync = ["std"]
+test-swmr = ["std"]
+test-swmr-generic = ["std"]
 
 [dependencies]
 among = { version = "0.1", default-features = false }
@@ -39,7 +43,10 @@ faststr = { version = "0.2", default-features = false, optional = true }
 tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]
+arbitrary = { version = "1", features = ["derive"] }
 criterion = "0.5"
+names = "0.14"
+rand = "0.8"
 tempfile = "3"
 
 [profile.bench]

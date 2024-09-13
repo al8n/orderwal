@@ -7,6 +7,21 @@ pub struct EntryRef<'a, K, V> {
   ent: Entry<'a, Pointer<K, V>>,
 }
 
+impl<'a, K, V> core::fmt::Debug for EntryRef<'a, K, V>
+where
+  K: Type,
+  K::Ref<'a>: core::fmt::Debug,
+  V: Type,
+  V::Ref<'a>: core::fmt::Debug,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("EntryRef")
+      .field("key", &self.key())
+      .field("value", &self.value())
+      .finish()
+  }
+}
+
 impl<'a, K, V> Clone for EntryRef<'a, K, V> {
   #[inline]
   fn clone(&self) -> Self {

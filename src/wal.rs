@@ -62,6 +62,9 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// - This method is not thread-safe, so be careful when using it.
   unsafe fn reserved_slice(&self) -> &[u8];
 
+  /// Returns the path of the WAL if it is backed by a file.
+  fn path(&self) -> Option<&std::path::Path>;
+
   /// Returns `true` if this WAL instance is read-only.
   fn read_only(&self) -> bool;
 
@@ -184,7 +187,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   /// ```
   fn map_anon(b: Builder<C, S>) -> Result<Self, Error> {
     let Builder { opts, cmp, cks } = b;
-    let mmap_opts = MmapOptions::new().len(opts.capacity()).huge(opts.huge());
+    let mmap_opts = MmapOptions::new().len(opts.capacity());
     <Self::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
       .map_err(Into::into)
       .and_then(|arena| {
@@ -194,7 +197,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
   where
     C: Comparator + CheapClone,
     S: Checksumer,
@@ -205,7 +216,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  fn map_with_path_builder<PB, E>(
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map_with_path_builder<PB, E>(
     path_builder: PB,
     b: Builder<C, S>,
   ) -> Result<Self::Reader, Either<E, Error>>
@@ -233,7 +252,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
-  fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
+  ///  
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
   where
     C: Comparator + CheapClone,
     S: Checksumer,
@@ -248,7 +275,15 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
-  fn map_mut_with_path_builder<PB, E>(
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  unsafe fn map_mut_with_path_builder<PB, E>(
     path_builder: PB,
     b: Builder<C, S>,
     open_options: OpenOptions,
@@ -306,7 +341,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       .get_or_insert_with_value_builder::<()>(
         key,
         ValueBuilder::new(value.len() as u32, |buf| {
-          buf.write(value).unwrap();
+          buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
@@ -353,7 +388,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       .insert_with_in::<E, ()>(
         kb,
         ValueBuilder::new(value.len() as u32, |buf| {
-          buf.write(value).unwrap();
+          buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
@@ -393,7 +428,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in::<(), E>(
         KeyBuilder::new(key.len() as u32, |buf| {
-          buf.write(key).unwrap();
+          buf.put_slice(key).unwrap();
           Ok(())
         }),
         vb,
@@ -452,11 +487,11 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in::<(), ()>(
         KeyBuilder::new(key.len() as u32, |buf| {
-          buf.write(key).unwrap();
+          buf.put_slice(key).unwrap();
           Ok(())
         }),
         ValueBuilder::new(value.len() as u32, |buf| {
-          buf.write(value).unwrap();
+          buf.put_slice(value).unwrap();
           Ok(())
         }),
       )

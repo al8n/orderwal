@@ -2,9 +2,9 @@ use core::cmp;
 
 use among::Among;
 use crossbeam_skiplist::Comparable;
-use rarena_allocator::either::Either;
 
 mod impls;
+pub use impls::*;
 
 /// The type trait for limiting the types that can be used as keys and values in the [`GenericOrderWal`].
 ///
@@ -22,48 +22,6 @@ pub trait Type {
 
   /// Encodes the type into a binary slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error>;
-}
-
-impl<T: Type> Type for Either<T, &T> {
-  type Ref<'a> = T::Ref<'a>;
-  type Error = T::Error;
-
-  #[inline]
-  fn encoded_len(&self) -> usize {
-    match self {
-      Either::Left(t) => t.encoded_len(),
-      Either::Right(t) => t.encoded_len(),
-    }
-  }
-
-  #[inline]
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-    match self {
-      Either::Left(t) => t.encode(buf),
-      Either::Right(t) => t.encode(buf),
-    }
-  }
-}
-
-impl<T: Type> Type for Either<&T, T> {
-  type Ref<'a> = T::Ref<'a>;
-  type Error = T::Error;
-
-  #[inline]
-  fn encoded_len(&self) -> usize {
-    match self {
-      Either::Left(t) => t.encoded_len(),
-      Either::Right(t) => t.encoded_len(),
-    }
-  }
-
-  #[inline]
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-    match self {
-      Either::Left(t) => t.encode(buf),
-      Either::Right(t) => t.encode(buf),
-    }
-  }
 }
 
 pub(super) trait InsertAmongExt<T: Type> {
@@ -94,6 +52,7 @@ impl<T: Type> InsertAmongExt<T> for Among<T, &T, &[u8]> {
   }
 }
 
+/// The reference type trait for the [`Type`] trait.
 pub trait TypeRef<'a> {
   /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
   /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).

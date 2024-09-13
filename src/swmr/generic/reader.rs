@@ -121,6 +121,15 @@ where
     self.0.contains_key_by_ref(key)
   }
 
+  /// Returns `true` if the key exists in the WAL.
+  ///
+  /// # Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
+    self.0.contains_key_by_bytes(key)
+  }
+
   /// Gets the value associated with the key.
   #[inline]
   pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
@@ -137,5 +146,14 @@ where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
     self.0.get_by_ref(key)
+  }
+
+  /// Gets the value associated with the key.
+  ///
+  /// # Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+    self.0.get_by_bytes(key)
   }
 }

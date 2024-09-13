@@ -8,7 +8,7 @@ use wal::{
   ImmutableWal,
 };
 
-use core::ptr::NonNull;
+use core::{ops::RangeBounds, ptr::NonNull};
 use rarena_allocator::{unsync::Arena, Error as ArenaError};
 use std::collections::BTreeSet;
 
@@ -19,7 +19,7 @@ use iter::*;
 mod c;
 use c::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-unsync"))]
 mod tests;
 
 /// An ordered write-ahead log implementation for single thread environments.
@@ -65,7 +65,7 @@ where
 
 impl<C, S> OrderWal<C, S> {
   /// Returns the path of the WAL if it is backed by a file.
-  pub fn path(&self) -> Option<&std::rc::Rc<std::path::PathBuf>> {
+  pub fn path_buf(&self) -> Option<&std::rc::Rc<std::path::PathBuf>> {
     self.core.arena.path()
   }
 }
@@ -170,16 +170,17 @@ where
   type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
   type Range<'a, Q, R> = Range<'a, C>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
-    Q: Ord + ?Sized + crossbeam_skiplist::Comparable<[u8]>,
+    Q: Ord + ?Sized,
     Self: 'a,
     C: Comparator;
+
   type Keys<'a> = Keys<'a, C> where Self: 'a, C: Comparator;
 
   type RangeKeys<'a, Q, R> = RangeKeys<'a, C>
       where
-        R: core::ops::RangeBounds<Q>,
+        R: RangeBounds<Q>,
         [u8]: Borrow<Q>,
         Q: Ord + ?Sized,
         Self: 'a,
@@ -189,7 +190,7 @@ where
 
   type RangeValues<'a, Q, R> = RangeValues<'a, C>
       where
-        R: core::ops::RangeBounds<Q>,
+        R: RangeBounds<Q>,
         [u8]: Borrow<Q>,
         Q: Ord + ?Sized,
         Self: 'a,
@@ -201,6 +202,11 @@ where
     }
 
     &self.core.arena.reserved_slice()[HEADER_SIZE..]
+  }
+
+  #[inline]
+  fn path(&self) -> Option<&std::path::Path> {
+    self.core.arena.path().map(|p| p.as_ref().as_path())
   }
 
   #[inline]
@@ -251,7 +257,7 @@ where
   #[inline]
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator,
@@ -270,7 +276,7 @@ where
   #[inline]
   fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator,
@@ -289,7 +295,7 @@ where
   #[inline]
   fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
   where
-    R: core::ops::RangeBounds<Q>,
+    R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator,

@@ -1,7 +1,9 @@
 use super::*;
 
 mod bytes;
+pub use bytes::*;
 mod string;
+pub use string::Str;
 
 impl Type for () {
   type Ref<'a> = ();

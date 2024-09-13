@@ -13,14 +13,10 @@ use crossbeam_skiplist::SkipSet;
 use error::Error;
 use rarena_allocator::{
   either::{self, Either},
-  Allocator, ArenaOptions, Freelist, Memory, MmapOptions, OpenOptions,
+  Allocator, ArenaOptions, Freelist, Memory, MmapOptions,
 };
 
-#[cfg(not(any(feature = "std", feature = "alloc")))]
-compile_error!("`orderwal` requires either the 'std' or 'alloc' feature to be enabled");
-
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
+pub use rarena_allocator::OpenOptions;
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -41,13 +37,18 @@ const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 
+#[cfg(all(test, any(feature = "test-swmr", feature = "test-unsync")))]
+#[macro_use]
+mod tests;
+
 /// Error types.
 pub mod error;
 
 mod buffer;
 pub use buffer::*;
 
-mod utils;
+/// Utilities.
+pub mod utils;
 use utils::*;
 
 mod wal;
@@ -61,9 +62,6 @@ pub mod swmr;
 
 /// An ordered write-ahead Log implementation.
 pub mod unsync;
-
-#[cfg(test)]
-mod tests;
 
 bitflags::bitflags! {
   /// The flags of the entry.

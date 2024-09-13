@@ -18,7 +18,7 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-swmr"))]
 mod tests;
 
 pub struct OrderWalCore<C, S> {
@@ -69,7 +69,9 @@ impl<C: Send + 'static, S> WalCore<C, S> for OrderWalCore<C, S> {
 
 /// A single writer multiple readers ordered write-ahead log implementation.
 ///
-/// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
+/// Both read and write operations of this WAL are zero-cost (no allocation will happen for both read and write).
+///
+/// Users can create multiple readers from the WAL by [`OrderWal::reader`], but only one writer is allowed.
 // ```text
 // +----------------------+--------------------------+--------------------+
 // | magic text (6 bytes) | magic version (2 bytes)  |  header (8 bytes)  |
@@ -209,7 +211,7 @@ impl<C, S> OrderWal<C, S> {
   }
 
   /// Returns the path of the WAL if it is backed by a file.
-  pub fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+  pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
     self.core.arena.path()
   }
 }
@@ -253,6 +255,11 @@ where
     }
 
     &self.core.arena.reserved_slice()[HEADER_SIZE..]
+  }
+
+  #[inline]
+  fn path(&self) -> Option<&std::path::Path> {
+    self.core.arena.path().map(|p| p.as_ref().as_path())
   }
 
   #[inline]

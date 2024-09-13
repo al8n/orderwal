@@ -64,6 +64,11 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
   }
 
   #[inline]
+  fn path(&self) -> Option<&std::path::Path> {
+    self.0.path()
+  }
+
+  #[inline]
   fn read_only(&self) -> bool {
     self.0.read_only()
   }
