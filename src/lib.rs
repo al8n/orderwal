@@ -35,7 +35,7 @@ const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 
-#[cfg(test)]
+#[cfg(all(test, any(feature = "test-swmr", feature = "test-unsync")))]
 #[macro_use]
 mod tests;
 
