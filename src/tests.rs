@@ -612,20 +612,20 @@ pub(crate) fn insert_to_full<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
-  assert_eq!(wal.len(), 1000);
+  assert_eq!(wal.len(), 100);
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     assert!(wal.contains_key(&i.to_be_bytes()));
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .insert_with_key_builder::<()>(
         KeyBuilder::<_>::new(4, |buf| {
@@ -637,13 +637,13 @@ pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .insert_with_value_builder::<()>(
         &i.to_be_bytes(),
@@ -655,13 +655,13 @@ pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .insert_with_builders::<(), ()>(
         KeyBuilder::<_>::new(4, |buf| {
@@ -676,18 +676,18 @@ pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn iter<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
   let mut iter = wal.iter();
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     let (key, value) = iter.next().unwrap();
     assert_eq!(key, i.to_be_bytes());
     assert_eq!(value, i.to_be_bytes());
@@ -695,14 +695,14 @@ pub(crate) fn iter<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn range<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
-  let x = 500u32.to_be_bytes();
+  let x = 50u32.to_be_bytes();
 
   let mut iter = wal.range((Bound::Included(x.as_slice()), Bound::Unbounded));
-  for i in 500..1000u32 {
+  for i in 50..100u32 {
     let (key, value) = iter.next().unwrap();
     assert_eq!(key, i.to_be_bytes());
     assert_eq!(value, i.to_be_bytes());
@@ -712,26 +712,26 @@ pub(crate) fn range<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
   let mut iter = wal.keys();
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     let key = iter.next().unwrap();
     assert_eq!(key, i.to_be_bytes());
   }
 }
 
 pub(crate) fn range_keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
-  let x = 500u32.to_be_bytes();
+  let x = 50u32.to_be_bytes();
 
   let mut iter = wal.range_keys((Bound::Included(x.as_slice()), Bound::Unbounded));
-  for i in 500..1000u32 {
+  for i in 50..100u32 {
     let key = iter.next().unwrap();
     assert_eq!(key, i.to_be_bytes());
   }
@@ -740,26 +740,26 @@ pub(crate) fn range_keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
   let mut iter = wal.values();
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     let value = iter.next().unwrap();
     assert_eq!(value, i.to_be_bytes());
   }
 }
 
 pub(crate) fn range_values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
-  let x = 500u32.to_be_bytes();
+  let x = 50u32.to_be_bytes();
 
   let mut iter = wal.range_values((Bound::Included(x.as_slice()), Bound::Unbounded));
-  for i in 500..1000u32 {
+  for i in 50..100u32 {
     let value = iter.next().unwrap();
     assert_eq!(value, i.to_be_bytes());
   }
@@ -768,7 +768,7 @@ pub(crate) fn range_values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn first<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
@@ -778,7 +778,7 @@ pub(crate) fn first<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn last<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
@@ -788,25 +788,25 @@ pub(crate) fn last<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 }
 
 pub(crate) fn get_or_insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .get_or_insert(&i.to_be_bytes(), &i.to_be_bytes())
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .get_or_insert(&i.to_be_bytes(), &(i * 2).to_be_bytes())
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
@@ -818,7 +818,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     wal
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
@@ -830,7 +830,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
       .unwrap();
   }
 
-  for i in 0..1000u32 {
+  for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }

@@ -69,7 +69,9 @@ impl<C: Send + 'static, S> WalCore<C, S> for OrderWalCore<C, S> {
 
 /// A single writer multiple readers ordered write-ahead log implementation.
 ///
-/// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
+/// Both read and write operations of this WAL are zero-cost (no allocation will happen for both read and write).
+///
+/// Users can create multiple readers from the WAL by [`OrderWal::reader`], but only one writer is allowed.
 // ```text
 // +----------------------+--------------------------+--------------------+
 // | magic text (6 bytes) | magic version (2 bytes)  |  header (8 bytes)  |

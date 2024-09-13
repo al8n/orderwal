@@ -5,7 +5,8 @@ use std::{
 };
 
 use among::Among;
-use crossbeam_skiplist::{Comparable, Equivalent, SkipSet};
+use crossbeam_skiplist::SkipSet;
+pub use dbutils::equivalent::*;
 use dbutils::{Checksumer, Crc32};
 use rarena_allocator::{
   either::Either, sync::Arena, Allocator, ArenaPosition, Error as ArenaError, Memory, MmapOptions,
@@ -526,7 +527,9 @@ where
 
 /// Generic ordered write-ahead log implementation, which supports structured keys and values.
 ///
-/// Only the first instance of the WAL can write to the log, while the rest can only read from the log.
+/// Both read and write operations of this WAL are zero-cost (no allocation will happen for both read and write).
+///
+/// Users can create multiple readers from the WAL by [`GenericOrderWal::reader`], but only one writer is allowed.
 pub struct GenericOrderWal<K, V, S = Crc32> {
   core: Arc<GenericOrderWalCore<K, V>>,
   opts: Options,
@@ -1063,7 +1066,7 @@ where
   /// # Safety
   /// - The given `key` and `value` must be valid to construct to `K::Ref` and `V::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes_or_insert_value_bytes(
+  pub unsafe fn get_by_bytes_or_insert_bytes(
     &mut self,
     key: &[u8],
     value: &[u8],
@@ -1089,7 +1092,7 @@ where
   /// # Safety
   /// - The given `value` must be valid to construct to `V::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_or_insert_value_bytes(
+  pub unsafe fn get_or_insert_bytes(
     &mut self,
     key: &K,
     value: &[u8],
@@ -1170,112 +1173,10 @@ where
   V: Type + 'static,
   S: Checksumer,
 {
-  /// Inserts a key-value pair into the write-ahead log. If `cache_key` or `cache_value` is enabled, the key or value will be cached
-  /// in memory for faster access.
-  ///
-  /// For `cache_key` or `cache_value`, see [`Options::with_cache_key`](Options::with_cache_key) and [`Options::with_cache_value`](Options::with_cache_value).
+  /// Inserts a key-value pair into the write-ahead log.
   #[inline]
   pub fn insert(&mut self, key: &K, val: &V) -> Result<(), Among<K::Error, V::Error, Error>> {
     self.insert_in(Among::Middle(key), Among::Middle(val))
-  }
-
-  /// Inserts a bytes format key-value pair into the write-ahead log directly.
-  ///
-  /// This method is useful when you have `K::Ref` and `V::Ref` and they can be easily converted to bytes format.
-  ///
-  /// # Safety
-  /// - The given key and value must be valid to construct to `K::Ref` and `V::Ref` without remaining.
-  ///
-  /// # Example
-  ///
-  /// TODO: ignore for now
-  /// ```no_compile
-  /// use orderwal::{swmr::{GenericOrderWal, Comparable}, Options, Crc32};
-  ///
-  /// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-  /// struct MyKey {
-  ///   id: u32,
-  ///   data: Vec<u8>,
-  /// }
-  ///
-  /// impl Type for MyKey {
-  ///   type Ref<'a> = MyKeyRef<'a>;
-  ///   type Error = ();
-  ///
-  ///   fn encoded_len(&self) -> usize {
-  ///     4 + self.data.len()
-  ///   }
-  ///
-  ///   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
-  ///     buf[..4].copy_from_slice(&self.id.to_le_bytes());
-  ///     buf[4..].copy_from_slice(&self.data);
-  ///   }
-  /// }
-  ///
-  /// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  /// struct MyKeyRef<'a> {
-  ///   buf: &'a [u8],
-  /// }
-  ///
-  /// impl<'a> PartialOrd for MyKeyRef<'a> {
-  ///   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-  ///     Some(self.cmp(other))
-  ///   }
-  /// }
-  ///
-  /// impl<'a> Ord for MyKeyRef<'a> {
-  ///   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-  ///     let sid = u32::from_le_bytes(self.buf[..4].try_into().unwrap());
-  ///     let oid = u32::from_le_bytes(other.buf[..4].try_into().unwrap());
-  ///
-  ///     sid.cmp(&oid).then_with(|| self.buf[4..].cmp(&other.buf[4..]))
-  ///   }
-  /// }
-  ///
-  /// impl<'a> TypeRef<'a> for MyKeyRef<'a> {
-  ///   fn from_slice(src: &'a [u8]) -> Self {
-  ///     Self { buf: src }
-  ///   }
-  /// }
-  ///
-  /// impl<'a> KeyRef<'a, MyKey> for MyKeyRef<'a> {
-  ///   fn compare_binary(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
-  ///     let aid = u32::from_le_bytes(a[..4].try_into().unwrap());
-  ///     let bid = u32::from_le_bytes(b[..4].try_into().unwrap());
-  ///     
-  ///     aid.cmp(&bid).then_with(|| a[4..].cmp(&b[4..]))
-  ///   }
-  ///
-  ///   fn compare<Q>(&self, a: &Q) -> std::cmp::Ordering
-  ///   where
-  ///     Q: ?Sized + Ord + Comparable<Self>,
-  ///   {
-  ///     Comparable::compare(a, self)
-  ///   }
-  /// }
-  ///
-  /// let wal = GenericOrderWal::new(Options::new().with_capacity(1024));
-  ///
-  /// let key = MyKey { id: 1, data: vec![1, 2, 3, 4] };
-  /// let value = b"Hello, world!".to_vec();
-  ///
-  /// wal.insert(key, value).unwrap();
-  ///
-  /// let ent = wal.get(&key).unwrap();
-  ///
-  /// let wal2 = GenericOrderWal::new(Options::new().with_capacity(1024));
-  ///
-  /// // Insert the key-value pair in bytes format directly.
-  /// unsafe { wal2.insert_value_bytes(ent.key(), ent.value().as_ref()).unwrap(); }
-  /// ```
-  #[inline]
-  pub unsafe fn insert_value_bytes(&mut self, key: &[u8], val: &[u8]) -> Result<(), Error> {
-    self
-      .insert_in(Among::Right(key), Among::Right(val))
-      .map_err(|e| match e {
-        Among::Right(e) => e,
-        _ => unreachable!(),
-      })
   }
 
   /// Inserts a key in structured format and value in bytes format into the write-ahead log directly.
@@ -1285,7 +1186,7 @@ where
   ///
   /// # Example
   ///
-  /// See [`insert_value_bytes`](GenericOrderWal::insert_value_bytes) for more details.
+  /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
   pub unsafe fn insert_key_with_value_bytes(&mut self, key: &K, value: &[u8]) -> Result<(), Error> {
     self
@@ -1300,6 +1201,135 @@ where
   ///
   /// # Safety
   /// - The given `key` and `value` must be valid to construct to `K::Ref` and `V::Ref` without remaining.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::*;
+  ///
+  /// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+  /// struct Person {
+  ///   id: u64,
+  ///   name: String,
+  /// }
+  ///
+  /// #[derive(Debug)]
+  /// struct PersonRef<'a> {
+  ///   id: u64,
+  ///   name: &'a str,
+  /// }
+  ///
+  /// impl<'a> PartialEq for PersonRef<'a> {
+  ///   fn eq(&self, other: &Self) -> bool {
+  ///     self.id == other.id && self.name == other.name
+  ///   }
+  /// }
+  ///
+  /// impl<'a> Eq for PersonRef<'a> {}
+  ///
+  /// impl<'a> PartialOrd for PersonRef<'a> {
+  ///   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+  ///     Some(self.cmp(other))
+  ///   }
+  /// }
+  ///
+  /// impl<'a> Ord for PersonRef<'a> {
+  ///   fn cmp(&self, other: &Self) -> cmp::Ordering {
+  ///     self
+  ///       .id
+  ///       .cmp(&other.id)
+  ///       .then_with(|| self.name.cmp(other.name))
+  ///   }
+  /// }
+  ///
+  /// impl Equivalent<Person> for PersonRef<'_> {
+  ///   fn equivalent(&self, key: &Person) -> bool {
+  ///     self.id == key.id && self.name == key.name
+  ///   }
+  /// }
+  ///
+  /// impl Comparable<Person> for PersonRef<'_> {
+  ///   fn compare(&self, key: &Person) -> std::cmp::Ordering {
+  ///     self.id.cmp(&key.id).then_with(|| self.name.cmp(&key.name))
+  ///   }
+  /// }
+  ///
+  /// impl Equivalent<PersonRef<'_>> for Person {
+  ///   fn equivalent(&self, key: &PersonRef<'_>) -> bool {
+  ///     self.id == key.id && self.name == key.name
+  ///   }
+  /// }
+  ///
+  /// impl Comparable<PersonRef<'_>> for Person {
+  ///   fn compare(&self, key: &PersonRef<'_>) -> std::cmp::Ordering {
+  ///     self
+  ///       .id
+  ///       .cmp(&key.id)
+  ///       .then_with(|| self.name.as_str().cmp(key.name))
+  ///   }
+  /// }
+  ///
+  /// impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
+  ///   fn compare<Q>(&self, a: &Q) -> cmp::Ordering
+  ///   where
+  ///     Q: ?Sized + Ord + Comparable<Self>,
+  ///   {
+  ///     Comparable::compare(a, self)
+  ///   }
+  ///
+  ///   fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
+  ///     let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
+  ///     let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
+  ///
+  ///     PersonRef {
+  ///       id: this_id,
+  ///       name: std::str::from_utf8(&this[this_id_size..]).unwrap(),
+  ///     }
+  ///     .cmp(&PersonRef {
+  ///       id: other_id,
+  ///       name: std::str::from_utf8(&other[other_id_size..]).unwrap(),
+  ///     })
+  ///   }
+  /// }
+  ///
+  /// impl Type for Person {
+  ///   type Ref<'a> = PersonRef<'a>;
+  ///   type Error = dbutils::leb128::EncodeVarintError;
+  ///
+  ///   fn encoded_len(&self) -> usize {
+  ///     encoded_u64_varint_len(self.id) + self.name.len()
+  ///   }
+  ///
+  ///   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+  ///     let id_size = encode_u64_varint(self.id, buf)?;
+  ///     buf[id_size..].copy_from_slice(self.name.as_bytes());
+  ///     Ok(())
+  ///   }
+  /// }
+  ///
+  /// impl<'a> TypeRef<'a> for PersonRef<'a> {
+  ///   fn from_slice(src: &'a [u8]) -> Self {
+  ///     let (id_size, id) = decode_u64_varint(src).unwrap();
+  ///     let name = std::str::from_utf8(&src[id_size..]).unwrap();
+  ///     PersonRef { id, name }
+  ///   }
+  /// }
+  ///
+  /// let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(1024)).unwrap();
+  ///
+  /// let key = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let mut pb = vec![0; key.encoded_len()];
+  /// key.encode(&mut pb).unwrap();
+  ///
+  /// // Safety: we know `pb` is valid to construct to `Person::Ref` without remaining.
+  /// unsafe {
+  ///   wal.insert_bytes(pb.as_ref(), b"Hello, Alice!").unwrap();
+  /// }
+  /// ```
   #[inline]
   pub unsafe fn insert_bytes(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
     self
@@ -1317,7 +1347,7 @@ where
   ///
   /// # Example
   ///
-  /// See [`insert_value_bytes`](GenericOrderWal::insert_value_bytes) for more details.
+  /// See [`insert_bytes`](GenericOrderWal::insert_bytes) for more details.
   #[inline]
   pub unsafe fn insert_key_bytes_with_value(&mut self, key: &[u8], value: &V) -> Result<(), Error> {
     self
