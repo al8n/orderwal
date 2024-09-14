@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, thread::spawn};
 
 use arbitrary::Arbitrary;
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
@@ -115,7 +115,7 @@ impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
   where
     Q: ?Sized + Ord + Comparable<Self>,
   {
-    Comparable::compare(a, self)
+    Comparable::compare(a, self).reverse()
   }
 
   fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
@@ -1608,4 +1608,131 @@ fn reserved_map_file() {
   };
 
   reserved(&mut wal);
+}
+
+fn concurrent_basic(mut w: GenericOrderWal<u32, [u8; 4]>) {
+  let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
+
+  let handles = readers.into_iter().map(|(i, reader)| {
+    spawn(move || loop {
+      if let Some(p) = reader.get(&i) {
+        assert_eq!(p.key(), i);
+        assert_eq!(p.value(), i.to_le_bytes());
+        break;
+      }
+    })
+  });
+
+  spawn(move || {
+    for i in 0..100u32 {
+      w.insert(&i, &i.to_le_bytes()).unwrap();
+    }
+  });
+
+  for handle in handles {
+    handle.join().unwrap();
+  }
+}
+
+#[test]
+fn concurrent_basic_inmemory() {
+  let wal = GenericOrderWal::<u32, [u8; 4]>::new(Options::new().with_capacity(MB).with_reserved(4))
+    .unwrap();
+  concurrent_basic(wal);
+}
+
+#[test]
+fn concurrent_basic_map_anon() {
+  let wal =
+    GenericOrderWal::<u32, [u8; 4]>::map_anon(Options::new().with_capacity(MB).with_reserved(4))
+      .unwrap();
+  concurrent_basic(wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn concurrent_basic_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_concurrent_basic_map_file");
+
+  let wal = unsafe {
+    GenericOrderWal::<u32, [u8; 4]>::map_mut(
+      &path,
+      Options::new().with_reserved(4),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  concurrent_basic(wal);
+
+  let wal =
+    unsafe { GenericOrderWal::<u32, [u8; 4]>::map(path, Options::new().with_reserved(4)).unwrap() };
+
+  for i in 0..100u32 {
+    assert!(wal.contains_key(&i));
+  }
+}
+
+fn concurrent_one_key(mut w: GenericOrderWal<u32, [u8; 4]>) {
+  let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
+  let handles = readers.into_iter().map(|(_, reader)| {
+    spawn(move || loop {
+      if let Some(p) = reader.get(&1) {
+        assert_eq!(p.key(), 1);
+        assert_eq!(p.value(), 1u32.to_le_bytes());
+        break;
+      }
+    })
+  });
+
+  w.insert(&1, &1u32.to_le_bytes()).unwrap();
+
+  for handle in handles {
+    handle.join().unwrap();
+  }
+}
+
+#[test]
+fn concurrent_one_key_inmemory() {
+  let wal = GenericOrderWal::<u32, [u8; 4]>::new(Options::new().with_capacity(MB).with_reserved(4))
+    .unwrap();
+  concurrent_one_key(wal);
+}
+
+#[test]
+fn concurrent_one_key_map_anon() {
+  let wal =
+    GenericOrderWal::<u32, [u8; 4]>::map_anon(Options::new().with_capacity(MB).with_reserved(4))
+      .unwrap();
+  concurrent_one_key(wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn concurrent_one_key_map_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_concurrent_basic_map_file");
+
+  let wal = unsafe {
+    GenericOrderWal::<u32, [u8; 4]>::map_mut(
+      &path,
+      Options::new().with_reserved(4),
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  concurrent_one_key(wal);
+
+  let wal =
+    unsafe { GenericOrderWal::<u32, [u8; 4]>::map(path, Options::new().with_reserved(4)).unwrap() };
+
+  assert!(wal.contains_key(&1));
 }

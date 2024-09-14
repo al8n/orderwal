@@ -109,12 +109,6 @@ impl Borrow<str> for Str<'_> {
   }
 }
 
-// impl<'a> Borrow<&'a str> for Str<'a> {
-//   fn borrow(&self) -> &&'a str {
-//     &self.0
-//   }
-// }
-
 impl core::ops::Deref for Str<'_> {
   type Target = str;
 

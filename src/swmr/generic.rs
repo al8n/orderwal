@@ -182,7 +182,7 @@ where
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
     let kr: K::Ref<'_> = TypeRef::from_slice(p.as_key_slice());
     let or: K::Ref<'_> = TypeRef::from_slice(self.as_key_slice());
-    KeyRef::compare(&kr, &or)
+    KeyRef::compare(&kr, &or).reverse()
   }
 }
 
@@ -221,7 +221,7 @@ where
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
     let kr = TypeRef::from_slice(p.as_key_slice());
-    KeyRef::compare(&kr, self.key)
+    KeyRef::compare(&kr, self.key).reverse()
   }
 }
 
@@ -260,7 +260,7 @@ where
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
     let kr = <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice());
-    KeyRef::compare(&kr, self.key)
+    KeyRef::compare(&kr, self.key).reverse()
   }
 }
 
@@ -1374,7 +1374,7 @@ where
   ///   where
   ///     Q: ?Sized + Ord + Comparable<Self>,
   ///   {
-  ///     Comparable::compare(a, self)
+  ///     Comparable::compare(a, self).reverse()
   ///   }
   ///
   ///   fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
