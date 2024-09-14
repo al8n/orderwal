@@ -5,6 +5,8 @@ pub use bytes::*;
 mod string;
 pub use string::Str;
 
+mod net;
+
 impl Type for () {
   type Ref<'a> = ();
   type Error = ();
