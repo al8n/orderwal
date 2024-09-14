@@ -109,11 +109,11 @@ impl Borrow<str> for Str<'_> {
   }
 }
 
-impl<'a> Borrow<&'a str> for Str<'a> {
-  fn borrow(&self) -> &&'a str {
-    &self.0
-  }
-}
+// impl<'a> Borrow<&'a str> for Str<'a> {
+//   fn borrow(&self) -> &&'a str {
+//     &self.0
+//   }
+// }
 
 impl core::ops::Deref for Str<'_> {
   type Target = str;
@@ -197,7 +197,7 @@ impl PartialOrd<Str<'_>> for &str {
 
 impls! {
   Cow<'_, str>,
-  // &'static str, TODO: add back this
+  &'static str,
   String,
   Arc<str>,
   Box<str>,

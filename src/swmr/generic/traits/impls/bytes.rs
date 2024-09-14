@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use dbutils::equivalent::*;
 use std::{borrow::Cow, sync::Arc};
 
@@ -77,6 +78,12 @@ impl<'a> TypeRef<'a> for &'a [u8] {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SliceRef<'a>(&'a [u8]);
 
+impl<'a> Borrow<[u8]> for SliceRef<'a> {
+  fn borrow(&self) -> &[u8] {
+    self.0
+  }
+}
+
 impl<'a> From<&'a [u8]> for SliceRef<'a> {
   fn from(src: &'a [u8]) -> Self {
     Self(src)
@@ -97,6 +104,13 @@ impl<'a> TypeRef<'a> for SliceRef<'a> {
 
 impl AsRef<[u8]> for SliceRef<'_> {
   fn as_ref(&self) -> &[u8] {
+    self.0
+  }
+}
+
+impl core::ops::Deref for SliceRef<'_> {
+  type Target = [u8];
+  fn deref(&self) -> &Self::Target {
     self.0
   }
 }
@@ -151,7 +165,7 @@ impl PartialEq<SliceRef<'_>> for &Vec<u8> {
 
 impls! {
   Cow<'_, [u8]>,
-  // &'static [u8] // TODO: implement this
+  &'static [u8],
   Vec<u8>,
   Box<[u8]>,
   Arc<[u8]>,

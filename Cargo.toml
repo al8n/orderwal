@@ -27,7 +27,7 @@ test-swmr = ["std"]
 test-swmr-generic = ["std"]
 
 [dependencies]
-among = { version = "0.1", default-features = false }
+among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "1", default-features = false }
 dbutils = { version = "0.3", default-features = false, features = ["crc32fast"] }
 rarena-allocator = { version = "0.2", default-features = false, features = ["memmap"] }

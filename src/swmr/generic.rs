@@ -46,14 +46,6 @@ pub struct Pointer<K, V> {
   _m: PhantomData<(K, V)>,
 }
 
-impl<K, V> Clone for Pointer<K, V> {
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-
-impl<K, V> Copy for Pointer<K, V> {}
-
 impl<K: Type, V> PartialEq for Pointer<K, V> {
   fn eq(&self, other: &Self) -> bool {
     self.as_key_slice() == other.as_key_slice()
@@ -669,7 +661,7 @@ where
     opts: Options,
     open_options: OpenOptions,
   ) -> Result<Self, Error> {
-    Self::map_mut_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts, open_options)
+    Self::map_mut_with_path_builder::<_, ()>(|| dummy_path_builder(path), opts, open_options)
       .map_err(|e| e.unwrap_right())
   }
 
@@ -730,7 +722,7 @@ where
     path: P,
     opts: Options,
   ) -> Result<GenericWalReader<K, V>, Error> {
-    Self::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), opts)
+    Self::map_with_path_builder::<_, ()>(|| dummy_path_builder(path), opts)
       .map_err(|e| e.unwrap_right())
   }
 
@@ -910,7 +902,7 @@ where
     cks: S,
   ) -> Result<Self, Error> {
     Self::map_mut_with_path_builder_and_checksumer::<_, ()>(
-      || Ok(path.as_ref().to_path_buf()),
+      || dummy_path_builder(path),
       opts,
       open_options,
       cks,
@@ -1021,12 +1013,8 @@ where
     opts: Options,
     cks: S,
   ) -> Result<GenericWalReader<K, V>, Error> {
-    Self::map_with_path_builder_and_checksumer::<_, ()>(
-      || Ok(path.as_ref().to_path_buf()),
-      opts,
-      cks,
-    )
-    .map_err(|e| e.unwrap_right())
+    Self::map_with_path_builder_and_checksumer::<_, ()>(|| dummy_path_builder(path), opts, cks)
+      .map_err(|e| e.unwrap_right())
   }
 
   /// Open a write-ahead log backed by a file backed memory map in read only mode with the given [`Checksumer`].
@@ -1220,9 +1208,7 @@ where
       Some(e) => e,
       None => match self.insert_in(Among::Middle(key), Among::Right(value)) {
         Ok(_) => Either::Right(Ok(())),
-        Err(Among::Left(e)) => Either::Right(Err(Either::Left(e))),
-        Err(Among::Right(e)) => Either::Right(Err(Either::Right(e))),
-        _ => unreachable!(),
+        Err(e) => Either::Right(Err(e.into_left_right())),
       },
     }
   }
@@ -1247,9 +1233,7 @@ where
       Some(e) => e,
       None => match self.insert_in(Among::Right(key), Among::Middle(value)) {
         Ok(_) => Either::Right(Ok(())),
-        Err(Among::Middle(e)) => Either::Right(Err(Either::Left(e))),
-        Err(Among::Right(e)) => Either::Right(Err(Either::Right(e))),
-        _ => unreachable!(),
+        Err(e) => Either::Right(Err(e.into_middle_right())),
       },
     }
   }
@@ -1274,9 +1258,7 @@ where
       Some(e) => e,
       None => match self.insert_in(Among::Right(key), Among::Left(value())) {
         Ok(_) => Either::Right(Ok(())),
-        Err(Among::Middle(e)) => Either::Right(Err(Either::Left(e))),
-        Err(Among::Right(e)) => Either::Right(Err(Either::Right(e))),
-        _ => unreachable!(),
+        Err(e) => Either::Right(Err(e.into_middle_right())),
       },
     }
   }
@@ -1311,11 +1293,7 @@ where
   ) -> Result<(), Either<K::Error, Error>> {
     self
       .insert_in(Among::Middle(key), Among::Right(value))
-      .map_err(|e| match e {
-        Among::Left(e) => Either::Left(e),
-        Among::Right(e) => Either::Right(e),
-        _ => unreachable!(),
-      })
+      .map_err(Among::into_left_right)
   }
 
   /// Inserts a key in bytes format and value in structured format into the write-ahead log directly.
@@ -1479,11 +1457,7 @@ where
   ) -> Result<(), Either<V::Error, Error>> {
     self
       .insert_in(Among::Right(key), Among::Middle(value))
-      .map_err(|e| match e {
-        Among::Middle(e) => Either::Left(e),
-        Among::Right(e) => Either::Right(e),
-        _ => unreachable!(),
-      })
+      .map_err(Among::into_middle_right)
   }
 
   fn insert_in(
@@ -1576,4 +1550,9 @@ where
       self.opts.maximum_value_size(),
     )
   }
+}
+
+#[inline]
+fn dummy_path_builder(p: impl AsRef<Path>) -> Result<PathBuf, ()> {
+  Ok(p.as_ref().to_path_buf())
 }

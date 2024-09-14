@@ -314,6 +314,8 @@ fn construct_map_file() {
       .insert(&person, &"My name is Alice!".to_string())
       .unwrap();
     assert_eq!(wal.get(&person).unwrap().value(), "My name is Alice!");
+
+    assert_eq!(*wal.path().unwrap().as_ref(), path);
   }
 
   let pr = PersonRef {

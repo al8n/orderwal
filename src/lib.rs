@@ -8,6 +8,8 @@
 
 use core::{borrow::Borrow, cmp, marker::PhantomData, mem, slice};
 
+#[doc(inline)]
+pub use among;
 use among::Among;
 use crossbeam_skiplist::SkipSet;
 use error::Error;
