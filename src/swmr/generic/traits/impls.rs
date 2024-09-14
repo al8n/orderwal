@@ -98,3 +98,57 @@ macro_rules! impl_numbers {
 }
 
 impl_numbers!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128,);
+
+impl Type for f32 {
+  type Ref<'a> = Self;
+
+  type Error = ();
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    core::mem::size_of::<f32>()
+  }
+
+  #[inline]
+  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    const SIZE: usize = core::mem::size_of::<f32>();
+    buf[..SIZE].copy_from_slice(self.to_le_bytes().as_ref());
+    Ok(())
+  }
+}
+
+impl TypeRef<'_> for f32 {
+  #[inline]
+  fn from_slice(buf: &[u8]) -> Self {
+    const SIZE: usize = core::mem::size_of::<f32>();
+
+    f32::from_le_bytes(buf[..SIZE].try_into().unwrap())
+  }
+}
+
+impl Type for f64 {
+  type Ref<'a> = Self;
+
+  type Error = ();
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    core::mem::size_of::<f64>()
+  }
+
+  #[inline]
+  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    const SIZE: usize = core::mem::size_of::<f64>();
+    buf[..SIZE].copy_from_slice(self.to_le_bytes().as_ref());
+    Ok(())
+  }
+}
+
+impl TypeRef<'_> for f64 {
+  #[inline]
+  fn from_slice(buf: &[u8]) -> Self {
+    const SIZE: usize = core::mem::size_of::<f64>();
+
+    f64::from_le_bytes(buf[..SIZE].try_into().unwrap())
+  }
+}
