@@ -1,13 +1,15 @@
 [package]
 name = "orderwal"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
 documentation = "https://docs.rs/orderwal"
-description = "An ordered Write-Ahead Log implementation for Rust."
+description = "A generic-purpose, ordered, zero-copy, Write-Ahead Log implementation for Rust."
 license = "MIT OR Apache-2.0"
 rust-version = "1.80"
+categories = ["filesystem", "database-implementations", "development-tools", "data-structures"]
+keywords = ["wal", "write-ahead-log", "append-only", "append-only-log", "bitcask"]
 
 [[bench]]
 path = "benches/foo.rs"

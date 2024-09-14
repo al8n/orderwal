@@ -1,9 +1,9 @@
 <div align="center">
-<h1>orderwal</h1>
+<h1>OrderWAL</h1>
 </div>
 <div align="center">
 
-A template for creating Rust open-source GitHub repo.
+A generic-purpose, ordered, zero-copy, Write-Ahead Log implementation for Rust.
 
 [<img alt="github" src="https://img.shields.io/badge/github-al8n/orderwal-8da0cb?style=for-the-badge&logo=Github" height="22">][Github-url]
 <img alt="LoC" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fal8n%2F327b2a8aef9003246e45c6e47fe63937%2Fraw%2Forderwal" height="22">
@@ -19,15 +19,23 @@ English | [简体中文][zh-cn-url]
 
 </div>
 
+## Introduction
+
+`orderwal` is a generic-purpose, ordered, zero-copy, concurrent-safe, pre-allocate style (memory map) write-ahead-log for developing databases.
+
+`orderwal` also supports generic structured key and value types, which is not limited to just bytes like other implementations.
+
 ## Installation
 
 ```toml
 [dependencies]
-template_rs = "0.1"
+orderwal = "0.1"
 ```
 
-## Features
-- [x] Create a Rust open-source repo fast 
+## Related projects
+
+- [`aol`](https://github.com/al8n/aol): Yet another generic purpose, append-only write-ahead log implementation based on `std::fs::File`.
+- [`skl`](https://github.com/al8n/skl): A lock-free, ARNEA based skiplist implementation, which supports in-memory and on-disk, suitable for frozen durable data file or memtable for LSM database.
 
 #### License
 

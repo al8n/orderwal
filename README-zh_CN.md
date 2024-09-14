@@ -1,9 +1,9 @@
 <div align="center">
-<h1>orderwal</h1>
+<h1>OrderWAL</h1>
 </div>
 <div align="center">
 
-开源Rust代码库GitHub模版
+An ordered, zero-copy, Write-Ahead Log implementation for Rust.
 
 [<img alt="github" src="https://img.shields.io/badge/github-al8n/orderwal-8da0cb?style=for-the-badge&logo=Github" height="22">][Github-url]
 <img alt="LoC" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fal8n%2F327b2a8aef9003246e45c6e47fe63937%2Fraw%2Forderwal" height="22">
@@ -23,12 +23,8 @@
 
 ```toml
 [dependencies]
-template_rs = "0.1"
+orderwal = "0.1"
 ```
-
-## Features
-
-- [x] 更快的创建GitHub开源Rust代码库
 
 #### License
 

@@ -1,7 +1,5 @@
-# UNRELEASED
+# 0.1.0 (Sep 14th, 2024)
 
-# 0.1.2 (January 6th, 2022)
+- Publish version `0.1.0`
 
 FEATURES
-
-
