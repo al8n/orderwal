@@ -1,0 +1,4 @@
+# TSAN suppressions file for orderwal
+
+# The epoch-based GC uses fences.
+race:crossbeam_epoch
