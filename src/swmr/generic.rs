@@ -32,7 +32,7 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-#[cfg(all(test, feature = "test-swmr-generic"))]
+#[cfg(test)]
 mod tests;
 
 #[doc(hidden)]

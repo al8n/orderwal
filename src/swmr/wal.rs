@@ -18,7 +18,7 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-#[cfg(all(test, feature = "test-swmr"))]
+#[cfg(test)]
 mod tests;
 
 pub struct OrderWalCore<C, S> {
@@ -204,11 +204,11 @@ where
 }
 
 impl<C, S> OrderWal<C, S> {
-  /// Returns the read-only view for the WAL.
-  #[inline]
-  pub fn reader(&self) -> OrderWalReader<C, S> {
-    OrderWalReader::new(self.core.clone())
-  }
+  // /// Returns the read-only view for the WAL.
+  // #[inline]
+  // pub fn reader(&self) -> OrderWalReader<C, S> {
+  //   OrderWalReader::new(self.core.clone())
+  // }
 
   /// Returns the path of the WAL if it is backed by a file.
   pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
@@ -260,11 +260,6 @@ where
   #[inline]
   fn path(&self) -> Option<&std::path::Path> {
     self.core.arena.path().map(|p| p.as_ref().as_path())
-  }
-
-  #[inline]
-  fn read_only(&self) -> bool {
-    self.ro
   }
 
   #[inline]
@@ -389,6 +384,16 @@ where
   C: Send + 'static,
 {
   type Reader = OrderWalReader<C, S>;
+
+  #[inline]
+  fn read_only(&self) -> bool {
+    self.ro
+  }
+
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    OrderWalReader::new(self.core.clone())
+  }
 
   #[inline]
   fn flush(&self) -> Result<(), Error> {

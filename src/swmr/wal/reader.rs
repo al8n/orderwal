@@ -69,11 +69,6 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
   }
 
   #[inline]
-  fn read_only(&self) -> bool {
-    self.0.read_only()
-  }
-
-  #[inline]
   fn len(&self) -> usize {
     self.0.len()
   }

@@ -1,6 +1,6 @@
 [package]
 name = "orderwal"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
@@ -24,9 +24,21 @@ xxhash3 = ["dbutils/xxhash3", "std"]
 xxhash64 = ["dbutils/xxhash64", "std"]
 
 ## only for miri testing
-test-unsync = ["std"]
-test-swmr = ["std"]
-test-swmr-generic = ["std"]
+test-unsync-insert = ["std"]
+test-unsync-iters = ["std"]
+test-unsync-get = ["std"]
+test-unsync-constructor = ["std"]
+
+test-swmr-insert = ["std"]
+test-swmr-iters = ["std"]
+test-swmr-get = ["std"]
+test-swmr-constructor = ["std"]
+
+test-swmr-generic-insert = ["std"]
+test-swmr-generic-iters = ["std"]
+test-swmr-generic-get = ["std"]
+test-swmr-generic-constructor = ["std"]
+
 
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }

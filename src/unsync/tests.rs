@@ -4,6 +4,16 @@ use crate::tests::*;
 
 use super::*;
 
-const MB: u32 = 1024 * 1024;
+#[cfg(all(test, feature = "test-unsync-constructor"))]
+mod constructor;
 
-common_unittests!(unsync::OrderWal);
+#[cfg(all(test, feature = "test-unsync-insert"))]
+mod insert;
+
+#[cfg(all(test, feature = "test-unsync-iters"))]
+mod iter;
+
+#[cfg(all(test, feature = "test-unsync-get"))]
+mod get;
+
+const MB: u32 = 1024 * 1024;

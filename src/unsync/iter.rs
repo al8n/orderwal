@@ -26,11 +26,6 @@ impl<'a, C> Iterator for Iter<'a, C> {
       (k, v)
     })
   }
-
-  #[inline]
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    self.iter.size_hint()
-  }
 }
 
 impl<'a, C> DoubleEndedIterator for Iter<'a, C> {
@@ -65,11 +60,6 @@ impl<'a, C> Iterator for Keys<'a, C> {
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().map(|ptr| ptr.as_key_slice())
   }
-
-  #[inline]
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    self.iter.size_hint()
-  }
 }
 
 impl<'a, C> DoubleEndedIterator for Keys<'a, C> {
@@ -99,11 +89,6 @@ impl<'a, C> Iterator for Values<'a, C> {
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().map(|ptr| ptr.as_value_slice())
-  }
-
-  #[inline]
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    self.iter.size_hint()
   }
 }
 
@@ -146,11 +131,6 @@ where
       .iter
       .next()
       .map(|ptr| (ptr.as_key_slice(), ptr.as_value_slice()))
-  }
-
-  #[inline]
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    self.iter.size_hint()
   }
 }
 
@@ -197,11 +177,6 @@ where
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().map(|ptr| ptr.as_key_slice())
   }
-
-  #[inline]
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    self.iter.size_hint()
-  }
 }
 
 impl<'a, C> DoubleEndedIterator for RangeKeys<'a, C>
@@ -243,11 +218,6 @@ where
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().map(|ptr| ptr.as_value_slice())
-  }
-
-  #[inline]
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    self.iter.size_hint()
   }
 }
 

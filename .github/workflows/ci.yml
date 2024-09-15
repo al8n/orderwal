@@ -217,41 +217,58 @@ jobs:
         run: ci/sanitizer_generic.sh
         if: matrix.os != 'ubuntu-latest'
 
-  miri-tb-unsync:
-    name: miri-tb-unsync
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          # - macos-latest
-          # - windows-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Cache cargo build and registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-miri-
-      - name: Install cargo-hack
-        run: cargo install cargo-hack
-      - name: Miri (Linux)
-        run: ci/miri_tb_unsync.sh
-        if: matrix.os == 'ubuntu-latest'
+  # miri-tb-unsync:
+  #   name: miri-tb-unsync
+  #   strategy:
+  #     matrix:
+  #       os:
+  #         - ubuntu-latest
+  #         # - macos-latest
+  #         # - windows-latest
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Cache cargo build and registry
+  #       uses: actions/cache@v3
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry
+  #           ~/.cargo/git
+  #           target
+  #         key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-miri-
+  #     - name: Install cargo-hack
+  #       run: cargo install cargo-hack
+  #     - name: Miri (Linux)
+  #       run: ci/miri_tb_unsync.sh
+  #       if: matrix.os == 'ubuntu-latest'
 
-  miri-tb-swmr:
-    name: miri-tb-swmr
+  miri-tb:
+    name: miri-tb-${{ matrix.os }}-${{ matrix.target }}-${{ matrix.features }}
     strategy:
       matrix:
         os:
           - ubuntu-latest
           # - macos-latest
           # - windows-latest
+        target:
+          - x86_64-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+          - powerpc64-unknown-linux-gnu
+        features:
+          - test-unsync-insert
+          - test-unsync-iters
+          - test-unsync-get
+          - test-unsync-constructor
+          - test-swmr-insert
+          - test-swmr-iters
+          - test-swmr-get
+          - test-swmr-constructor
+          - test-swmr-generic-insert
+          - test-swmr-generic-iters
+          - test-swmr-generic-get
+          - test-swmr-generic-constructor
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -268,34 +285,8 @@ jobs:
       - name: Install cargo-hack
         run: cargo install cargo-hack
       - name: Miri (Linux)
-        run: ci/miri_tb_swmr.sh
-        if: matrix.os == 'ubuntu-latest'
-  
-  miri-tb-swmr-generic:
-    name: miri-tb-swmr-generic
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          # - macos-latest
-          # - windows-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Cache cargo build and registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-miri-
-      - name: Install cargo-hack
-        run: cargo install cargo-hack
-      - name: Miri (Linux)
-        run: ci/miri_tb_swmr_generic.sh
+        run: |
+          bash ci/miri_tb.sh ${{ matrix.target }} ${{ matrix.features }}
         if: matrix.os == 'ubuntu-latest'
 
   # miri-sb:

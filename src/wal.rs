@@ -11,13 +11,13 @@ pub(crate) mod sealed;
 
 pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// The iterator type.
-  type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])>
+  type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])> + DoubleEndedIterator
   where
     Self: 'a,
     C: Comparator;
 
   /// The iterator type over a subset of entries in the WAL.
-  type Range<'a, Q, R>: Iterator<Item = (&'a [u8], &'a [u8])>
+  type Range<'a, Q, R>: Iterator<Item = (&'a [u8], &'a [u8])> + DoubleEndedIterator
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
@@ -26,13 +26,13 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     C: Comparator;
 
   /// The keys iterator type.
-  type Keys<'a>: Iterator<Item = &'a [u8]>
+  type Keys<'a>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
   where
     Self: 'a,
     C: Comparator;
 
   /// The iterator type over a subset of keys in the WAL.
-  type RangeKeys<'a, Q, R>: Iterator<Item = &'a [u8]>
+  type RangeKeys<'a, Q, R>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
@@ -41,13 +41,13 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     C: Comparator;
 
   /// The values iterator type.
-  type Values<'a>: Iterator<Item = &'a [u8]>
+  type Values<'a>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
   where
     Self: 'a,
     C: Comparator;
 
   /// The iterator type over a subset of values in the WAL.
-  type RangeValues<'a, Q, R>: Iterator<Item = &'a [u8]>
+  type RangeValues<'a, Q, R>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
@@ -64,9 +64,6 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 
   /// Returns the path of the WAL if it is backed by a file.
   fn path(&self) -> Option<&std::path::Path>;
-
-  /// Returns `true` if this WAL instance is read-only.
-  fn read_only(&self) -> bool;
 
   /// Returns the number of entries in the WAL.
   fn len(&self) -> usize;
@@ -318,6 +315,9 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     .map_err(Either::Right)
   }
 
+  /// Returns `true` if this WAL instance is read-only.
+  fn read_only(&self) -> bool;
+
   /// Returns the mutable reference to the reserved slice.
   ///
   /// # Safety
@@ -330,6 +330,9 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
 
   /// Flushes the to disk.
   fn flush_async(&self) -> Result<(), Error>;
+
+  /// Returns the read-only view for the WAL.
+  fn reader(&self) -> Self::Reader;
 
   /// Get or insert a new entry into the WAL.
   fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
@@ -392,11 +395,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
           Ok(())
         }),
       )
-      .map_err(|e| match e {
-        Among::Left(e) => Either::Left(e),
-        Among::Middle(_) => unreachable!(),
-        Among::Right(e) => Either::Right(e),
-      })
+      .map_err(Among::into_left_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -433,11 +432,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
         }),
         vb,
       )
-      .map_err(|e| match e {
-        Among::Left(_) => unreachable!(),
-        Among::Middle(e) => Either::Left(e),
-        Among::Right(e) => Either::Right(e),
-      })
+      .map_err(Among::into_middle_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method

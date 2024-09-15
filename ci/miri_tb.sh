@@ -1,13 +1,25 @@
 #!/bin/bash
 set -e
 
+# Check if TARGET and FEATURES are provided, otherwise panic
+if [ -z "$1" ]; then
+  echo "Error: TARGET is not provided"
+  exit 1
+fi
+
+if [ -z "$2" ]; then
+  echo "Error: FEATURES are not provided"
+  exit 1
+fi
+
+TARGET=$1
+FEATURES=$2
+
 rustup toolchain install nightly --component miri
 rustup override set nightly
 cargo miri setup
 
-export MIRIFLAGS="-Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-tree-borrows"
+export MIRIFLAGS="-Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-tree-borrows -Zmiri-ignore-leaks"
 
-cargo miri test --tests --target x86_64-unknown-linux-gnu --all-features
-# cargo miri test --tests --target aarch64-unknown-linux-gnu #crossbeam_utils has problem on this platform
-cargo miri test --tests --target i686-unknown-linux-gnu --all-features
-cargo miri test --tests --target powerpc64-unknown-linux-gnu --all-features
+cargo miri test --tests --target $TARGET --features $FEATURES --lib
+

@@ -9,8 +9,11 @@ ignore:
   - "src/swmr/generic/traits/impls.rs"
   - "src/tests.rs"
   - "src/swmr/generic/tests.rs"
+  - "src/swmr/generic/tests/"
   - "src/swmr/wal/tests.rs"
+  - "src/swmr/wal/tests/"
   - "src/unsync/tests.rs"
+  - "src/unsync/tests/"
 
 coverage:
   status:

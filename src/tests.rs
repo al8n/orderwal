@@ -7,40 +7,8 @@ use wal::ImmutableWal;
 const MB: usize = 1024 * 1024;
 
 macro_rules! common_unittests {
-  ($prefix:ident::$wal:ident) => {
+  ($prefix:ident::insert::$wal:ident) => {
     paste::paste! {
-      #[test]
-      fn test_construct_inmemory() {
-        construct_inmemory::<OrderWal<Ascend, Crc32>>();
-      }
-
-      #[test]
-      fn test_construct_map_anon() {
-        construct_map_anon::<OrderWal<Ascend, Crc32>>();
-      }
-
-      #[test]
-      #[cfg_attr(miri, ignore)]
-      fn test_construct_map_file() {
-        construct_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
-      }
-
-      #[test]
-      fn test_construct_with_small_capacity_inmemory() {
-        construct_with_small_capacity_inmemory::<OrderWal<Ascend, Crc32>>();
-      }
-
-      #[test]
-      fn test_construct_with_small_capacity_map_anon() {
-        construct_with_small_capacity_map_anon::<OrderWal<Ascend, Crc32>>();
-      }
-
-      #[test]
-      #[cfg_attr(miri, ignore)]
-      fn test_construct_with_small_capacity_map_file() {
-        construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
-      }
-
       #[test]
       fn test_insert_to_full_inmemory() {
         insert_to_full(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
@@ -175,7 +143,10 @@ macro_rules! common_unittests {
           .unwrap() },
         );
       }
-
+    }
+  };
+  ($prefix:ident::iters::$wal:ident) => {
+    paste::paste! {
       #[test]
       fn test_iter_inmemory() {
         iter(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
@@ -337,7 +308,10 @@ macro_rules! common_unittests {
           .unwrap() },
         );
       }
-
+    }
+  };
+  ($prefix:ident::get::$wal:ident) => {
+    paste::paste! {
       #[test]
       fn test_first_inmemory() {
         first(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
@@ -456,6 +430,41 @@ macro_rules! common_unittests {
 
         assert_eq!(wal.path().unwrap(), path);
       }
+    }
+  };
+  ($prefix:ident::constructor::$wal:ident) => {
+    paste::paste! {
+      #[test]
+      fn test_construct_inmemory() {
+        construct_inmemory::<OrderWal<Ascend, Crc32>>();
+      }
+
+      #[test]
+      fn test_construct_map_anon() {
+        construct_map_anon::<OrderWal<Ascend, Crc32>>();
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_construct_map_file() {
+        construct_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
+      }
+
+      #[test]
+      fn test_construct_with_small_capacity_inmemory() {
+        construct_with_small_capacity_inmemory::<OrderWal<Ascend, Crc32>>();
+      }
+
+      #[test]
+      fn test_construct_with_small_capacity_map_anon() {
+        construct_with_small_capacity_map_anon::<OrderWal<Ascend, Crc32>>();
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_construct_with_small_capacity_map_file() {
+        construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
+      }
 
       #[test]
       fn test_zero_reserved_inmemory() {
@@ -559,10 +568,17 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
     .unwrap();
 
     assert_eq!(wal.get(b"key1").unwrap(), b"value1");
+    assert!(!wal.read_only());
   }
 
   let wal = unsafe { W::map(&path, Builder::new()).unwrap() };
   assert_eq!(wal.get(b"key1").unwrap(), b"value1");
+  assert_eq!(wal.path().unwrap(), path);
+  assert_eq!(wal.maximum_key_size(), Options::new().maximum_key_size());
+  assert_eq!(
+    wal.maximum_value_size(),
+    Options::new().maximum_value_size()
+  );
 }
 
 pub(crate) fn construct_with_small_capacity_inmemory<W: Wal<Ascend, Crc32>>() {
@@ -631,6 +647,16 @@ pub(crate) fn insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
+  assert!(!wal.is_empty());
+  assert_eq!(wal.len(), 100);
+
+  for i in 0..100u32 {
+    assert!(wal.contains_key(&i.to_be_bytes()));
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  assert!(!wal.is_empty());
   assert_eq!(wal.len(), 100);
 
   for i in 0..100u32 {
@@ -655,6 +681,11 @@ pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
 }
 
 pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
@@ -670,6 +701,11 @@ pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
       .unwrap();
   }
 
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
   for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
@@ -694,6 +730,11 @@ pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
 }
 
 pub(crate) fn iter<W: Wal<Ascend, Crc32>>(wal: &mut W) {
@@ -702,8 +743,32 @@ pub(crate) fn iter<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   }
 
   let mut iter = wal.iter();
+
   for i in 0..100u32 {
     let (key, value) = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  let mut iter = wal.iter();
+  for i in (0..100u32).rev() {
+    let (key, value) = iter.next_back().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  let mut iter = wal.iter();
+
+  for i in 0..100u32 {
+    let (key, value) = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  let mut iter = wal.iter();
+  for i in (0..100u32).rev() {
+    let (key, value) = iter.next_back().unwrap();
     assert_eq!(key, i.to_be_bytes());
     assert_eq!(value, i.to_be_bytes());
   }
@@ -724,6 +789,31 @@ pub(crate) fn range<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   }
 
   assert!(iter.next().is_none());
+
+  let mut iter = wal.range((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in (50..100u32).rev() {
+    let (key, value) = iter.next_back().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+
+  let mut iter = wal.range((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in 50..100u32 {
+    let (key, value) = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.range((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in (50..100u32).rev() {
+    let (key, value) = iter.next_back().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+    assert_eq!(value, i.to_be_bytes());
+  }
 }
 
 pub(crate) fn keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
@@ -732,8 +822,33 @@ pub(crate) fn keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   }
 
   let mut iter = wal.keys();
+
   for i in 0..100u32 {
     let key = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.keys();
+  for i in (0..100u32).rev() {
+    let key = iter.next_back().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  let mut iter = wal.keys();
+
+  for i in 0..100u32 {
+    let key = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.keys();
+  for i in (0..100u32).rev() {
+    let key = iter.next_back().unwrap();
     assert_eq!(key, i.to_be_bytes());
   }
 }
@@ -752,6 +867,27 @@ pub(crate) fn range_keys<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   }
 
   assert!(iter.next().is_none());
+
+  let mut iter = wal.range_keys((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in (50..100u32).rev() {
+    let key = iter.next_back().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  let mut iter = wal.range_keys((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in 50..100u32 {
+    let key = iter.next().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.range_keys((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in (50..100u32).rev() {
+    let key = iter.next_back().unwrap();
+    assert_eq!(key, i.to_be_bytes());
+  }
 }
 
 pub(crate) fn values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
@@ -760,8 +896,33 @@ pub(crate) fn values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   }
 
   let mut iter = wal.values();
+
   for i in 0..100u32 {
     let value = iter.next().unwrap();
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.values();
+  for i in (0..100u32).rev() {
+    let value = iter.next_back().unwrap();
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  let mut iter = wal.values();
+
+  for i in 0..100u32 {
+    let value = iter.next().unwrap();
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.values();
+  for i in (0..100u32).rev() {
+    let value = iter.next_back().unwrap();
     assert_eq!(value, i.to_be_bytes());
   }
 }
@@ -774,12 +935,34 @@ pub(crate) fn range_values<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   let x = 50u32.to_be_bytes();
 
   let mut iter = wal.range_values((Bound::Included(x.as_slice()), Bound::Unbounded));
+
   for i in 50..100u32 {
     let value = iter.next().unwrap();
     assert_eq!(value, i.to_be_bytes());
   }
 
   assert!(iter.next().is_none());
+
+  let mut iter = wal.range_values((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in (50..100u32).rev() {
+    let value = iter.next_back().unwrap();
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  let mut iter = wal.range_values((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in 50..100u32 {
+    let value = iter.next().unwrap();
+    assert_eq!(value, i.to_be_bytes());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut iter = wal.range_values((Bound::Included(x.as_slice()), Bound::Unbounded));
+  for i in (50..100u32).rev() {
+    let value = iter.next_back().unwrap();
+    assert_eq!(value, i.to_be_bytes());
+  }
 }
 
 pub(crate) fn first<W: Wal<Ascend, Crc32>>(wal: &mut W) {
@@ -790,6 +973,11 @@ pub(crate) fn first<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   let (key, value) = wal.first().unwrap();
   assert_eq!(key, 0u32.to_be_bytes());
   assert_eq!(value, 0u32.to_be_bytes());
+
+  let wal = wal.reader();
+  let (key, value) = wal.first().unwrap();
+  assert_eq!(key, 0u32.to_be_bytes());
+  assert_eq!(value, 0u32.to_be_bytes());
 }
 
 pub(crate) fn last<W: Wal<Ascend, Crc32>>(wal: &mut W) {
@@ -797,6 +985,11 @@ pub(crate) fn last<W: Wal<Ascend, Crc32>>(wal: &mut W) {
     wal.insert(&i.to_be_bytes(), &i.to_be_bytes()).unwrap();
   }
 
+  let (key, value) = wal.last().unwrap();
+  assert_eq!(key, 99u32.to_be_bytes());
+  assert_eq!(value, 99u32.to_be_bytes());
+
+  let wal = wal.reader();
   let (key, value) = wal.last().unwrap();
   assert_eq!(key, 99u32.to_be_bytes());
   assert_eq!(value, 99u32.to_be_bytes());
@@ -815,6 +1008,11 @@ pub(crate) fn get_or_insert<W: Wal<Ascend, Crc32>>(wal: &mut W) {
       .unwrap();
   }
 
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
   for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
@@ -848,12 +1046,20 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
   for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
 }
 
 pub(crate) fn zero_reserved<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   unsafe {
     assert_eq!(wal.reserved_slice(), &[]);
     assert_eq!(wal.reserved_slice_mut(), &mut []);
+
+    let reader = wal.reader();
+    assert_eq!(reader.reserved_slice(), &[]);
   }
 }
 
@@ -863,5 +1069,8 @@ pub(crate) fn reserved<W: Wal<Ascend, Crc32>>(wal: &mut W) {
     buf.copy_from_slice(b"al8n");
     assert_eq!(wal.reserved_slice(), b"al8n");
     assert_eq!(wal.reserved_slice_mut(), b"al8n");
+
+    let reader = wal.reader();
+    assert_eq!(reader.reserved_slice(), b"al8n");
   }
 }

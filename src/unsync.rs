@@ -8,9 +8,9 @@ use wal::{
   ImmutableWal,
 };
 
-use core::{ops::RangeBounds, ptr::NonNull};
+use core::{cell::UnsafeCell, ops::RangeBounds, ptr::NonNull};
 use rarena_allocator::{unsync::Arena, Error as ArenaError};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, rc::Rc};
 
 /// Iterators for the `OrderWal`.
 pub mod iter;
@@ -19,7 +19,7 @@ use iter::*;
 mod c;
 use c::*;
 
-#[cfg(all(test, feature = "test-unsync"))]
+#[cfg(test)]
 mod tests;
 
 /// An ordered write-ahead log implementation for single thread environments.
@@ -41,7 +41,7 @@ mod tests;
 // +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
 // ```
 pub struct OrderWal<C = Ascend, S = Crc32> {
-  core: OrderWalCore<C, S>,
+  core: Rc<UnsafeCell<OrderWalCore<C, S>>>,
   ro: bool,
   _s: PhantomData<S>,
 }
@@ -56,7 +56,7 @@ where
   #[inline]
   fn from_core(core: Self::Core, ro: bool) -> Self {
     Self {
-      core,
+      core: Rc::new(UnsafeCell::new(core)),
       ro,
       _s: PhantomData,
     }
@@ -66,7 +66,17 @@ where
 impl<C, S> OrderWal<C, S> {
   /// Returns the path of the WAL if it is backed by a file.
   pub fn path_buf(&self) -> Option<&std::rc::Rc<std::path::PathBuf>> {
-    self.core.arena.path()
+    self.core().arena.path()
+  }
+
+  #[inline]
+  fn core(&self) -> &OrderWalCore<C, S> {
+    unsafe { &*self.core.get() }
+  }
+
+  #[inline]
+  fn core_mut(&mut self) -> &mut OrderWalCore<C, S> {
+    unsafe { &mut *self.core.get() }
   }
 }
 
@@ -88,7 +98,8 @@ where
     let (len_size, kvlen, elen) = entry_size(klen, vlen);
     let klen = klen as usize;
     let vlen = vlen as usize;
-    let buf = self.core.arena.alloc_bytes(elen);
+    let core = self.core_mut();
+    let buf = core.arena.alloc_bytes(elen);
 
     match buf {
       Err(e) => {
@@ -107,8 +118,8 @@ where
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
           let flag = Flags::COMMITTED.bits();
 
-          self.core.cks.reset();
-          self.core.cks.update(&[flag]);
+          core.cks.reset();
+          core.cks.update(&[flag]);
 
           buf.put_u8_unchecked(Flags::empty().bits());
           let written = buf.put_u64_varint_unchecked(kvlen);
@@ -134,27 +145,26 @@ where
           .map_err(Among::Middle)?;
 
           let cks = {
-            self.core.cks.update(&buf[1..]);
-            self.core.cks.digest()
+            core.cks.update(&buf[1..]);
+            core.cks.digest()
           };
           buf.put_u64_le_unchecked(cks);
 
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.core.opts.sync_on_write() && self.core.arena.is_ondisk() {
-            self
-              .core
+          if core.opts.sync_on_write() && core.arena.is_ondisk() {
+            core
               .arena
               .flush_range(buf.offset(), elen as usize)
               .map_err(|e| Among::Right(e.into()))?;
           }
           buf.detach();
-          self.core.map.insert(Pointer::new(
+          core.map.insert(Pointer::new(
             klen,
             vlen,
             buf.as_ptr().add(ko),
-            self.core.cmp.cheap_clone(),
+            core.cmp.cheap_clone(),
           ));
           Ok(())
         }
@@ -197,43 +207,39 @@ where
         C: Comparator;
 
   unsafe fn reserved_slice(&self) -> &[u8] {
-    if self.core.opts.reserved() == 0 {
+    let core = self.core();
+    if core.opts.reserved() == 0 {
       return &[];
     }
 
-    &self.core.arena.reserved_slice()[HEADER_SIZE..]
+    &core.arena.reserved_slice()[HEADER_SIZE..]
   }
 
   #[inline]
   fn path(&self) -> Option<&std::path::Path> {
-    self.core.arena.path().map(|p| p.as_ref().as_path())
-  }
-
-  #[inline]
-  fn read_only(&self) -> bool {
-    self.ro
+    self.core().arena.path().map(|p| p.as_ref().as_path())
   }
 
   /// Returns the number of entries in the WAL.
   #[inline]
   fn len(&self) -> usize {
-    self.core.map.len()
+    self.core().map.len()
   }
 
   /// Returns `true` if the WAL is empty.
   #[inline]
   fn is_empty(&self) -> bool {
-    self.core.map.is_empty()
+    self.core().map.is_empty()
   }
 
   #[inline]
   fn maximum_key_size(&self) -> u32 {
-    self.core.opts.maximum_key_size()
+    self.core().opts.maximum_key_size()
   }
 
   #[inline]
   fn maximum_value_size(&self) -> u32 {
-    self.core.opts.maximum_value_size()
+    self.core().opts.maximum_value_size()
   }
 
   #[inline]
@@ -243,7 +249,7 @@ where
     Q: ?Sized + Ord,
     C: Comparator,
   {
-    self.core.map.contains(key)
+    self.core().map.contains(key)
   }
 
   #[inline]
@@ -251,7 +257,7 @@ where
   where
     C: Comparator,
   {
-    Iter::new(self.core.map.iter())
+    Iter::new(self.core().map.iter())
   }
 
   #[inline]
@@ -262,7 +268,7 @@ where
     Q: Ord + ?Sized,
     C: Comparator,
   {
-    Range::new(self.core.map.range(range))
+    Range::new(self.core().map.range(range))
   }
 
   #[inline]
@@ -270,7 +276,7 @@ where
   where
     C: Comparator,
   {
-    Keys::new(self.core.map.iter())
+    Keys::new(self.core().map.iter())
   }
 
   #[inline]
@@ -281,7 +287,7 @@ where
     Q: Ord + ?Sized,
     C: Comparator,
   {
-    RangeKeys::new(self.core.map.range(range))
+    RangeKeys::new(self.core().map.range(range))
   }
 
   #[inline]
@@ -289,7 +295,7 @@ where
   where
     C: Comparator,
   {
-    Values::new(self.core.map.iter())
+    Values::new(self.core().map.iter())
   }
 
   #[inline]
@@ -300,7 +306,7 @@ where
     Q: Ord + ?Sized,
     C: Comparator,
   {
-    RangeValues::new(self.core.map.range(range))
+    RangeValues::new(self.core().map.range(range))
   }
 
   #[inline]
@@ -309,7 +315,7 @@ where
     C: Comparator,
   {
     self
-      .core
+      .core()
       .map
       .first()
       .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
@@ -321,7 +327,7 @@ where
     C: Comparator,
   {
     self
-      .core
+      .core()
       .map
       .last()
       .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
@@ -334,7 +340,7 @@ where
     Q: ?Sized + Ord,
     C: Comparator,
   {
-    self.core.map.get(key).map(|ent| ent.as_value_slice())
+    self.core().map.get(key).map(|ent| ent.as_value_slice())
   }
 }
 
@@ -345,12 +351,27 @@ where
   type Reader = Self;
 
   #[inline]
+  fn read_only(&self) -> bool {
+    self.ro
+  }
+
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    Self {
+      core: self.core.clone(),
+      ro: true,
+      _s: PhantomData,
+    }
+  }
+
+  #[inline]
   unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
-    if self.core.opts.reserved() == 0 {
+    let core = self.core_mut();
+    if core.opts.reserved() == 0 {
       return &mut [];
     }
 
-    &mut self.core.arena.reserved_slice_mut()[HEADER_SIZE..]
+    &mut core.arena.reserved_slice_mut()[HEADER_SIZE..]
   }
 
   #[inline]
@@ -359,7 +380,7 @@ where
       return Err(error::Error::read_only());
     }
 
-    self.core.arena.flush().map_err(Into::into)
+    self.core().arena.flush().map_err(Into::into)
   }
 
   #[inline]
@@ -368,7 +389,7 @@ where
       return Err(error::Error::read_only());
     }
 
-    self.core.arena.flush_async().map_err(Into::into)
+    self.core().arena.flush_async().map_err(Into::into)
   }
 
   fn get_or_insert_with_value_builder<E>(
@@ -393,7 +414,7 @@ where
       )
       .map_err(Either::Right)?;
 
-    if let Some(ent) = self.core.map.get(key) {
+    if let Some(ent) = self.core().map.get(key) {
       return Ok(Some(ent.as_value_slice()));
     }
 
