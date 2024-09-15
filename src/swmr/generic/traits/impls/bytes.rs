@@ -78,7 +78,7 @@ impl<'a> TypeRef<'a> for &'a [u8] {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SliceRef<'a>(&'a [u8]);
 
-impl<'a> Borrow<[u8]> for SliceRef<'a> {
+impl Borrow<[u8]> for SliceRef<'_> {
   fn borrow(&self) -> &[u8] {
     self.0
   }

@@ -47,7 +47,7 @@ where
   }
 }
 
-impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V>
+impl<K, V> DoubleEndedIterator for Iter<'_, K, V>
 where
   K: Type + Ord,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,

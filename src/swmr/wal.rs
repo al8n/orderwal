@@ -9,7 +9,7 @@ use wal::{
 };
 
 use core::ptr::NonNull;
-use rarena_allocator::{sync::Arena, Error as ArenaError};
+use rarena_allocator::sync::Arena;
 use std::sync::Arc;
 
 mod reader;
@@ -18,9 +18,19 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-#[cfg(test)]
+#[cfg(all(
+  test,
+  any(
+    all_tests,
+    test_swmr_constructor,
+    test_swmr_insert,
+    test_swmr_get,
+    test_swmr_iters,
+  )
+))]
 mod tests;
 
+#[doc(hidden)]
 pub struct OrderWalCore<C, S> {
   arena: Arena,
   map: SkipSet<Pointer<C>>,
@@ -31,7 +41,7 @@ pub struct OrderWalCore<C, S> {
 
 impl<C: Comparator, S> OrderWalCore<C, S> {
   #[inline]
-  fn iter(&self) -> Iter<C> {
+  fn iter(&self) -> Iter<'_, C> {
     Iter::new(self.map.iter())
   }
 }
@@ -131,17 +141,7 @@ where
     let buf = self.core.arena.alloc_bytes(elen);
 
     match buf {
-      Err(e) => {
-        let e = match e {
-          ArenaError::InsufficientSpace {
-            requested,
-            available,
-          } => error::Error::insufficient_space(requested, available),
-          ArenaError::ReadOnly => error::Error::read_only(),
-          _ => unreachable!(),
-        };
-        Err(Among::Right(e))
-      }
+      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
       Ok(mut buf) => {
         unsafe {
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
@@ -204,13 +204,18 @@ where
 }
 
 impl<C, S> OrderWal<C, S> {
-  // /// Returns the read-only view for the WAL.
-  // #[inline]
-  // pub fn reader(&self) -> OrderWalReader<C, S> {
-  //   OrderWalReader::new(self.core.clone())
-  // }
-
   /// Returns the path of the WAL if it is backed by a file.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Wal, Builder};
+  ///
+  /// // A in-memory WAL
+  /// let wal = OrderWal::new(Builder::new().with_capacity(100)).unwrap();
+  ///
+  /// assert!(wal.path_buf().is_none());
+  /// ```
   pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
     self.core.arena.path()
   }
@@ -431,16 +436,13 @@ where
     C: Comparator + CheapClone,
     S: Checksumer,
   {
-    if self.read_only() {
-      return Err(Either::Right(Error::read_only()));
-    }
-
     self
       .check(
         key.len(),
         vb.size() as usize,
         self.maximum_key_size(),
         self.maximum_value_size(),
+        self.read_only(),
       )
       .map_err(Either::Right)?;
 

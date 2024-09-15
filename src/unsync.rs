@@ -1,16 +1,16 @@
+use core::{cell::UnsafeCell, ops::RangeBounds, ptr::NonNull};
+use std::{collections::BTreeSet, rc::Rc};
+
 use super::*;
 
 use among::Among;
 use either::Either;
 use error::Error;
+use rarena_allocator::unsync::Arena;
 use wal::{
   sealed::{Constructor, Sealed},
   ImmutableWal,
 };
-
-use core::{cell::UnsafeCell, ops::RangeBounds, ptr::NonNull};
-use rarena_allocator::{unsync::Arena, Error as ArenaError};
-use std::{collections::BTreeSet, rc::Rc};
 
 /// Iterators for the `OrderWal`.
 pub mod iter;
@@ -19,7 +19,16 @@ use iter::*;
 mod c;
 use c::*;
 
-#[cfg(test)]
+#[cfg(all(
+  test,
+  any(
+    all_tests,
+    test_unsync_constructor,
+    test_unsync_insert,
+    test_unsync_get,
+    test_unsync_iters,
+  )
+))]
 mod tests;
 
 /// An ordered write-ahead log implementation for single thread environments.
@@ -65,6 +74,17 @@ where
 
 impl<C, S> OrderWal<C, S> {
   /// Returns the path of the WAL if it is backed by a file.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{unsync::OrderWal, Wal, Builder};
+  ///
+  /// // A in-memory WAL
+  /// let wal = OrderWal::new(Builder::new().with_capacity(100)).unwrap();
+  ///
+  /// assert!(wal.path_buf().is_none());
+  /// ```
   pub fn path_buf(&self) -> Option<&std::rc::Rc<std::path::PathBuf>> {
     self.core().arena.path()
   }
@@ -102,17 +122,7 @@ where
     let buf = core.arena.alloc_bytes(elen);
 
     match buf {
-      Err(e) => {
-        let e = match e {
-          ArenaError::InsufficientSpace {
-            requested,
-            available,
-          } => error::Error::insufficient_space(requested, available),
-          ArenaError::ReadOnly => error::Error::read_only(),
-          _ => unreachable!(),
-        };
-        Err(Among::Right(e))
-      }
+      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
       Ok(mut buf) => {
         unsafe {
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
@@ -401,16 +411,13 @@ where
     C: Comparator + CheapClone,
     S: Checksumer,
   {
-    if self.read_only() {
-      return Err(Either::Right(Error::read_only()));
-    }
-
     self
       .check(
         key.len(),
         vb.size() as usize,
         self.maximum_key_size(),
         self.maximum_value_size(),
+        self.read_only(),
       )
       .map_err(Either::Right)?;
 

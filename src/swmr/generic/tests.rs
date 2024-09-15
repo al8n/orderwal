@@ -8,14 +8,17 @@ use super::*;
 
 const MB: u32 = 1024 * 1024;
 
-#[cfg(all(test, feature = "test-swmr-generic-constructor"))]
+#[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
-#[cfg(all(test, feature = "test-swmr-generic-get"))]
-mod get;
-#[cfg(all(test, feature = "test-swmr-generic-insert"))]
+
+#[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
 mod insert;
-#[cfg(all(test, feature = "test-swmr-generic-iters"))]
+
+#[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
 mod iters;
+
+#[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
+mod get;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
 struct Person {
@@ -51,7 +54,7 @@ struct PersonRef<'a> {
   name: &'a str,
 }
 
-impl<'a> PersonRef<'a> {
+impl PersonRef<'_> {
   fn encoded_len(&self) -> usize {
     encoded_u64_varint_len(self.id) + self.name.len()
   }
@@ -69,21 +72,21 @@ impl<'a> PersonRef<'a> {
   }
 }
 
-impl<'a> PartialEq for PersonRef<'a> {
+impl PartialEq for PersonRef<'_> {
   fn eq(&self, other: &Self) -> bool {
     self.id == other.id && self.name == other.name
   }
 }
 
-impl<'a> Eq for PersonRef<'a> {}
+impl Eq for PersonRef<'_> {}
 
-impl<'a> PartialOrd for PersonRef<'a> {
+impl PartialOrd for PersonRef<'_> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl<'a> Ord for PersonRef<'a> {
+impl Ord for PersonRef<'_> {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
     self
       .id

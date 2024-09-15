@@ -1,7 +1,5 @@
 use core::ops::RangeBounds;
 
-use rarena_allocator::Error as ArenaError;
-
 use super::*;
 
 mod builder;
@@ -162,13 +160,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     let arena = <Self::Allocator as Allocator>::new(
       arena_options(opts.reserved()).with_capacity(opts.capacity()),
     )
-    .map_err(|e| match e {
-      ArenaError::InsufficientSpace {
-        requested,
-        available,
-      } => Error::insufficient_space(requested, available),
-      _ => unreachable!(),
-    })?;
+    .map_err(Error::from_insufficient_space)?;
     <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
       .map(|core| Self::from_core(core, false))
   }
@@ -374,16 +366,13 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: Checksumer,
   {
-    if self.read_only() {
-      return Err(Either::Right(Error::read_only()));
-    }
-
     self
       .check(
         kb.size() as usize,
         value.len(),
         self.maximum_key_size(),
         self.maximum_value_size(),
+        self.read_only(),
       )
       .map_err(Either::Right)?;
 
@@ -411,16 +400,13 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: Checksumer,
   {
-    if self.read_only() {
-      return Err(Either::Right(Error::read_only()));
-    }
-
     self
       .check(
         key.len(),
         vb.size() as usize,
         self.maximum_key_size(),
         self.maximum_value_size(),
+        self.read_only(),
       )
       .map_err(Either::Right)?;
 
@@ -446,16 +432,13 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: Checksumer,
   {
-    if self.read_only() {
-      return Err(Among::Right(Error::read_only()));
-    }
-
     self
       .check(
         kb.size() as usize,
         vb.size() as usize,
         self.maximum_key_size(),
         self.maximum_value_size(),
+        self.read_only(),
       )
       .map_err(Among::Right)?;
 
@@ -468,15 +451,12 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: Checksumer,
   {
-    if self.read_only() {
-      return Err(Error::read_only());
-    }
-
     self.check(
       key.len(),
       value.len(),
       self.maximum_key_size(),
       self.maximum_value_size(),
+      self.read_only(),
     )?;
 
     self

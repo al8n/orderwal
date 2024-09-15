@@ -23,23 +23,6 @@ std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/defau
 xxhash3 = ["dbutils/xxhash3", "std"]
 xxhash64 = ["dbutils/xxhash64", "std"]
 
-## only for miri testing
-test-unsync-insert = ["std"]
-test-unsync-iters = ["std"]
-test-unsync-get = ["std"]
-test-unsync-constructor = ["std"]
-
-test-swmr-insert = ["std"]
-test-swmr-iters = ["std"]
-test-swmr-get = ["std"]
-test-swmr-constructor = ["std"]
-
-test-swmr-generic-insert = ["std"]
-test-swmr-generic-iters = ["std"]
-test-swmr-generic-get = ["std"]
-test-swmr-generic-constructor = ["std"]
-
-
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "1", default-features = false }
@@ -76,3 +59,22 @@ rpath = false
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+rust_2018_idioms = "warn"
+single_use_lifetimes = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(all_tests)',
+  'cfg(test_unsync_constructor)',
+  'cfg(test_unsync_insert)',
+  'cfg(test_unsync_iters)',
+  'cfg(test_unsync_get)',
+  'cfg(test_swmr_constructor)',
+  'cfg(test_swmr_insert)',
+  'cfg(test_swmr_iters)',
+  'cfg(test_swmr_get)',
+  'cfg(test_swmr_generic_constructor)',
+  'cfg(test_swmr_generic_insert)',
+  'cfg(test_swmr_generic_iters)',
+  'cfg(test_swmr_generic_get)',
+] }

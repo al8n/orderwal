@@ -54,19 +54,19 @@ where
 {
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  pub fn first(&self) -> Option<EntryRef<K, V>> {
+  pub fn first(&self) -> Option<EntryRef<'_, K, V>> {
     self.0.first()
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  pub fn last(&self) -> Option<EntryRef<K, V>> {
+  pub fn last(&self) -> Option<EntryRef<'_, K, V>> {
     self.0.last()
   }
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  pub fn iter(&self) -> Iter<K, V> {
+  pub fn iter(&self) -> Iter<'_, K, V> {
     self.0.iter()
   }
 
@@ -105,7 +105,7 @@ where
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  pub fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
@@ -114,7 +114,7 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  pub fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
@@ -132,7 +132,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
@@ -141,7 +141,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
@@ -153,7 +153,7 @@ where
   /// # Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<'_, K, V>> {
     self.0.get_by_bytes(key)
   }
 }

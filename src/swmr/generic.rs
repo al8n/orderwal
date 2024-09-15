@@ -9,8 +9,7 @@ use crossbeam_skiplist::SkipSet;
 pub use dbutils::equivalent::*;
 use dbutils::{Checksumer, Crc32};
 use rarena_allocator::{
-  either::Either, sync::Arena, Allocator, ArenaPosition, Error as ArenaError, Memory, MmapOptions,
-  OpenOptions,
+  either::Either, sync::Arena, Allocator, ArenaPosition, Memory, MmapOptions, OpenOptions,
 };
 
 use crate::{
@@ -32,10 +31,20 @@ pub use reader::*;
 mod iter;
 pub use iter::*;
 
-#[cfg(test)]
+#[cfg(all(
+  test,
+  any(
+    all_tests,
+    test_swmr_generic_constructor,
+    test_swmr_generic_insert,
+    test_swmr_generic_get,
+    test_swmr_generic_iters,
+  )
+))]
 mod tests;
 
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct Pointer<K, V> {
   /// The pointer to the start of the entry.
   ptr: *const u8,
@@ -300,7 +309,7 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
-  fn first(&self) -> Option<EntryRef<K, V>>
+  fn first(&self) -> Option<EntryRef<'_, K, V>>
   where
     K: Type + Ord,
     for<'b> K::Ref<'b>: KeyRef<'b, K>,
@@ -309,7 +318,7 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
-  fn last(&self) -> Option<EntryRef<K, V>>
+  fn last(&self) -> Option<EntryRef<'_, K, V>>
   where
     K: Type + Ord,
     for<'b> K::Ref<'b>: KeyRef<'b, K>,
@@ -318,7 +327,7 @@ impl<K, V> GenericOrderWalCore<K, V> {
   }
 
   #[inline]
-  fn iter(&self) -> Iter<K, V>
+  fn iter(&self) -> Iter<'_, K, V>
   where
     K: Type + Ord,
     for<'b> K::Ref<'b>: KeyRef<'b, K>,
@@ -475,19 +484,19 @@ where
   V: Type,
 {
   #[inline]
-  fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
-    self.map.contains::<Owned<K, Q>>(&Owned::new(key))
+    self.map.contains::<Owned<'_, K, Q>>(&Owned::new(key))
   }
 
   #[inline]
-  fn contains_key_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
-    self.map.contains::<Ref<K, Q>>(&Ref::new(key))
+    self.map.contains::<Ref<'_, K, Q>>(&Ref::new(key))
   }
 
   #[inline]
@@ -498,26 +507,29 @@ where
   }
 
   #[inline]
-  fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  fn get<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
     self
       .map
-      .get::<Owned<K, Q>>(&Owned::new(key))
+      .get::<Owned<'_, K, Q>>(&Owned::new(key))
       .map(EntryRef::new)
   }
 
   #[inline]
-  fn get_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
-    self.map.get::<Ref<K, Q>>(&Ref::new(key)).map(EntryRef::new)
+    self
+      .map
+      .get::<Ref<'_, K, Q>>(&Ref::new(key))
+      .map(EntryRef::new)
   }
 
   #[inline]
-  unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+  unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<'_, K, V>> {
     self
       .map
       .get(&PartialPointer::new(key.len(), key.as_ptr()))
@@ -574,19 +586,19 @@ where
 {
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  pub fn first(&self) -> Option<EntryRef<K, V>> {
+  pub fn first(&self) -> Option<EntryRef<'_, K, V>> {
     self.core.first()
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  pub fn last(&self) -> Option<EntryRef<K, V>> {
+  pub fn last(&self) -> Option<EntryRef<'_, K, V>> {
     self.core.last()
   }
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  pub fn iter(&self) -> Iter<K, V> {
+  pub fn iter(&self) -> Iter<'_, K, V> {
     self.core.iter()
   }
 
@@ -810,15 +822,8 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// let wal = GenericOrderWal::<String, String>::with_checksumer(Options::new().with_capacity(1024), Crc32::default());
   /// ```
   pub fn with_checksumer(opts: Options, cks: S) -> Result<Self, Error> {
-    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity())).map_err(
-      |e| match e {
-        ArenaError::InsufficientSpace {
-          requested,
-          available,
-        } => Error::insufficient_space(requested, available),
-        _ => unreachable!(),
-      },
-    )?;
+    let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity()))
+      .map_err(Error::from_insufficient_space)?;
 
     GenericOrderWalCore::new(arena, opts.magic_version(), false, opts.reserved())
       .map(|core| Self::from_core(core, opts, cks, false))
@@ -1058,7 +1063,7 @@ where
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  pub fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
@@ -1076,7 +1081,7 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  pub fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
@@ -1085,7 +1090,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
@@ -1094,7 +1099,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get_by_ref<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V>>
+  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
@@ -1106,7 +1111,7 @@ where
   /// # Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<K, V>> {
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<'_, K, V>> {
     self.core.get_by_bytes(key)
   }
 }
@@ -1465,10 +1470,6 @@ where
     key: Among<K, &K, &[u8]>,
     val: Among<V, &V, &[u8]>,
   ) -> Result<(), Among<K::Error, V::Error, Error>> {
-    if self.ro {
-      return Err(Among::Right(Error::read_only()));
-    }
-
     let klen = key.encoded_len();
     let vlen = val.encoded_len();
 
@@ -1479,17 +1480,7 @@ where
     let buf = self.core.arena.alloc_bytes(elen);
 
     match buf {
-      Err(e) => {
-        let e = match e {
-          ArenaError::InsufficientSpace {
-            requested,
-            available,
-          } => error::Error::insufficient_space(requested, available),
-          ArenaError::ReadOnly => error::Error::read_only(),
-          _ => unreachable!(),
-        };
-        Err(Among::Right(e))
-      }
+      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
       Ok(mut buf) => {
         unsafe {
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
@@ -1548,6 +1539,7 @@ where
       vlen,
       self.opts.maximum_key_size(),
       self.opts.maximum_value_size(),
+      self.ro,
     )
   }
 }

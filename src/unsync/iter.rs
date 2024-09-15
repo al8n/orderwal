@@ -28,7 +28,7 @@ impl<'a, C> Iterator for Iter<'a, C> {
   }
 }
 
-impl<'a, C> DoubleEndedIterator for Iter<'a, C> {
+impl<C> DoubleEndedIterator for Iter<'_, C> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().map(|ptr| {
@@ -39,7 +39,7 @@ impl<'a, C> DoubleEndedIterator for Iter<'a, C> {
   }
 }
 
-impl<'a, C> FusedIterator for Iter<'a, C> {}
+impl<C> FusedIterator for Iter<'_, C> {}
 
 /// Iterator over the keys in the WAL.
 pub struct Keys<'a, C> {
@@ -62,14 +62,14 @@ impl<'a, C> Iterator for Keys<'a, C> {
   }
 }
 
-impl<'a, C> DoubleEndedIterator for Keys<'a, C> {
+impl<C> DoubleEndedIterator for Keys<'_, C> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().map(|ptr| ptr.as_key_slice())
   }
 }
 
-impl<'a, C> FusedIterator for Keys<'a, C> {}
+impl<C> FusedIterator for Keys<'_, C> {}
 
 /// Iterator over the values in the WAL.
 pub struct Values<'a, C> {
@@ -92,14 +92,14 @@ impl<'a, C> Iterator for Values<'a, C> {
   }
 }
 
-impl<'a, C> DoubleEndedIterator for Values<'a, C> {
+impl<C> DoubleEndedIterator for Values<'_, C> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().map(|ptr| ptr.as_value_slice())
   }
 }
 
-impl<'a, C> FusedIterator for Values<'a, C> {}
+impl<C> FusedIterator for Values<'_, C> {}
 
 /// An iterator over a subset of the entries in the WAL.
 pub struct Range<'a, C>
@@ -134,7 +134,7 @@ where
   }
 }
 
-impl<'a, C> DoubleEndedIterator for Range<'a, C>
+impl<C> DoubleEndedIterator for Range<'_, C>
 where
   C: Comparator,
 {
@@ -147,7 +147,7 @@ where
   }
 }
 
-impl<'a, C> FusedIterator for Range<'a, C> where C: Comparator {}
+impl<C> FusedIterator for Range<'_, C> where C: Comparator {}
 
 /// An iterator over the keys in a subset of the entries in the WAL.
 pub struct RangeKeys<'a, C>
@@ -179,7 +179,7 @@ where
   }
 }
 
-impl<'a, C> DoubleEndedIterator for RangeKeys<'a, C>
+impl<C> DoubleEndedIterator for RangeKeys<'_, C>
 where
   C: Comparator,
 {
@@ -189,7 +189,7 @@ where
   }
 }
 
-impl<'a, C> FusedIterator for RangeKeys<'a, C> where C: Comparator {}
+impl<C> FusedIterator for RangeKeys<'_, C> where C: Comparator {}
 
 /// An iterator over the values in a subset of the entries in the WAL.
 pub struct RangeValues<'a, C>
@@ -221,7 +221,7 @@ where
   }
 }
 
-impl<'a, C> DoubleEndedIterator for RangeValues<'a, C>
+impl<C> DoubleEndedIterator for RangeValues<'_, C>
 where
   C: Comparator,
 {
@@ -230,3 +230,5 @@ where
     self.iter.next_back().map(|ptr| ptr.as_value_slice())
   }
 }
+
+impl<C> FusedIterator for RangeValues<'_, C> where C: Comparator {}

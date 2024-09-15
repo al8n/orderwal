@@ -23,21 +23,21 @@ struct PersonRef<'a> {
   name: &'a str,
 }
 
-impl<'a> PartialEq for PersonRef<'a> {
+impl PartialEq for PersonRef<'_> {
   fn eq(&self, other: &Self) -> bool {
     self.id == other.id && self.name == other.name
   }
 }
 
-impl<'a> Eq for PersonRef<'a> {}
+impl Eq for PersonRef<'_> {}
 
-impl<'a> PartialOrd for PersonRef<'a> {
+impl PartialOrd for PersonRef<'_> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl<'a> Ord for PersonRef<'a> {
+impl Ord for PersonRef<'_> {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
     self
       .id

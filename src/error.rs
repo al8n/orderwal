@@ -74,6 +74,17 @@ impl Error {
     }
   }
 
+  #[inline]
+  pub(crate) const fn from_insufficient_space(error: rarena_allocator::Error) -> Self {
+    match error {
+      rarena_allocator::Error::InsufficientSpace {
+        requested,
+        available,
+      } => Self::insufficient_space(requested, available),
+      _ => unreachable!(),
+    }
+  }
+
   /// Create a new corrupted error.
   #[inline]
   pub(crate) fn corrupted() -> Error {

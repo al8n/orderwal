@@ -11,12 +11,12 @@ macro_rules! common_unittests {
     paste::paste! {
       #[test]
       fn test_insert_to_full_inmemory() {
-        insert_to_full(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        insert_to_full(&mut OrderWal::new(Builder::new().with_capacity(100)).unwrap());
       }
 
       #[test]
       fn test_insert_to_full_map_anon() {
-        insert_to_full(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        insert_to_full(&mut OrderWal::map_anon(Builder::new().with_capacity(100)).unwrap());
       }
 
       #[test]
@@ -28,7 +28,7 @@ macro_rules! common_unittests {
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_to_full_map_file")),
             Builder::new(),
             OpenOptions::new()
-              .create_new(Some(MB))
+              .create_new(Some(100))
               .write(true)
               .read(true),
           )

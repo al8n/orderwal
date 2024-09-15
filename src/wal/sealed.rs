@@ -16,14 +16,16 @@ pub trait WalCore<C, S> {
 }
 
 pub trait Sealed<C, S>: Constructor<C, S> {
+  #[inline]
   fn check(
     &self,
     klen: usize,
     vlen: usize,
     max_key_size: u32,
     max_value_size: u32,
+    ro: bool,
   ) -> Result<(), Error> {
-    crate::check(klen, vlen, max_key_size, max_value_size)
+    crate::check(klen, vlen, max_key_size, max_value_size, ro)
   }
 
   fn insert_with_in<KE, VE>(

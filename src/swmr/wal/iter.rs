@@ -29,7 +29,7 @@ impl<'a, C: Comparator> Iterator for Iter<'a, C> {
   }
 }
 
-impl<'a, C: Comparator> DoubleEndedIterator for Iter<'a, C> {
+impl<C: Comparator> DoubleEndedIterator for Iter<'_, C> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self
@@ -60,7 +60,7 @@ impl<'a, C: Comparator> Iterator for Keys<'a, C> {
   }
 }
 
-impl<'a, C: Comparator> DoubleEndedIterator for Keys<'a, C> {
+impl<C: Comparator> DoubleEndedIterator for Keys<'_, C> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().map(|ptr| ptr.as_key_slice())
@@ -88,7 +88,7 @@ impl<'a, C: Comparator> Iterator for Values<'a, C> {
   }
 }
 
-impl<'a, C: Comparator> DoubleEndedIterator for Values<'a, C> {
+impl<C: Comparator> DoubleEndedIterator for Values<'_, C> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().map(|ptr| ptr.as_value_slice())
@@ -137,7 +137,7 @@ where
   }
 }
 
-impl<'a, Q, R, C> DoubleEndedIterator for Range<'a, Q, R, C>
+impl<Q, R, C> DoubleEndedIterator for Range<'_, Q, R, C>
 where
   C: Comparator,
   R: RangeBounds<Q>,
@@ -192,7 +192,7 @@ where
   }
 }
 
-impl<'a, Q, R, C> DoubleEndedIterator for RangeKeys<'a, Q, R, C>
+impl<Q, R, C> DoubleEndedIterator for RangeKeys<'_, Q, R, C>
 where
   C: Comparator,
   R: RangeBounds<Q>,
@@ -244,7 +244,7 @@ where
   }
 }
 
-impl<'a, Q, R, C> DoubleEndedIterator for RangeValues<'a, Q, R, C>
+impl<Q, R, C> DoubleEndedIterator for RangeValues<'_, Q, R, C>
 where
   C: Comparator,
   R: RangeBounds<Q>,

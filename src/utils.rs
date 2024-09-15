@@ -50,7 +50,12 @@ pub(crate) const fn check(
   vlen: usize,
   max_key_size: u32,
   max_value_size: u32,
+  ro: bool,
 ) -> Result<(), error::Error> {
+  if ro {
+    return Err(error::Error::read_only());
+  }
+
   let max_ksize = min_u64(max_key_size as u64, u32::MAX as u64);
   let max_vsize = min_u64(max_value_size as u64, u32::MAX as u64);
 

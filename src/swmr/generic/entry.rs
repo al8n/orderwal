@@ -22,7 +22,7 @@ where
   }
 }
 
-impl<'a, K, V> Clone for EntryRef<'a, K, V> {
+impl<K, V> Clone for EntryRef<'_, K, V> {
   #[inline]
   fn clone(&self) -> Self {
     Self {
