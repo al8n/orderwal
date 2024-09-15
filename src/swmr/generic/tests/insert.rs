@@ -20,14 +20,14 @@ fn insert_to_full(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn insert_to_full_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(100)).unwrap();
   insert_to_full(&mut wal);
 }
 
 #[test]
 fn insert_to_full_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(100)).unwrap();
   insert_to_full(&mut wal);
 }
 
@@ -42,7 +42,7 @@ fn insert_to_full_map_file() {
       &path,
       Options::new(),
       OpenOptions::new()
-        .create_new(Some(MB))
+        .create_new(Some(100))
         .write(true)
         .read(true),
     )

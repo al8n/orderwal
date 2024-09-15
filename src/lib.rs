@@ -8,7 +8,6 @@
 
 use core::{borrow::Borrow, cmp, marker::PhantomData, mem, slice};
 
-#[doc(inline)]
 pub use among;
 use among::Among;
 use crossbeam_skiplist::SkipSet;
@@ -26,9 +25,11 @@ extern crate std;
 pub use dbutils::{Ascend, CheapClone, Checksumer, Comparator, Crc32, Descend};
 
 #[cfg(feature = "xxhash3")]
+#[cfg_attr(docsrs, doc(cfg(feature = "xxhash3")))]
 pub use dbutils::XxHash3;
 
 #[cfg(feature = "xxhash64")]
+#[cfg_attr(docsrs, doc(cfg(feature = "xxhash64")))]
 pub use dbutils::XxHash64;
 
 const STATUS_SIZE: usize = mem::size_of::<u8>();
