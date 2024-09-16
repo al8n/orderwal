@@ -4,8 +4,22 @@ use super::*;
 
 mod builder;
 pub use builder::*;
+use sealed::Base;
+
+mod impls;
 
 pub(crate) mod sealed;
+
+/// A batch of keys and values that can be inserted into the [`Wal`].
+pub trait Batch {
+  /// The iterator type.
+  type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])>
+  where
+    Self: 'a;
+
+  /// Returns an iterator over the keys and values.
+  fn iter(&self) -> Self::Iter<'_>;
+}
 
 pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// The iterator type.
@@ -58,7 +72,19 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// # Safety
   /// - The writer must ensure that the returned slice is not modified.
   /// - This method is not thread-safe, so be careful when using it.
-  unsafe fn reserved_slice(&self) -> &[u8];
+  unsafe fn reserved_slice<'a>(&'a self) -> &'a [u8]
+  where
+    Self::Allocator: 'a,
+  {
+    let reserved = self.options().reserved();
+    if reserved == 0 {
+      return &[];
+    }
+
+    let allocator = self.allocator();
+    let reserved_slice = allocator.reserved_slice();
+    &reserved_slice[HEADER_SIZE..]
+  }
 
   /// Returns the path of the WAL if it is backed by a file.
   fn path(&self) -> Option<&std::path::Path>;
@@ -67,15 +93,37 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   fn len(&self) -> usize;
 
   /// Returns `true` if the WAL is empty.
+  #[inline]
   fn is_empty(&self) -> bool {
     self.len() == 0
   }
 
   /// Returns the maximum key size allowed in the WAL.
-  fn maximum_key_size(&self) -> u32;
+  #[inline]
+  fn maximum_key_size(&self) -> u32 {
+    self.options().maximum_key_size()
+  }
 
   /// Returns the maximum value size allowed in the WAL.
-  fn maximum_value_size(&self) -> u32;
+  #[inline]
+  fn maximum_value_size(&self) -> u32 {
+    self.options().maximum_value_size()
+  }
+
+  /// Returns the remaining capacity of the WAL.
+  #[inline]
+  fn remaining(&self) -> u32 {
+    self.allocator().remaining() as u32
+  }
+
+  /// Returns the capacity of the WAL.
+  #[inline]
+  fn capacity(&self) -> u32 {
+    self.options().capacity()
+  }
+
+  /// Returns the options used to create this WAL instance.
+  fn options(&self) -> &Options;
 
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, key: &Q) -> bool
@@ -161,8 +209,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       arena_options(opts.reserved()).with_capacity(opts.capacity()),
     )
     .map_err(Error::from_insufficient_space)?;
-    <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
-      .map(|core| Self::from_core(core, false))
+    <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(Self::from_core)
   }
 
   /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
@@ -180,8 +227,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     <Self::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
       .map_err(Into::into)
       .and_then(|arena| {
-        <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
-          .map(|core| Self::from_core(core, false))
+        <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(Self::from_core)
       })
   }
 
@@ -197,7 +243,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   unsafe fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
     P: AsRef<std::path::Path>,
   {
     <Self as Wal<C, S>>::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), b)
@@ -220,7 +266,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     let open_options = OpenOptions::default().read(true);
 
@@ -235,7 +281,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     .map_err(|e| e.map_right(Into::into))
     .and_then(|arena| {
       <Self::Reader as sealed::Constructor<C, S>>::replay(arena, Options::new(), true, cmp, cks)
-        .map(|core| <Self::Reader as sealed::Constructor<C, S>>::from_core(core, true))
+        .map(<Self::Reader as sealed::Constructor<C, S>>::from_core)
         .map_err(Either::Right)
     })
   }
@@ -252,7 +298,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   unsafe fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
     P: AsRef<std::path::Path>,
   {
     <Self as Wal<C, S>>::map_mut_with_path_builder::<_, ()>(
@@ -280,7 +326,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     let path = path_builder().map_err(Either::Left)?;
 
@@ -297,31 +343,56 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     .map_err(Into::into)
     .and_then(|arena| {
       if !exist {
-        <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
-          .map(|core| Self::from_core(core, false))
+        <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(Self::from_core)
       } else {
         <Self as sealed::Constructor<C, S>>::replay(arena, opts, false, cmp, cks)
-          .map(|core| Self::from_core(core, false))
+          .map(Self::from_core)
       }
     })
     .map_err(Either::Right)
   }
 
   /// Returns `true` if this WAL instance is read-only.
-  fn read_only(&self) -> bool;
+  fn read_only(&self) -> bool {
+    self.allocator().read_only()
+  }
 
   /// Returns the mutable reference to the reserved slice.
   ///
   /// # Safety
   /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
   /// - This method is not thread-safe, so be careful when using it.
-  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8];
+  unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]
+  where
+    Self::Allocator: 'a,
+  {
+    let reserved = sealed::Sealed::options(self).reserved();
+    if reserved == 0 {
+      return &mut [];
+    }
+
+    let allocator = self.allocator();
+    let reserved_slice = allocator.reserved_slice_mut();
+    &mut reserved_slice[HEADER_SIZE..]
+  }
 
   /// Flushes the to disk.
-  fn flush(&self) -> Result<(), Error>;
+  fn flush(&self) -> Result<(), Error> {
+    if !self.read_only() {
+      self.allocator().flush().map_err(Into::into)
+    } else {
+      Err(Error::read_only())
+    }
+  }
 
   /// Flushes the to disk.
-  fn flush_async(&self) -> Result<(), Error>;
+  fn flush_async(&self) -> Result<(), Error> {
+    if !self.read_only() {
+      self.allocator().flush_async().map_err(Into::into)
+    } else {
+      Err(Error::read_only())
+    }
+  }
 
   /// Returns the read-only view for the WAL.
   fn reader(&self) -> Self::Reader;
@@ -330,7 +401,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .get_or_insert_with_value_builder::<()>(
@@ -351,7 +422,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer;
+    S: BuildChecksumer;
 
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
@@ -364,7 +435,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<(), Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(
@@ -384,6 +455,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
           Ok(())
         }),
       )
+      .map(|ptr| self.insert_pointer(ptr))
       .map_err(Among::into_left_right)
   }
 
@@ -398,7 +470,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<(), Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(
@@ -418,6 +490,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
         }),
         vb,
       )
+      .map(|ptr| self.insert_pointer(ptr))
       .map_err(Among::into_middle_right)
   }
 
@@ -430,7 +503,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<(), Among<KE, VE, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(
@@ -442,14 +515,47 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       )
       .map_err(Among::Right)?;
 
-    self.insert_with_in(kb, vb)
+    self
+      .insert_with_in(kb, vb)
+      .map(|ptr| self.insert_pointer(ptr))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch<B: Batch>(&mut self, batch: &B) -> Result<(), Error>
+  where
+    S: BuildChecksumer,
+  {
+    let batch_encoded_size = batch
+      .iter()
+      .fold(0u64, |acc, (k, v)| acc + k.len() as u64 + v.len() as u64);
+    let total_size = STATUS_SIZE as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+    if total_size > <Self as ImmutableWal<_, _>>::capacity(self) as u64 {
+      return Err(Error::insufficient_space(
+        total_size,
+        <Self as ImmutableWal<_, _>>::remaining(self),
+      ));
+    }
+
+    let allocator = self.allocator();
+
+    let mut buf = allocator
+      .alloc_bytes(total_size as u32)
+      .map_err(Error::from_insufficient_space)?;
+
+    unsafe {
+      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
+      let cks = self.hasher().build_checksumer();
+      let flag = Flags::BATCHING;
+      buf.put_u8_unchecked(flag.bits);
+    }
+    todo!()
   }
 
   /// Inserts a key-value pair into the WAL.
   fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self.check(
       key.len(),
@@ -470,6 +576,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
           Ok(())
         }),
       )
+      .map(|ptr| self.insert_pointer(ptr))
       .map_err(Among::unwrap_right)
   }
 }

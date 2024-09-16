@@ -8,6 +8,13 @@ use super::*;
 
 const MB: u32 = 1024 * 1024;
 
+const fn __static_assertion<B: GenericBatch>() {}
+
+const _: () = {
+  __static_assertion::<std::collections::BTreeMap<String, String>>();
+  __static_assertion::<std::collections::HashMap<String, String>>();
+};
+
 #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
 

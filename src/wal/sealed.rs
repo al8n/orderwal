@@ -1,3 +1,5 @@
+use core::ptr::NonNull;
+
 use rarena_allocator::ArenaPosition;
 
 use super::*;
@@ -28,19 +30,96 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     crate::check(klen, vlen, max_key_size, max_value_size, ro)
   }
 
+  fn hasher(&self) -> &S;
+
+  fn options(&self) -> &Options;
+
+  fn comparator(&self) -> &C;
+
+  fn insert_pointer(&self, ptr: Pointer<C>)
+  where
+    C: Comparator;
+
   fn insert_with_in<KE, VE>(
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>>
+  ) -> Result<Pointer<C>, Among<KE, VE, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer;
+    S: BuildChecksumer,
+  {
+    let (klen, kf) = kb.into_components();
+    let (vlen, vf) = vb.into_components();
+    let (len_size, kvlen, elen) = entry_size(klen, vlen);
+    let klen = klen as usize;
+    let vlen = vlen as usize;
+    let allocator = self.allocator();
+    let is_ondisk = allocator.is_ondisk();
+    let buf = allocator.alloc_bytes(elen);
+    let mut cks = self.hasher().build_checksumer();
+
+    match buf {
+      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
+      Ok(mut buf) => {
+        unsafe {
+          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
+          let flag = Flags::COMMITTED.bits();
+
+          cks.update(&[flag]);
+
+          buf.put_u8_unchecked(Flags::empty().bits());
+          let written = buf.put_u64_varint_unchecked(kvlen);
+          debug_assert_eq!(
+            written, len_size,
+            "the precalculated size should be equal to the written size"
+          );
+
+          let ko = STATUS_SIZE + written;
+          buf.set_len(ko + klen + vlen);
+
+          kf(&mut VacantBuffer::new(
+            klen,
+            NonNull::new_unchecked(buf.as_mut_ptr().add(ko)),
+          ))
+          .map_err(Among::Left)?;
+
+          let vo = ko + klen;
+          vf(&mut VacantBuffer::new(
+            vlen,
+            NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
+          ))
+          .map_err(Among::Middle)?;
+
+          let cks = {
+            cks.update(&buf[1..]);
+            cks.digest()
+          };
+          buf.put_u64_le_unchecked(cks);
+
+          // commit the entry
+          buf[0] |= Flags::COMMITTED.bits();
+
+          if self.options().sync_on_write() && is_ondisk {
+            allocator
+              .flush_range(buf.offset(), elen as usize)
+              .map_err(|e| Among::Right(e.into()))?;
+          }
+          buf.detach();
+          let cmp = self.comparator().cheap_clone();
+          let ptr = buf.as_ptr().add(ko);
+          Ok(Pointer::new(klen, vlen, ptr, cmp))
+        }
+      }
+    }
+  }
 }
 
 pub trait Constructor<C, S>: Sized {
   type Allocator: Allocator;
   type Core: WalCore<C, S, Allocator = Self::Allocator>;
+
+  fn allocator(&self) -> &Self::Allocator;
 
   fn new_in(arena: Self::Allocator, opts: Options, cmp: C, cks: S) -> Result<Self::Core, Error> {
     unsafe {
@@ -64,7 +143,7 @@ pub trait Constructor<C, S>: Sized {
   ) -> Result<Self::Core, Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];
@@ -122,7 +201,7 @@ pub trait Constructor<C, S>: Sized {
 
         let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
 
-        if cks != checksumer.checksum(arena.get_bytes(cursor, cks_offset)) {
+        if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
           return Err(Error::corrupted());
         }
 
@@ -151,5 +230,5 @@ pub trait Constructor<C, S>: Sized {
     ))
   }
 
-  fn from_core(core: Self::Core, ro: bool) -> Self;
+  fn from_core(core: Self::Core) -> Self;
 }

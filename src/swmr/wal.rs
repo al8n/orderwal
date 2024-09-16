@@ -1,6 +1,5 @@
 use super::super::*;
 
-use among::Among;
 use either::Either;
 use error::Error;
 use wal::{
@@ -8,7 +7,6 @@ use wal::{
   ImmutableWal,
 };
 
-use core::ptr::NonNull;
 use rarena_allocator::sync::Arena;
 use std::sync::Arc;
 
@@ -36,7 +34,7 @@ pub struct OrderWalCore<C, S> {
   map: SkipSet<Pointer<C>>,
   opts: Options,
   cmp: C,
-  cks: UnsafeCellChecksumer<S>,
+  cks: S,
 }
 
 impl<C: Comparator, S> OrderWalCore<C, S> {
@@ -60,19 +58,13 @@ impl<C: Send + 'static, S> WalCore<C, S> for OrderWalCore<C, S> {
   type Base = SkipSet<Pointer<C>>;
 
   #[inline]
-  fn construct(
-    arena: Arena,
-    set: SkipSet<Pointer<C>>,
-    opts: Options,
-    cmp: C,
-    checksumer: S,
-  ) -> Self {
+  fn construct(arena: Arena, set: SkipSet<Pointer<C>>, opts: Options, cmp: C, cks: S) -> Self {
     Self {
       arena,
       map: set,
       cmp,
       opts,
-      cks: UnsafeCellChecksumer::new(checksumer),
+      cks,
     }
   }
 }
@@ -99,7 +91,6 @@ impl<C: Send + 'static, S> WalCore<C, S> for OrderWalCore<C, S> {
 // ```
 pub struct OrderWal<C = Ascend, S = Crc32> {
   core: Arc<OrderWalCore<C, S>>,
-  ro: bool,
   _s: PhantomData<S>,
 }
 
@@ -111,10 +102,14 @@ where
   type Core = OrderWalCore<C, S>;
 
   #[inline]
-  fn from_core(core: Self::Core, ro: bool) -> Self {
+  fn allocator(&self) -> &Self::Allocator {
+    &self.core.arena
+  }
+
+  #[inline]
+  fn from_core(core: Self::Core) -> Self {
     Self {
       core: Arc::new(core),
-      ro,
       _s: PhantomData,
     }
   }
@@ -124,82 +119,23 @@ impl<C, S> Sealed<C, S> for OrderWal<C, S>
 where
   C: Send + 'static,
 {
-  fn insert_with_in<KE, VE>(
-    &mut self,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>>
+  fn hasher(&self) -> &S {
+    &self.core.cks
+  }
+
+  fn options(&self) -> &Options {
+    &self.core.opts
+  }
+
+  fn comparator(&self) -> &C {
+    &self.core.cmp
+  }
+
+  fn insert_pointer(&self, ptr: Pointer<C>)
   where
-    C: Comparator + CheapClone,
-    S: Checksumer,
+    C: Comparator,
   {
-    let (klen, kf) = kb.into_components();
-    let (vlen, vf) = vb.into_components();
-    let (len_size, kvlen, elen) = entry_size(klen, vlen);
-    let klen = klen as usize;
-    let vlen = vlen as usize;
-    let buf = self.core.arena.alloc_bytes(elen);
-
-    match buf {
-      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
-      Ok(mut buf) => {
-        unsafe {
-          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
-          let flag = Flags::COMMITTED.bits();
-
-          self.core.cks.reset();
-          self.core.cks.update(&[flag]);
-
-          buf.put_u8_unchecked(Flags::empty().bits());
-          let written = buf.put_u64_varint_unchecked(kvlen);
-          debug_assert_eq!(
-            written, len_size,
-            "the precalculated size should be equal to the written size"
-          );
-
-          let ko = STATUS_SIZE + written;
-          buf.set_len(ko + klen + vlen);
-
-          kf(&mut VacantBuffer::new(
-            klen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(ko)),
-          ))
-          .map_err(Among::Left)?;
-
-          let vo = ko + klen;
-          vf(&mut VacantBuffer::new(
-            vlen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
-          ))
-          .map_err(Among::Middle)?;
-
-          let cks = {
-            self.core.cks.update(&buf[1..]);
-            self.core.cks.digest()
-          };
-          buf.put_u64_le_unchecked(cks);
-
-          // commit the entry
-          buf[0] |= Flags::COMMITTED.bits();
-
-          if self.core.opts.sync_on_write() && self.core.arena.is_ondisk() {
-            self
-              .core
-              .arena
-              .flush_range(buf.offset(), elen as usize)
-              .map_err(|e| Among::Right(e.into()))?;
-          }
-          buf.detach();
-          self.core.map.insert(Pointer::new(
-            klen,
-            vlen,
-            buf.as_ptr().add(ko),
-            self.core.cmp.cheap_clone(),
-          ));
-          Ok(())
-        }
-      }
-    }
+    self.core.map.insert(ptr);
   }
 }
 
@@ -254,15 +190,6 @@ where
         C: Comparator;
 
   #[inline]
-  unsafe fn reserved_slice(&self) -> &[u8] {
-    if self.core.opts.reserved() == 0 {
-      return &[];
-    }
-
-    &self.core.arena.reserved_slice()[HEADER_SIZE..]
-  }
-
-  #[inline]
   fn path(&self) -> Option<&std::path::Path> {
     self.core.arena.path().map(|p| p.as_ref().as_path())
   }
@@ -280,6 +207,16 @@ where
   #[inline]
   fn maximum_value_size(&self) -> u32 {
     self.core.opts.maximum_value_size()
+  }
+
+  #[inline]
+  fn remaining(&self) -> u32 {
+    self.core.arena.remaining() as u32
+  }
+
+  #[inline]
+  fn options(&self) -> &Options {
+    &self.core.opts
   }
 
   #[inline]
@@ -391,40 +328,8 @@ where
   type Reader = OrderWalReader<C, S>;
 
   #[inline]
-  fn read_only(&self) -> bool {
-    self.ro
-  }
-
-  #[inline]
   fn reader(&self) -> Self::Reader {
     OrderWalReader::new(self.core.clone())
-  }
-
-  #[inline]
-  fn flush(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush().map_err(Into::into)
-  }
-
-  #[inline]
-  fn flush_async(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core.arena.flush_async().map_err(Into::into)
-  }
-
-  #[inline]
-  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
-    if self.core.opts.reserved() == 0 {
-      return &mut [];
-    }
-
-    &mut self.core.arena.reserved_slice_mut()[HEADER_SIZE..]
   }
 
   fn get_or_insert_with_value_builder<E>(
@@ -434,7 +339,7 @@ where
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(

@@ -6,8 +6,8 @@ use std::{
 
 use among::Among;
 use crossbeam_skiplist::SkipSet;
+use dbutils::checksum::{BuildChecksumer, Checksumer, Crc32};
 pub use dbutils::equivalent::*;
-use dbutils::{Checksumer, Crc32};
 use rarena_allocator::{
   either::Either, sync::Arena, Allocator, ArenaPosition, Memory, MmapOptions, OpenOptions,
 };
@@ -15,8 +15,7 @@ use rarena_allocator::{
 use crate::{
   arena_options, check, entry_size,
   error::{self, Error},
-  split_lengths, Flags, Options, UnsafeCellChecksumer, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT,
-  STATUS_SIZE,
+  split_lengths, Flags, Options, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, STATUS_SIZE,
 };
 
 mod entry;
@@ -189,9 +188,11 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
-    let kr: K::Ref<'_> = TypeRef::from_slice(p.as_key_slice());
-    let or: K::Ref<'_> = TypeRef::from_slice(self.as_key_slice());
-    KeyRef::compare(&kr, &or).reverse()
+    unsafe {
+      let kr: K::Ref<'_> = TypeRef::from_slice(p.as_key_slice());
+      let or: K::Ref<'_> = TypeRef::from_slice(self.as_key_slice());
+      KeyRef::compare(&kr, &or).reverse()
+    }
   }
 }
 
@@ -229,7 +230,7 @@ where
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
-    let kr = TypeRef::from_slice(p.as_key_slice());
+    let kr = unsafe { TypeRef::from_slice(p.as_key_slice()) };
     KeyRef::compare(&kr, self.key).reverse()
   }
 }
@@ -268,7 +269,7 @@ where
   Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &Pointer<K, V>) -> cmp::Ordering {
-    let kr = <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice());
+    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
     KeyRef::compare(&kr, self.key).reverse()
   }
 }
@@ -387,7 +388,7 @@ where
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
   V: Type + 'static,
 {
-  fn replay<S: Checksumer>(
+  fn replay<S: BuildChecksumer>(
     arena: Arena,
     opts: &Options,
     ro: bool,
@@ -450,7 +451,7 @@ where
 
         let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
 
-        if cks != checksumer.checksum(arena.get_bytes(cursor, cks_offset)) {
+        if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
           return Err(Error::corrupted());
         }
 
@@ -545,7 +546,7 @@ where
 pub struct GenericOrderWal<K, V, S = Crc32> {
   core: Arc<GenericOrderWalCore<K, V>>,
   opts: Options,
-  cks: UnsafeCellChecksumer<S>,
+  cks: S,
   ro: bool,
 }
 
@@ -854,7 +855,7 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
       core: Arc::new(core),
       ro,
       opts,
-      cks: UnsafeCellChecksumer::new(cks),
+      cks,
     }
   }
 }
@@ -864,7 +865,7 @@ where
   K: Type + Ord + 'static,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
   V: Type + 'static,
-  S: Checksumer,
+  S: BuildChecksumer,
 {
   /// Returns a write-ahead log backed by a file backed memory map with the given options and [`Checksumer`].
   ///
@@ -1121,7 +1122,7 @@ where
   K: Type + Ord + for<'a> Comparable<K::Ref<'a>> + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: Type + 'static,
-  S: Checksumer,
+  S: BuildChecksumer,
 {
   /// Gets or insert the key value pair.
   #[inline]
@@ -1274,7 +1275,7 @@ where
   K: Type + Ord + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: Type + 'static,
-  S: Checksumer,
+  S: BuildChecksumer,
 {
   /// Inserts a key-value pair into the write-ahead log.
   #[inline]
@@ -1486,8 +1487,8 @@ where
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
           let flag = Flags::COMMITTED.bits();
 
-          self.cks.reset();
-          self.cks.update(&[flag]);
+          let mut cks = self.cks.build_checksumer();
+          cks.update(&[flag]);
 
           buf.put_u8_unchecked(Flags::empty().bits());
           let written = buf.put_u64_varint_unchecked(kvlen);
@@ -1507,8 +1508,8 @@ where
           val.encode(value_buf).map_err(Among::Middle)?;
 
           let cks = {
-            self.cks.update(&buf[1..]);
-            self.cks.digest()
+            cks.update(&buf[1..]);
+            cks.digest()
           };
           buf.put_u64_le_unchecked(cks);
 
@@ -1548,3 +1549,10 @@ where
 fn dummy_path_builder(p: impl AsRef<Path>) -> Result<PathBuf, ()> {
   Ok(p.as_ref().to_path_buf())
 }
+
+// #[inline]
+// fn encoded_batch_len<B: GenericBatch>(batch: &B) -> u64 {
+//   let (len, encoded_len) = batch.meta();
+
+//   STATUS_SIZE +
+// }

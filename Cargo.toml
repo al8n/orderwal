@@ -34,6 +34,7 @@ thiserror = "1"
 
 bytes = { version = "1", default-features = false, optional = true }
 smallvec = { version = "1", default-features = false, optional = true, features = ["const_generics"] }
+smallvec-wrapper = { version = "0.1", optional = true, default-features = false, features = ["const_generics"] }
 smol_str = { version = "0.3", default-features = false, optional = true }
 faststr = { version = "0.2", default-features = false, optional = true }
 

@@ -22,15 +22,18 @@ pub use rarena_allocator::OpenOptions;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub use dbutils::{Ascend, CheapClone, Checksumer, Comparator, Crc32, Descend};
+pub use dbutils::{
+  checksum::{BuildChecksumer, Checksumer, Crc32},
+  Ascend, CheapClone, Comparator, Descend,
+};
 
 #[cfg(feature = "xxhash3")]
 #[cfg_attr(docsrs, doc(cfg(feature = "xxhash3")))]
-pub use dbutils::XxHash3;
+pub use dbutils::checksum::XxHash3;
 
 #[cfg(feature = "xxhash64")]
 #[cfg_attr(docsrs, doc(cfg(feature = "xxhash64")))]
-pub use dbutils::XxHash64;
+pub use dbutils::checksum::XxHash64;
 
 const STATUS_SIZE: usize = mem::size_of::<u8>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
@@ -88,6 +91,8 @@ bitflags::bitflags! {
   struct Flags: u8 {
     /// First bit: 1 indicates committed, 0 indicates uncommitted
     const COMMITTED = 0b00000001;
+    /// Second bit: 1 indicates batching, 0 indicates single entry
+    const BATCHING = 0b00000010;
   }
 }
 
@@ -167,37 +172,5 @@ where
 {
   fn borrow(&self) -> &Q {
     self.as_key_slice().borrow()
-  }
-}
-
-/// Use to avoid the mutable borrow checker, for single writer multiple readers usecase.
-struct UnsafeCellChecksumer<S>(core::cell::UnsafeCell<S>);
-
-impl<S> UnsafeCellChecksumer<S> {
-  #[inline]
-  const fn new(checksumer: S) -> Self {
-    Self(core::cell::UnsafeCell::new(checksumer))
-  }
-}
-
-impl<S> UnsafeCellChecksumer<S>
-where
-  S: Checksumer,
-{
-  #[inline]
-  fn update(&self, buf: &[u8]) {
-    // SAFETY: the checksumer will not be invoked concurrently.
-    unsafe { (*self.0.get()).update(buf) }
-  }
-
-  #[inline]
-  fn reset(&self) {
-    // SAFETY: the checksumer will not be invoked concurrently.
-    unsafe { (*self.0.get()).reset() }
-  }
-
-  #[inline]
-  fn digest(&self) -> u64 {
-    unsafe { (*self.0.get()).digest() }
   }
 }

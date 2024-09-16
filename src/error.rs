@@ -5,7 +5,7 @@ pub enum Error {
   #[error("insufficient space in the WAL (requested: {requested}, available: {available})")]
   InsufficientSpace {
     /// The requested size
-    requested: u32,
+    requested: u64,
     /// The remaining size
     available: u32,
   },
@@ -43,7 +43,7 @@ pub enum Error {
 
 impl Error {
   /// Create a new `Error::InsufficientSpace` instance.
-  pub(crate) const fn insufficient_space(requested: u32, available: u32) -> Self {
+  pub(crate) const fn insufficient_space(requested: u64, available: u32) -> Self {
     Self::InsufficientSpace {
       requested,
       available,
@@ -80,7 +80,7 @@ impl Error {
       rarena_allocator::Error::InsufficientSpace {
         requested,
         available,
-      } => Self::insufficient_space(requested, available),
+      } => Self::insufficient_space(requested as u64, available),
       _ => unreachable!(),
     }
   }

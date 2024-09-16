@@ -9,7 +9,6 @@ impl<C, S> OrderWalReader<C, S> {
   pub(super) fn new(wal: Arc<OrderWalCore<C, S>>) -> Self {
     Self(OrderWal {
       core: wal.clone(),
-      ro: true,
       _s: PhantomData,
     })
   }
@@ -20,10 +19,14 @@ impl<C: Send + 'static, S> Constructor<C, S> for OrderWalReader<C, S> {
 
   type Core = OrderWalCore<C, S>;
 
-  fn from_core(core: Self::Core, _ro: bool) -> Self {
+  #[inline]
+  fn allocator(&self) -> &Self::Allocator {
+    self.0.allocator()
+  }
+
+  fn from_core(core: Self::Core) -> Self {
     Self(OrderWal {
       core: Arc::new(core),
-      ro: true,
       _s: PhantomData,
     })
   }
@@ -59,11 +62,6 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
         C: Comparator;
 
   #[inline]
-  unsafe fn reserved_slice(&self) -> &[u8] {
-    self.0.reserved_slice()
-  }
-
-  #[inline]
   fn path(&self) -> Option<&std::path::Path> {
     self.0.path()
   }
@@ -74,13 +72,8 @@ impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
   }
 
   #[inline]
-  fn maximum_key_size(&self) -> u32 {
-    self.0.maximum_key_size()
-  }
-
-  #[inline]
-  fn maximum_value_size(&self) -> u32 {
-    self.0.maximum_value_size()
+  fn options(&self) -> &Options {
+    ImmutableWal::options(&self.0)
   }
 
   #[inline]

@@ -1,10 +1,30 @@
-use core::cmp;
+use core::{cmp, hash::Hash};
 
 use among::Among;
-use crossbeam_skiplist::Comparable;
+use crossbeam_skiplist::{Comparable, Equivalent};
 
-mod impls;
-pub use impls::*;
+mod type_impls;
+pub use type_impls::*;
+
+mod container_impls;
+pub use container_impls::*;
+
+/// The container for entries in the [`GenericBatch`].
+pub trait GenericBatch {
+  /// The key type.
+  type Key;
+
+  /// The value type.
+  type Value;
+
+  /// The iterator type.
+  type Iter<'a>: Iterator<Item = (&'a Self::Key, &'a Self::Value)>
+  where
+    Self: 'a;
+
+  /// Returns an iterator over the keys and values.
+  fn iter(&self) -> Self::Iter<'_>;
+}
 
 /// The type trait for limiting the types that can be used as keys and values in the [`GenericOrderWal`].
 ///
@@ -22,6 +42,21 @@ pub trait Type {
 
   /// Encodes the type into a binary slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error>;
+}
+
+impl<T: Type> Type for &T {
+  type Ref<'a> = T::Ref<'a>;
+  type Error = T::Error;
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    T::encoded_len(*self)
+  }
+
+  #[inline]
+  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    T::encode(*self, buf)
+  }
 }
 
 pub(super) trait InsertAmongExt<T: Type> {
@@ -56,7 +91,10 @@ impl<T: Type> InsertAmongExt<T> for Among<T, &T, &[u8]> {
 pub trait TypeRef<'a> {
   /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
   /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
-  fn from_slice(src: &'a [u8]) -> Self;
+  ///
+  /// # Safety
+  /// - the `src` must the same as the one returned by [`encode`](Type::encode).
+  unsafe fn from_slice(src: &'a [u8]) -> Self;
 }
 
 /// The key reference trait for comparing `K` in the [`GenericOrderWal`].
