@@ -174,3 +174,151 @@ where
     self.as_key_slice().borrow()
   }
 }
+
+/// An entry in the write-ahead log.
+pub struct Entry<K, V, C> {
+  key: K,
+  value: V,
+  pointer: Option<Pointer<C>>,
+}
+
+impl<K, V, C> Entry<K, V, C> {
+  /// Creates a new entry.
+  #[inline]
+  pub const fn new(key: K, value: V) -> Self {
+    Self {
+      key,
+      value,
+      pointer: None,
+    }
+  }
+
+  /// Returns the key.
+  #[inline]
+  pub const fn key(&self) -> &K {
+    &self.key
+  }
+
+  /// Returns the value.
+  #[inline]
+  pub const fn value(&self) -> &V {
+    &self.value
+  }
+
+  /// Consumes the entry and returns the key and value.
+  #[inline]
+  pub fn into_components(self) -> (K, V) {
+    (self.key, self.value)
+  }
+}
+
+/// An entry in the write-ahead log.
+pub struct EntryWithKeyBuilder<KB, V, C> {
+  kb: KeyBuilder<KB>,
+  value: V,
+  pointer: Option<Pointer<C>>,
+}
+
+impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
+  /// Creates a new entry.
+  #[inline]
+  pub const fn new(kb: KeyBuilder<KB>, value: V) -> Self {
+    Self {
+      kb,
+      value,
+      pointer: None,
+    }
+  }
+
+  /// Returns the key.
+  #[inline]
+  pub const fn key_builder(&self) -> &KeyBuilder<KB> {
+    &self.kb
+  }
+
+  /// Returns the value.
+  #[inline]
+  pub const fn value(&self) -> &V {
+    &self.value
+  }
+
+  /// Consumes the entry and returns the key and value.
+  #[inline]
+  pub fn into_components(self) -> (KeyBuilder<KB>, V) {
+    (self.kb, self.value)
+  }
+}
+
+/// An entry in the write-ahead log.
+pub struct EntryWithValueBuilder<K, VB, C> {
+  key: K,
+  vb: ValueBuilder<VB>,
+  pointer: Option<Pointer<C>>,
+}
+
+impl<K, VB, C> EntryWithValueBuilder<K, VB, C> {
+  /// Creates a new entry.
+  #[inline]
+  pub const fn new(key: K, vb: ValueBuilder<VB>) -> Self {
+    Self {
+      key,
+      vb,
+      pointer: None,
+    }
+  }
+
+  /// Returns the key.
+  #[inline]
+  pub const fn value_builder(&self) -> &ValueBuilder<VB> {
+    &self.vb
+  }
+
+  /// Returns the value.
+  #[inline]
+  pub const fn key(&self) -> &K {
+    &self.key
+  }
+
+  /// Consumes the entry and returns the key and value.
+  #[inline]
+  pub fn into_components(self) -> (K, ValueBuilder<VB>) {
+    (self.key, self.vb)
+  }
+}
+
+/// An entry in the write-ahead log.
+pub struct EntryWithBuilders<KB, VB, C> {
+  kb: KeyBuilder<KB>,
+  vb: ValueBuilder<VB>,
+  pointer: Option<Pointer<C>>,
+}
+
+impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
+  /// Creates a new entry.
+  #[inline]
+  pub const fn new(kb: KeyBuilder<KB>, vb: ValueBuilder<VB>) -> Self {
+    Self {
+      kb,
+      vb,
+      pointer: None,
+    }
+  }
+
+  /// Returns the key.
+  #[inline]
+  pub const fn value_builder(&self) -> &ValueBuilder<VB> {
+    &self.vb
+  }
+
+  /// Returns the value.
+  #[inline]
+  pub const fn key_builder(&self) -> &KeyBuilder<KB> {
+    &self.kb
+  }
+
+  /// Consumes the entry and returns the key and value.
+  #[inline]
+  pub fn into_components(self) -> (KeyBuilder<KB>, ValueBuilder<VB>) {
+    (self.kb, self.vb)
+  }
+}

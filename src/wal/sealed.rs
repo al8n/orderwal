@@ -40,6 +40,70 @@ pub trait Sealed<C, S>: Constructor<C, S> {
   where
     C: Comparator;
 
+  fn insert_pointers(&self, ptrs: impl Iterator<Item = Pointer<C>>)
+  where
+    C: Comparator;
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_in<B: Batch<Comparator = C>>(&mut self, batch: &mut B) -> Result<(), Error>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    let batch_encoded_size = batch.iter_mut().fold(0u64, |acc, ent| {
+      acc + ent.key.borrow().len() as u64 + ent.value.borrow().len() as u64
+    });
+    let total_size = STATUS_SIZE as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+    if total_size > self.options().capacity() as u64 {
+      return Err(Error::insufficient_space(
+        total_size,
+        self.allocator().remaining() as u32,
+      ));
+    }
+
+    let allocator = self.allocator();
+
+    let mut buf = allocator
+      .alloc_bytes(total_size as u32)
+      .map_err(Error::from_insufficient_space)?;
+
+    unsafe {
+      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
+      let mut cks = self.hasher().build_checksumer();
+      let flag = Flags::BATCHING;
+      buf.put_u8_unchecked(flag.bits);
+      let cmp = self.comparator();
+      let mut cursor = 1;
+      batch.iter_mut().for_each(|ent| {
+        let ptr = buf.as_ptr().add(cursor as usize);
+        let key = ent.key.borrow();
+        let value = ent.value.borrow();
+        let klen = key.len();
+        let vlen = value.len();
+        cursor += klen as u64;
+        buf.put_slice_unchecked(key);
+        cursor += vlen as u64;
+        buf.put_slice_unchecked(value);
+
+        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
+      });
+
+      cks.update(&[committed_flag.bits]);
+      cks.update(&buf[1..]);
+      buf.put_u64_le_unchecked(cks.digest());
+
+      // commit the entry
+      buf[0] = committed_flag.bits;
+      let buf_cap = buf.capacity();
+
+      if self.options().sync_on_write() && allocator.is_ondisk() {
+        allocator.flush_range(buf.offset(), buf_cap)?;
+      }
+      buf.detach();
+      Ok(())
+    }
+  }
+
   fn insert_with_in<KE, VE>(
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,

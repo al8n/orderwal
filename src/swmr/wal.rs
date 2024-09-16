@@ -137,6 +137,15 @@ where
   {
     self.core.map.insert(ptr);
   }
+
+  fn insert_pointers(&self, ptrs: impl Iterator<Item = Pointer<C>>)
+  where
+    C: Comparator,
+  {
+    for ptr in ptrs {
+      self.core.map.insert(ptr);
+    }
+  }
 }
 
 impl<C, S> OrderWal<C, S> {

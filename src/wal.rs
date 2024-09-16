@@ -4,23 +4,190 @@ use super::*;
 
 mod builder;
 pub use builder::*;
-use sealed::Base;
-
-mod impls;
 
 pub(crate) mod sealed;
 
 /// A batch of keys and values that can be inserted into the [`Wal`].
 pub trait Batch {
+  /// The key type.
+  type Key: Borrow<[u8]>;
+
+  /// The value type.
+  type Value: Borrow<[u8]>;
+
+  /// The [`Comparator`] type.
+  type Comparator: Comparator;
+
   /// The iterator type.
-  type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])>
+  type IterMut<'a>: Iterator<Item = &'a mut Entry<Self::Key, Self::Value, Self::Comparator>>
   where
     Self: 'a;
 
   /// Returns an iterator over the keys and values.
-  fn iter(&self) -> Self::Iter<'_>;
+  fn iter_mut(&mut self) -> Self::IterMut<'_>;
 }
 
+impl<K, V, C, T> Batch for T
+where
+  K: Borrow<[u8]>,
+  V: Borrow<[u8]>,
+  C: Comparator,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut Entry<K, V, C>>,
+{
+  type Key = K;
+  type Value = V;
+  type Comparator = C;
+
+  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+
+  fn iter_mut(&mut self) -> Self::IterMut<'_> {
+    IntoIterator::into_iter(self)
+  }
+}
+
+/// A batch of keys and values that can be inserted into the [`Wal`].
+/// Comparing to [`Batch`], this trait is used to build
+/// the key in place.
+pub trait BatchWithKeyBuilder {
+  /// The key builder type.
+  type KeyBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
+
+  /// The error for the key builder.
+  type Error;
+
+  /// The value type.
+  type Value: Borrow<[u8]>;
+
+  /// The [`Comparator`] type.
+  type Comparator: Comparator;
+
+  /// The iterator type.
+  type IterMut<'a>: Iterator<
+    Item = &'a mut EntryWithKeyBuilder<Self::KeyBuilder, Self::Value, Self::Comparator>,
+  >
+  where
+    Self: 'a;
+
+  /// Returns an iterator over the keys and values.
+  fn iter_mut(&mut self) -> Self::IterMut<'_>;
+}
+
+impl<KB, E, V, C, T> BatchWithKeyBuilder for T
+where
+  KB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>,
+  V: Borrow<[u8]>,
+  C: Comparator,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithKeyBuilder<KB, V, C>>,
+{
+  type KeyBuilder = KB;
+  type Error = E;
+  type Value = V;
+  type Comparator = C;
+
+  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+
+  fn iter_mut(&mut self) -> Self::IterMut<'_> {
+    IntoIterator::into_iter(self)
+  }
+}
+
+/// A batch of keys and values that can be inserted into the [`Wal`].
+/// Comparing to [`Batch`], this trait is used to build
+/// the value in place.
+pub trait BatchWithValueBuilder {
+  /// The value builder type.
+  type ValueBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
+
+  /// The error for the value builder.
+  type Error;
+
+  /// The key type.
+  type Key: Borrow<[u8]>;
+
+  /// The [`Comparator`] type.
+  type Comparator: Comparator;
+
+  /// The iterator type.
+  type IterMut<'a>: Iterator<
+    Item = &'a mut EntryWithValueBuilder<Self::Key, Self::ValueBuilder, Self::Comparator>,
+  >
+  where
+    Self: 'a;
+
+  /// Returns an iterator over the keys and values.
+  fn iter_mut(&mut self) -> Self::IterMut<'_>;
+}
+
+impl<K, VB, E, C, T> BatchWithValueBuilder for T
+where
+  VB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>,
+  K: Borrow<[u8]>,
+  C: Comparator,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithValueBuilder<K, VB, C>>,
+{
+  type Key = K;
+  type Error = E;
+  type ValueBuilder = VB;
+  type Comparator = C;
+
+  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+
+  fn iter_mut(&mut self) -> Self::IterMut<'_> {
+    IntoIterator::into_iter(self)
+  }
+}
+
+/// A batch of keys and values that can be inserted into the [`Wal`].
+/// Comparing to [`Batch`], this trait is used to build
+/// the key and value in place.
+pub trait BatchWithBuilders {
+  /// The value builder type.
+  type ValueBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::ValueError>;
+
+  /// The error for the value builder.
+  type ValueError;
+
+  /// The value builder type.
+  type KeyBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::KeyError>;
+
+  /// The error for the value builder.
+  type KeyError;
+
+  /// The [`Comparator`] type.
+  type Comparator: Comparator;
+
+  /// The iterator type.
+  type IterMut<'a>: Iterator<
+    Item = &'a mut EntryWithBuilders<Self::KeyBuilder, Self::ValueBuilder, Self::Comparator>,
+  >
+  where
+    Self: 'a;
+
+  /// Returns an iterator over the keys and values.
+  fn iter_mut(&mut self) -> Self::IterMut<'_>;
+}
+
+impl<KB, KE, VB, VE, C, T> BatchWithBuilders for T
+where
+  VB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>,
+  KB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>,
+  C: Comparator,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithBuilders<KB, VB, C>>,
+{
+  type KeyBuilder = KB;
+  type KeyError = KE;
+  type ValueBuilder = VB;
+  type ValueError = VE;
+  type Comparator = C;
+
+  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+
+  fn iter_mut(&mut self) -> Self::IterMut<'_> {
+    IntoIterator::into_iter(self)
+  }
+}
+
+/// An abstract layer for the immutable write-ahead log.
 pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// The iterator type.
   type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])> + DoubleEndedIterator
@@ -521,34 +688,14 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
-  fn insert_batch<B: Batch>(&mut self, batch: &B) -> Result<(), Error>
+  fn insert_batch<B: Batch<Comparator = C>>(&mut self, batch: &mut B) -> Result<(), Error>
   where
+    C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
-    let batch_encoded_size = batch
-      .iter()
-      .fold(0u64, |acc, (k, v)| acc + k.len() as u64 + v.len() as u64);
-    let total_size = STATUS_SIZE as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
-    if total_size > <Self as ImmutableWal<_, _>>::capacity(self) as u64 {
-      return Err(Error::insufficient_space(
-        total_size,
-        <Self as ImmutableWal<_, _>>::remaining(self),
-      ));
-    }
-
-    let allocator = self.allocator();
-
-    let mut buf = allocator
-      .alloc_bytes(total_size as u32)
-      .map_err(Error::from_insufficient_space)?;
-
-    unsafe {
-      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
-      let cks = self.hasher().build_checksumer();
-      let flag = Flags::BATCHING;
-      buf.put_u8_unchecked(flag.bits);
-    }
-    todo!()
+    self
+      .insert_batch_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
   }
 
   /// Inserts a key-value pair into the WAL.

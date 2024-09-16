@@ -125,6 +125,16 @@ where
       (*self.core.get()).map.insert(ptr);
     }
   }
+
+  #[inline]
+  fn insert_pointers(&self, ptrs: impl Iterator<Item = Pointer<C>>)
+  where
+    C: Comparator,
+  {
+    unsafe {
+      (*self.core.get()).map.extend(ptrs);
+    }
+  }
 }
 
 impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
