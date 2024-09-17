@@ -573,7 +573,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .get_or_insert_with_value_builder::<()>(
         key,
-        ValueBuilder::new(value.len() as u32, |buf| {
+        ValueBuilder::once(value.len() as u32, |buf| {
           buf.put_slice(value).unwrap();
           Ok(())
         }),
@@ -617,7 +617,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in::<E, ()>(
         kb,
-        ValueBuilder::new(value.len() as u32, |buf| {
+        ValueBuilder::once(value.len() as u32, |buf| {
           buf.put_slice(value).unwrap();
           Ok(())
         }),
@@ -651,7 +651,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
 
     self
       .insert_with_in::<(), E>(
-        KeyBuilder::new(key.len() as u32, |buf| {
+        KeyBuilder::once(key.len() as u32, |buf| {
           buf.put_slice(key).unwrap();
           Ok(())
         }),
@@ -696,6 +696,10 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    if self.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
     self
       .insert_batch_with_key_builder_in(batch)
       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
@@ -710,6 +714,10 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    if self.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
     self
       .insert_batch_with_value_builder_in(batch)
       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
@@ -724,6 +732,10 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    if self.read_only() {
+      return Err(Among::Right(Error::read_only()));
+    }
+
     self
       .insert_batch_with_builders_in(batch)
       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
@@ -735,6 +747,10 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    if self.read_only() {
+      return Err(Error::read_only());
+    }
+
     self
       .insert_batch_in(batch)
       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
@@ -756,11 +772,11 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
 
     self
       .insert_with_in::<(), ()>(
-        KeyBuilder::new(key.len() as u32, |buf| {
+        KeyBuilder::once(key.len() as u32, |buf: &mut VacantBuffer<'_>| {
           buf.put_slice(key).unwrap();
           Ok(())
         }),
-        ValueBuilder::new(value.len() as u32, |buf| {
+        ValueBuilder::once(value.len() as u32, |buf: &mut VacantBuffer<'_>| {
           buf.put_slice(value).unwrap();
           Ok(())
         }),

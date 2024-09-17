@@ -43,24 +43,25 @@ const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 
-#[cfg(all(
-  test,
-  any(
-    all_tests,
-    test_unsync_constructor,
-    test_unsync_insert,
-    test_unsync_get,
-    test_unsync_iters,
-    test_swmr_constructor,
-    test_swmr_insert,
-    test_swmr_get,
-    test_swmr_iters,
-    test_swmr_generic_constructor,
-    test_swmr_generic_insert,
-    test_swmr_generic_get,
-    test_swmr_generic_iters,
-  )
-))]
+// #[cfg(all(
+//   test,
+//   any(
+//     all_tests,
+//     test_unsync_constructor,
+//     test_unsync_insert,
+//     test_unsync_get,
+//     test_unsync_iters,
+//     test_swmr_constructor,
+//     test_swmr_insert,
+//     test_swmr_get,
+//     test_swmr_iters,
+//     test_swmr_generic_constructor,
+//     test_swmr_generic_insert,
+//     test_swmr_generic_get,
+//     test_swmr_generic_iters,
+//   )
+// ))]
+#[cfg(test)]
 #[macro_use]
 mod tests;
 
@@ -76,7 +77,7 @@ use utils::*;
 
 mod wal;
 pub use wal::{
-  Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal,
+  Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, Builder, ImmutableWal, Wal,
 };
 
 mod options;

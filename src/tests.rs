@@ -669,7 +669,7 @@ pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..100u32 {
     wal
       .insert_with_key_builder::<()>(
-        KeyBuilder::<_>::new(4, |buf| {
+        KeyBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -693,7 +693,7 @@ pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
     wal
       .insert_with_value_builder::<()>(
         &i.to_be_bytes(),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -715,11 +715,11 @@ pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..100u32 {
     wal
       .insert_with_builders::<(), ()>(
-        KeyBuilder::<_>::new(4, |buf| {
+        KeyBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -1023,7 +1023,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
     wal
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -1035,13 +1035,98 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
     wal
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i * 2);
           Ok(())
         }),
       )
       .unwrap();
   }
+
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  let mut batch = vec![];
+
+  for i in 0..100u32 {
+    batch.push(Entry::new(i.to_be_bytes(), i.to_be_bytes()));
+  }
+
+  wal.insert_batch(&mut batch).unwrap();
+
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  let mut batch = vec![];
+
+  for i in 0..100u32 {
+    batch.push(EntryWithKeyBuilder::new(
+      KeyBuilder::new(4, move |buf| buf.put_u32_le(i)),
+      i.to_be_bytes(),
+    ));
+  }
+
+  wal.insert_batch_with_key_builder(&mut batch).unwrap();
+
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  let mut batch = vec![];
+
+  for i in 0..100u32 {
+    batch.push(EntryWithValueBuilder::new(
+      i.to_be_bytes(),
+      ValueBuilder::new(4, move |buf| buf.put_u32_le(i)),
+    ));
+  }
+
+  wal.insert_batch_with_value_builder(&mut batch).unwrap();
+
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  let mut batch = vec![];
+
+  for i in 0..100u32 {
+    batch.push(EntryWithBuilders::new(
+      KeyBuilder::new(4, move |buf| buf.put_u32_le(i)),
+      ValueBuilder::new(4, move |buf| buf.put_u32_le(i)),
+    ));
+  }
+
+  wal.insert_batch_with_builders(&mut batch).unwrap();
 
   for i in 0..100u32 {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());

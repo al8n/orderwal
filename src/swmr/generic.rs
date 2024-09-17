@@ -428,11 +428,11 @@ where
         let header = arena.get_u8(cursor).unwrap();
         let flag = Flags::from_bits_unchecked(header);
 
-        let (kvsize, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|_e| {
+        let (kvsize, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
           #[cfg(feature = "tracing")]
-          tracing::error!(err=%_e);
+          tracing::error!(err=%e);
 
-          Error::corrupted()
+          Error::corrupted(e)
         })?;
         let (key_len, value_len) = split_lengths(encoded_len);
         let key_len = key_len as usize;
@@ -452,7 +452,7 @@ where
         let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
 
         if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
-          return Err(Error::corrupted());
+          return Err(Error::corrupted("checksum mismatch"));
         }
 
         // If the entry is not committed, we should not rewind

@@ -14,9 +14,18 @@ macro_rules! builder {
         impl<F> [< $name Builder >]<F> {
           #[doc = "Creates a new `" [<$name Builder>] "` with the given size and builder closure."]
           #[inline]
-          pub const fn new<E>(size: $size, f: F) -> Self
+          pub const fn once<E>(size: $size, f: F) -> Self
           where
             F: for<'a> FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+          {
+            Self { size, f }
+          }
+
+          #[doc = "Creates a new `" [<$name Builder>] "` with the given size and builder closure."]
+          #[inline]
+          pub const fn new<E>(size: $size, f: F) -> Self
+          where
+            F: for<'a> Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
           {
             Self { size, f }
           }
