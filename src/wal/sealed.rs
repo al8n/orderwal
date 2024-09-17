@@ -44,7 +44,211 @@ pub trait Sealed<C, S>: Constructor<C, S> {
   where
     C: Comparator;
 
-  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_key_builder_in<B: BatchWithKeyBuilder<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    let batch_encoded_size = batch.iter_mut().fold(0u64, |acc, ent| {
+      acc + ent.kb.size() as u64 + ent.value.borrow().len() as u64
+    });
+    let total_size = STATUS_SIZE as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+    if total_size > self.options().capacity() as u64 {
+      return Err(Either::Right(Error::insufficient_space(
+        total_size,
+        self.allocator().remaining() as u32,
+      )));
+    }
+
+    let allocator = self.allocator();
+
+    let mut buf = allocator
+      .alloc_bytes(total_size as u32)
+      .map_err(|e| Either::Right(Error::from_insufficient_space(e)))?;
+
+    unsafe {
+      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
+      let mut cks = self.hasher().build_checksumer();
+      let flag = Flags::BATCHING;
+      buf.put_u8_unchecked(flag.bits);
+      let cmp = self.comparator();
+      let mut cursor = 1;
+
+      for ent in batch.iter_mut() {
+        let ptr = buf.as_mut_ptr().add(cursor as usize);
+        let klen = ent.kb.size() as usize;
+        buf.set_len(cursor as usize + klen);
+        let f = ent.kb.builder();
+        f(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr))).map_err(Either::Left)?;
+        let value = ent.value.borrow();
+        let vlen = value.len();
+        cursor += klen as u64;
+        cursor += vlen as u64;
+        buf.put_slice_unchecked(value);
+
+        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
+      }
+
+      cks.update(&[committed_flag.bits]);
+      cks.update(&buf[1..]);
+      buf.put_u64_le_unchecked(cks.digest());
+
+      // commit the entry
+      buf[0] = committed_flag.bits;
+      let buf_cap = buf.capacity();
+
+      if self.options().sync_on_write() && allocator.is_ondisk() {
+        allocator
+          .flush_range(buf.offset(), buf_cap)
+          .map_err(|e| Either::Right(e.into()))?;
+      }
+      buf.detach();
+      Ok(())
+    }
+  }
+
+  fn insert_batch_with_value_builder_in<B: BatchWithValueBuilder<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    let batch_encoded_size = batch.iter_mut().fold(0u64, |acc, ent| {
+      acc + ent.key.borrow().len() as u64 + ent.vb.size() as u64
+    });
+    let total_size = STATUS_SIZE as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+    if total_size > self.options().capacity() as u64 {
+      return Err(Either::Right(Error::insufficient_space(
+        total_size,
+        self.allocator().remaining() as u32,
+      )));
+    }
+
+    let allocator = self.allocator();
+
+    let mut buf = allocator
+      .alloc_bytes(total_size as u32)
+      .map_err(|e| Either::Right(Error::from_insufficient_space(e)))?;
+
+    unsafe {
+      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
+      let mut cks = self.hasher().build_checksumer();
+      let flag = Flags::BATCHING;
+      buf.put_u8_unchecked(flag.bits);
+      let cmp = self.comparator();
+      let mut cursor = 1;
+
+      for ent in batch.iter_mut() {
+        let ptr = buf.as_mut_ptr().add(cursor as usize);
+        let key = ent.key.borrow();
+        let klen = key.len();
+        let vlen = ent.vb.size() as usize;
+        cursor += klen as u64;
+        buf.put_slice_unchecked(key);
+        buf.set_len(cursor as usize + vlen);
+        let f = ent.vb.builder();
+        f(&mut VacantBuffer::new(
+          klen,
+          NonNull::new_unchecked(ptr.add(klen)),
+        ))
+        .map_err(Either::Left)?;
+        cursor += vlen as u64;
+        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
+      }
+
+      cks.update(&[committed_flag.bits]);
+      cks.update(&buf[1..]);
+      buf.put_u64_le_unchecked(cks.digest());
+
+      // commit the entry
+      buf[0] = committed_flag.bits;
+      let buf_cap = buf.capacity();
+
+      if self.options().sync_on_write() && allocator.is_ondisk() {
+        allocator
+          .flush_range(buf.offset(), buf_cap)
+          .map_err(|e| Either::Right(e.into()))?;
+      }
+      buf.detach();
+      Ok(())
+    }
+  }
+
+  fn insert_batch_with_builders_in<B: BatchWithBuilders<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    let batch_encoded_size = batch.iter_mut().fold(0u64, |acc, ent| {
+      acc + ent.kb.size() as u64 + ent.vb.size() as u64
+    });
+    let total_size = STATUS_SIZE as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+    if total_size > self.options().capacity() as u64 {
+      return Err(Among::Right(Error::insufficient_space(
+        total_size,
+        self.allocator().remaining() as u32,
+      )));
+    }
+
+    let allocator = self.allocator();
+
+    let mut buf = allocator
+      .alloc_bytes(total_size as u32)
+      .map_err(|e| Either::Right(Error::from_insufficient_space(e)))?;
+
+    unsafe {
+      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
+      let mut cks = self.hasher().build_checksumer();
+      let flag = Flags::BATCHING;
+      buf.put_u8_unchecked(flag.bits);
+      let cmp = self.comparator();
+      let mut cursor = 1;
+
+      for ent in batch.iter_mut() {
+        let ptr = buf.as_mut_ptr().add(cursor as usize);
+        let klen = ent.kb.size() as usize;
+        buf.set_len(cursor as usize + klen);
+        let f = ent.kb.builder();
+        f(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr))).map_err(Among::Left)?;
+        let vlen = ent.vb.size() as usize;
+        cursor += klen as u64;
+        buf.set_len(cursor as usize + vlen);
+        let f = ent.vb.builder();
+        f(&mut VacantBuffer::new(
+          klen,
+          NonNull::new_unchecked(ptr.add(klen)),
+        ))
+        .map_err(Among::Middle)?;
+        cursor += vlen as u64;
+        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
+      }
+
+      cks.update(&[committed_flag.bits]);
+      cks.update(&buf[1..]);
+      buf.put_u64_le_unchecked(cks.digest());
+
+      // commit the entry
+      buf[0] = committed_flag.bits;
+      let buf_cap = buf.capacity();
+
+      if self.options().sync_on_write() && allocator.is_ondisk() {
+        allocator
+          .flush_range(buf.offset(), buf_cap)
+          .map_err(|e| Among::Right(e.into()))?;
+      }
+      buf.detach();
+      Ok(())
+    }
+  }
+
   fn insert_batch_in<B: Batch<Comparator = C>>(&mut self, batch: &mut B) -> Result<(), Error>
   where
     C: Comparator + CheapClone,

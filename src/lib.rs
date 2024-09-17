@@ -75,7 +75,9 @@ pub mod utils;
 use utils::*;
 
 mod wal;
-pub use wal::{Builder, Wal};
+pub use wal::{
+  Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal,
+};
 
 mod options;
 pub use options::Options;
@@ -304,13 +306,13 @@ impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
     }
   }
 
-  /// Returns the key.
+  /// Returns the value builder.
   #[inline]
   pub const fn value_builder(&self) -> &ValueBuilder<VB> {
     &self.vb
   }
 
-  /// Returns the value.
+  /// Returns the key builder.
   #[inline]
   pub const fn key_builder(&self) -> &KeyBuilder<KB> {
     &self.kb

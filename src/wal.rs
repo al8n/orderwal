@@ -50,7 +50,7 @@ where
 /// the key in place.
 pub trait BatchWithKeyBuilder {
   /// The key builder type.
-  type KeyBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
+  type KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
 
   /// The error for the key builder.
   type Error;
@@ -74,7 +74,7 @@ pub trait BatchWithKeyBuilder {
 
 impl<KB, E, V, C, T> BatchWithKeyBuilder for T
 where
-  KB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>,
+  KB: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
   V: Borrow<[u8]>,
   C: Comparator,
   for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithKeyBuilder<KB, V, C>>,
@@ -96,7 +96,7 @@ where
 /// the value in place.
 pub trait BatchWithValueBuilder {
   /// The value builder type.
-  type ValueBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
+  type ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
 
   /// The error for the value builder.
   type Error;
@@ -120,7 +120,7 @@ pub trait BatchWithValueBuilder {
 
 impl<K, VB, E, C, T> BatchWithValueBuilder for T
 where
-  VB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>,
+  VB: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
   K: Borrow<[u8]>,
   C: Comparator,
   for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithValueBuilder<K, VB, C>>,
@@ -142,13 +142,13 @@ where
 /// the key and value in place.
 pub trait BatchWithBuilders {
   /// The value builder type.
-  type ValueBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::ValueError>;
+  type ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::ValueError>;
 
   /// The error for the value builder.
   type ValueError;
 
   /// The value builder type.
-  type KeyBuilder: FnOnce(&mut VacantBuffer<'_>) -> Result<(), Self::KeyError>;
+  type KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::KeyError>;
 
   /// The error for the value builder.
   type KeyError;
@@ -169,8 +169,8 @@ pub trait BatchWithBuilders {
 
 impl<KB, KE, VB, VE, C, T> BatchWithBuilders for T
 where
-  VB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>,
-  KB: FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>,
+  VB: Fn(&mut VacantBuffer<'_>) -> Result<(), VE>,
+  KB: Fn(&mut VacantBuffer<'_>) -> Result<(), KE>,
   C: Comparator,
   for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithBuilders<KB, VB, C>>,
 {
@@ -685,6 +685,48 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in(kb, vb)
       .map(|ptr| self.insert_pointer(ptr))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_key_builder<B: BatchWithKeyBuilder<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    self
+      .insert_batch_with_key_builder_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_value_builder<B: BatchWithValueBuilder<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    self
+      .insert_batch_with_value_builder_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_builders<B: BatchWithBuilders<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    self
+      .insert_batch_with_builders_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
