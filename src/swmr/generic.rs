@@ -1414,7 +1414,7 @@ where
   /// }
   ///
   /// impl<'a> TypeRef<'a> for PersonRef<'a> {
-  ///   fn from_slice(src: &'a [u8]) -> Self {
+  ///   unsafe fn from_slice(src: &'a [u8]) -> Self {
   ///     let (id_size, id) = decode_u64_varint(src).unwrap();
   ///     let name = std::str::from_utf8(&src[id_size..]).unwrap();
   ///     PersonRef { id, name }
