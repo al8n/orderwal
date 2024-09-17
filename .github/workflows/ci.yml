@@ -240,10 +240,12 @@ jobs:
           - unsync_iters
           - unsync_get
           - unsync_constructor
+          - unsync_insert_batch
           - swmr_insert
           - swmr_iters
           - swmr_get
           - swmr_constructor
+          - swmr_insert_batch
           - swmr_generic_insert
           - swmr_generic_iters
           - swmr_generic_get

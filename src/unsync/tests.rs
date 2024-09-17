@@ -16,4 +16,7 @@ mod iter;
 #[cfg(all(test, any(test_unsync_get, all_tests)))]
 mod get;
 
+#[cfg(all(test, any(test_unsync_insert_batch, all_tests)))]
+mod insert_batch;
+
 const MB: u32 = 1024 * 1024;

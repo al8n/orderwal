@@ -24,6 +24,7 @@ use c::*;
     all_tests,
     test_unsync_constructor,
     test_unsync_insert,
+    test_unsync_insert_batch,
     test_unsync_get,
     test_unsync_iters,
   )

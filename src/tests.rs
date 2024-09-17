@@ -145,6 +145,169 @@ macro_rules! common_unittests {
       }
     }
   };
+  ($prefix:ident::insert_batch::$wal:ident) => {
+    paste::paste! {
+      #[test]
+      fn test_insert_batch_inmemory() {
+        insert_batch(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_map_anon() {
+        insert_batch(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_map_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_map_file"
+        ));
+        let mut map = unsafe {
+          OrderWal::map_mut(
+            &path,
+            Builder::new(),
+            OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        insert_batch(&mut map);
+
+        let map = unsafe { OrderWal::map(&path, Builder::new()).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+
+      #[test]
+      fn test_insert_batch_with_key_builder_inmemory() {
+        insert_batch(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_with_key_builder_map_anon() {
+        insert_batch(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_with_key_builder_map_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_with_key_builder_map_file"
+        ));
+        let mut map = unsafe {
+          OrderWal::map_mut(
+            &path,
+            Builder::new(),
+            OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        insert_batch_with_key_builder(&mut map);
+
+        let map = unsafe { OrderWal::map(&path, Builder::new()).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+
+      #[test]
+      fn test_insert_batch_with_value_builder_inmemory() {
+        insert_batch(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_with_value_builder_map_anon() {
+        insert_batch(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_with_value_builder_map_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_with_value_builder_map_file"
+        ));
+        let mut map = unsafe {
+          OrderWal::map_mut(
+            &path,
+            Builder::new(),
+            OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        insert_batch_with_value_builder(&mut map);
+
+        let map = unsafe { OrderWal::map(&path, Builder::new()).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+
+      #[test]
+      fn test_insert_batch_with_builders_inmemory() {
+        insert_batch_with_builders(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_with_builders_map_anon() {
+        insert_batch_with_builders(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_with_builders_map_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_with_builders_map_file"
+        ));
+        let mut map = unsafe {
+          OrderWal::map_mut(
+            &path,
+            Builder::new(),
+            OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        insert_batch_with_builders(&mut map);
+
+        let map = unsafe { OrderWal::map(&path, Builder::new()).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+    }
+  };
   ($prefix:ident::iters::$wal:ident) => {
     paste::paste! {
       #[test]
@@ -1054,86 +1217,93 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
 }
 
 pub(crate) fn insert_batch<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
   let mut batch = vec![];
 
-  for i in 0..100u32 {
+  for i in 0..N {
     batch.push(Entry::new(i.to_be_bytes(), i.to_be_bytes()));
   }
 
   wal.insert_batch(&mut batch).unwrap();
 
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 
   let wal = wal.reader();
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn insert_batch_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
   let mut batch = vec![];
 
-  for i in 0..100u32 {
+  for i in 0..N {
     batch.push(EntryWithKeyBuilder::new(
-      KeyBuilder::new(4, move |buf| buf.put_u32_le(i)),
+      KeyBuilder::new(4, move |buf| buf.put_u32_be(i)),
       i.to_be_bytes(),
     ));
   }
 
   wal.insert_batch_with_key_builder(&mut batch).unwrap();
 
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 
   let wal = wal.reader();
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn insert_batch_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
-  let mut batch = vec![];
+  const N: u32 = 100;
 
-  for i in 0..100u32 {
+  let mut batch = vec![];
+  for i in 0..N {
     batch.push(EntryWithValueBuilder::new(
       i.to_be_bytes(),
-      ValueBuilder::new(4, move |buf| buf.put_u32_le(i)),
+      ValueBuilder::new(4, move |buf| buf.put_u32_be(i)),
     ));
   }
 
   wal.insert_batch_with_value_builder(&mut batch).unwrap();
 
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 
   let wal = wal.reader();
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }
 
 pub(crate) fn insert_batch_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
   let mut batch = vec![];
 
-  for i in 0..100u32 {
+  for i in 0..N {
     batch.push(EntryWithBuilders::new(
-      KeyBuilder::new(4, move |buf| buf.put_u32_le(i)),
-      ValueBuilder::new(4, move |buf| buf.put_u32_le(i)),
+      KeyBuilder::new(4, move |buf| buf.put_u32_be(i)),
+      ValueBuilder::new(4, move |buf| buf.put_u32_be(i)),
     ));
   }
 
   wal.insert_batch_with_builders(&mut batch).unwrap();
 
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 
   let wal = wal.reader();
-  for i in 0..100u32 {
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }

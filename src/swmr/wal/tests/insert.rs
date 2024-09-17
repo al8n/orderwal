@@ -1,3 +1,3 @@
 use super::*;
 
-common_unittests!(unsync::insert::OrderWal);
+common_unittests!(swmr::insert::OrderWal);
