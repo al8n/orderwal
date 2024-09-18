@@ -63,7 +63,6 @@ const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
     test_swmr_generic_iters,
   )
 ))]
-#[cfg(test)]
 #[macro_use]
 mod tests;
 

@@ -360,24 +360,6 @@ impl<K, V, S> GenericOrderWalCore<K, V, S> {
     self.map.is_empty()
   }
 
-  // #[inline]
-  // fn new(arena: Arena, magic_version: u16, flush: bool, reserved: u32) -> Result<Self, Error> {
-  //   unsafe {
-  //     let slice = arena.reserved_slice_mut();
-  //     slice[0..6].copy_from_slice(&MAGIC_TEXT);
-  //     slice[6..8].copy_from_slice(&magic_version.to_le_bytes());
-  //   }
-
-  //   if !flush {
-  //     return Ok(Self::construct(arena, SkipSet::new(), reserved));
-  //   }
-
-  //   arena
-  //     .flush_range(0, HEADER_SIZE)
-  //     .map(|_| Self::construct(arena, SkipSet::new(), reserved))
-  //     .map_err(Into::into)
-  // }
-
   #[inline]
   fn first(&self) -> Option<EntryRef<'_, K, V>>
   where
@@ -839,14 +821,6 @@ where
 
     Self::new_in(arena, opts, (), cks).map(Self::from_core)
   }
-
-  // #[inline]
-  // fn from_core(core: GenericOrderWalCore<K, V>, opts: Options, cks: S, ro: bool) -> Self {
-  //   Self {
-  //     core: Arc::new(core),
-  //     ro,
-  //   }
-  // }
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S>

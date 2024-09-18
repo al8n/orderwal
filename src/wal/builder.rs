@@ -28,6 +28,14 @@ impl Builder {
 
 impl<C, S> Builder<C, S> {
   /// Returns a new write-ahead log builder with the new comparator
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{Builder, Ascend};
+  ///
+  /// let opts = Builder::new().with_comparator(Ascend);
+  /// ```
   #[inline]
   pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC, S> {
     Builder {
@@ -38,6 +46,14 @@ impl<C, S> Builder<C, S> {
   }
 
   /// Returns a new write-ahead log builder with the new checksumer
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{Builder, Crc32};
+  ///
+  /// let opts = Builder::new().with_checksumer(Crc32::new());
+  /// ```
   #[inline]
   pub fn with_checksumer<NS>(self, cks: NS) -> Builder<C, NS> {
     Builder {
@@ -48,9 +64,17 @@ impl<C, S> Builder<C, S> {
   }
 
   /// Returns a new write-ahead log builder with the new options
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{Builder, Options};
+  ///
+  /// let opts = Builder::new().with_options(Options::default());
+  /// ```
   #[inline]
   pub fn with_options(self, opts: Options) -> Self {
-    Builder {
+    Self {
       opts,
       cmp: self.cmp,
       cks: self.cks,
@@ -324,5 +348,253 @@ impl<C, S> Builder<C, S> {
   pub const fn with_magic_version(mut self, version: u16) -> Self {
     self.opts = self.opts.with_magic_version(version);
     self
+  }
+}
+
+impl<C, S> Builder<C, S> {
+  /// Creates a new in-memory write-ahead log backed by an aligned vec.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Builder};
+  ///
+  /// let wal = Builder::new()
+  ///   .with_capacity(1024)
+  ///   .alloc::<OrderWal>()
+  ///   .unwrap();
+  /// ```
+  pub fn alloc<W>(self) -> Result<W, Error>
+  where
+    W: Wal<C, S>,
+  {
+    let Self { opts, cmp, cks } = self;
+    let arena = <W::Allocator as Allocator>::new(
+      arena_options(opts.reserved()).with_capacity(opts.capacity()),
+    )
+    .map_err(Error::from_insufficient_space)?;
+    <W as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
+  }
+
+  /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Builder};
+  ///
+  /// let wal = Builder::new()
+  ///   .with_capacity(1024)
+  ///   .map_anon::<OrderWal>()
+  ///   .unwrap();
+  /// ```
+  pub fn map_anon<W>(self) -> Result<W, Error>
+  where
+    W: Wal<C, S>,
+  {
+    let Self { opts, cmp, cks } = self;
+    let mmap_opts = MmapOptions::new().len(opts.capacity());
+    <W::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
+      .map_err(Into::into)
+      .and_then(|arena| {
+        <W as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
+      })
+  }
+
+  /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Builder};
+  /// # use orderwal::OpenOptions;
+  ///
+  /// # let dir = tempfile::tempdir().unwrap();
+  /// # let path = dir.path().join("map.wal");
+  ///
+  /// # let wal = unsafe {
+  /// #  Builder::new()
+  /// #  .map_mut::<OrderWal, _>(&path, OpenOptions::default().read(true).write(true).create(Some(1000)))
+  /// #  .unwrap()
+  /// # };
+  ///
+  /// let wal = unsafe {
+  ///   Builder::new()
+  ///     .map::<OrderWal, _>(&path)
+  ///     .unwrap()
+  /// };
+  pub unsafe fn map<W, P>(self, path: P) -> Result<W::Reader, Error>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+    P: AsRef<std::path::Path>,
+    W: Wal<C, S>,
+  {
+    self
+      .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_err(|e| e.unwrap_right())
+  }
+
+  /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Builder};
+  /// # use orderwal::OpenOptions;
+  ///
+  /// # let dir = tempfile::tempdir().unwrap();
+  /// # let path = dir.path().join("map_with_path_builder.wal");
+  ///
+  /// # let wal = unsafe {
+  /// #  Builder::new()
+  /// #  .map_mut::<OrderWal, _>(&path, OpenOptions::default().read(true).write(true).create(Some(1000)))
+  /// #  .unwrap()
+  /// # };
+  ///
+  /// let wal = unsafe {
+  ///   Builder::new()
+  ///     .map_with_path_builder::<OrderWal, _, ()>(|| Ok(path))
+  ///     .unwrap()
+  /// };
+  pub unsafe fn map_with_path_builder<W, PB, E>(
+    self,
+    path_builder: PB,
+  ) -> Result<W::Reader, Either<E, Error>>
+  where
+    PB: FnOnce() -> Result<std::path::PathBuf, E>,
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+    W: Wal<C, S>,
+    W::Pointer: Ord,
+  {
+    let open_options = OpenOptions::default().read(true);
+
+    let Self { opts, cmp, cks } = self;
+
+    <<W::Reader as sealed::Constructor<C, S>>::Allocator as Allocator>::map_with_path_builder(
+      path_builder,
+      arena_options(opts.reserved()),
+      open_options,
+      MmapOptions::new(),
+    )
+    .map_err(|e| e.map_right(Into::into))
+    .and_then(|arena| {
+      <W::Reader as sealed::Constructor<C, S>>::replay(arena, Options::new(), true, cmp, cks)
+        .map(<W::Reader as sealed::Constructor<C, S>>::from_core)
+        .map_err(Either::Right)
+    })
+  }
+
+  /// Opens a write-ahead log backed by a file backed memory map.
+  ///  
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Builder, OpenOptions};
+  ///
+  /// let dir = tempfile::tempdir().unwrap();
+  /// let path = dir.path().join("map_mut_with_path_builder_example.wal");
+  ///
+  /// let wal = unsafe {
+  ///   Builder::new()
+  ///   .map_mut::<OrderWal, _>(&path, OpenOptions::default().read(true).write(true).create(Some(1000)))
+  ///   .unwrap()
+  /// };
+  /// ```
+  pub unsafe fn map_mut<W, P>(self, path: P, open_opts: OpenOptions) -> Result<W, Error>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+    P: AsRef<std::path::Path>,
+    W: Wal<C, S>,
+  {
+    self
+      .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()), open_opts)
+      .map_err(|e| e.unwrap_right())
+  }
+
+  /// Opens a write-ahead log backed by a file backed memory map.
+  ///
+  /// ## Safety
+  ///
+  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
+  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  /// out of process. Applications must consider the risk and take appropriate precautions when
+  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  /// unlinked) files exist but are platform specific and limited.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{swmr::OrderWal, Builder, OpenOptions};
+  ///
+  /// let dir = tempfile::tempdir().unwrap();
+  ///  
+  /// let wal = unsafe {
+  ///   Builder::new()
+  ///   .map_mut_with_path_builder::<OrderWal, _, ()>(
+  ///     || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
+  ///     OpenOptions::default().read(true).write(true).create(Some(1000)),
+  ///   )
+  ///   .unwrap()
+  /// };
+  /// ```
+  pub unsafe fn map_mut_with_path_builder<W, PB, E>(
+    self,
+    path_builder: PB,
+    open_options: OpenOptions,
+  ) -> Result<W, Either<E, Error>>
+  where
+    PB: FnOnce() -> Result<std::path::PathBuf, E>,
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+    W: Wal<C, S>,
+  {
+    let path = path_builder().map_err(Either::Left)?;
+
+    let exist = path.exists();
+
+    let Self { opts, cmp, cks } = self;
+
+    <W::Allocator as Allocator>::map_mut(
+      path,
+      arena_options(opts.reserved()),
+      open_options,
+      MmapOptions::new(),
+    )
+    .map_err(Into::into)
+    .and_then(|arena| {
+      if !exist {
+        <W as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
+      } else {
+        <W as sealed::Constructor<C, S>>::replay(arena, opts, false, cmp, cks).map(W::from_core)
+      }
+    })
+    .map_err(Either::Right)
   }
 }
