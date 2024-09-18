@@ -3,7 +3,7 @@ use super::super::*;
 use either::Either;
 use error::Error;
 use wal::{
-  sealed::{Base, Constructor, Sealed, WalCore},
+  sealed::{Constructor, Sealed, WalCore},
   ImmutableWal,
 };
 
@@ -44,18 +44,13 @@ impl<C: Comparator, S> OrderWalCore<C, S> {
   }
 }
 
-impl<C: Send + 'static> Base<C> for SkipSet<Pointer<C>> {
-  fn insert(&mut self, ele: Pointer<C>)
-  where
-    C: Comparator,
-  {
-    SkipSet::insert(self, ele);
-  }
-}
-
-impl<C: Send + 'static, S> WalCore<C, S> for OrderWalCore<C, S> {
+impl<C, S> WalCore<C, S> for OrderWalCore<C, S>
+where
+  C: Comparator + CheapClone + Send + 'static,
+{
   type Allocator = Arena;
   type Base = SkipSet<Pointer<C>>;
+  type Pointer = Pointer<C>;
 
   #[inline]
   fn construct(arena: Arena, set: SkipSet<Pointer<C>>, opts: Options, cmp: C, cks: S) -> Self {
@@ -96,10 +91,11 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
 
 impl<C, S> Constructor<C, S> for OrderWal<C, S>
 where
-  C: Send + 'static,
+  C: Comparator + CheapClone + Send + 'static,
 {
   type Allocator = Arena;
   type Core = OrderWalCore<C, S>;
+  type Pointer = Pointer<C>;
 
   #[inline]
   fn allocator(&self) -> &Self::Allocator {
@@ -117,7 +113,7 @@ where
 
 impl<C, S> Sealed<C, S> for OrderWal<C, S>
 where
-  C: Send + 'static,
+  C: Comparator + CheapClone + Send + 'static,
 {
   fn hasher(&self) -> &S {
     &self.core.cks
@@ -168,7 +164,7 @@ impl<C, S> OrderWal<C, S> {
 
 impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
 where
-  C: Send + 'static,
+  C: Comparator + CheapClone + Send + 'static,
 {
   type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
   type Range<'a, Q, R> = Range<'a, Q, R, C>
@@ -332,7 +328,7 @@ where
 
 impl<C, S> Wal<C, S> for OrderWal<C, S>
 where
-  C: Send + 'static,
+  C: Comparator + CheapClone + Send + 'static,
 {
   type Reader = OrderWalReader<C, S>;
 

@@ -56,10 +56,11 @@ pub struct OrderWal<C = Ascend, S = Crc32> {
 
 impl<C, S> Constructor<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   type Allocator = Arena;
   type Core = OrderWalCore<C, S>;
+  type Pointer = Pointer<C>;
 
   #[inline]
   fn allocator(&self) -> &Self::Allocator {
@@ -100,7 +101,7 @@ impl<C, S> OrderWal<C, S> {
 
 impl<C, S> Sealed<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   #[inline]
   fn hasher(&self) -> &S {
@@ -140,7 +141,7 @@ where
 
 impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
   type Range<'a, Q, R> = Range<'a, C>
@@ -312,7 +313,7 @@ where
 
 impl<C, S> Wal<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   type Reader = Self;
 

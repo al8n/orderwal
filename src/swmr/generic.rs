@@ -8,14 +8,13 @@ use among::Among;
 use crossbeam_skiplist::SkipSet;
 use dbutils::checksum::{BuildChecksumer, Checksumer, Crc32};
 pub use dbutils::equivalent::*;
-use rarena_allocator::{
-  either::Either, sync::Arena, Allocator, ArenaPosition, Memory, MmapOptions, OpenOptions,
-};
+use rarena_allocator::{either::Either, sync::Arena, Allocator, Memory, MmapOptions, OpenOptions};
 
 use crate::{
   arena_options, check, entry_size,
   error::{self, Error},
-  split_lengths, Flags, Options, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, STATUS_SIZE,
+  wal::sealed::Constructor,
+  Flags, Options, HEADER_SIZE, STATUS_SIZE,
 };
 
 mod entry;
@@ -52,6 +51,15 @@ pub struct Pointer<K, V> {
   /// The length of the value.
   value_len: usize,
   _m: PhantomData<(K, V)>,
+}
+
+impl<K, V> crate::wal::sealed::Pointer for Pointer<K, V> {
+  type Comparator = ();
+
+  #[inline]
+  fn new(klen: usize, vlen: usize, ptr: *const u8, _cmp: Self::Comparator) -> Self {
+    Self::new(klen, vlen, ptr)
+  }
 }
 
 impl<K: Type, V> PartialEq for Pointer<K, V> {
@@ -114,6 +122,43 @@ impl<K, V> Pointer<K, V> {
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
     unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
+  }
+}
+
+/// An entry in the generic write-ahead log.
+pub struct GenericEntry<K, V> {
+  key: K,
+  value: V,
+  pointer: Option<Pointer<K, V>>,
+}
+
+impl<K, V> GenericEntry<K, V> {
+  /// Creates a new entry.
+  #[inline]
+  pub const fn new(key: K, value: V) -> Self {
+    Self {
+      key,
+      value,
+      pointer: None,
+    }
+  }
+
+  /// Returns the key.
+  #[inline]
+  pub const fn key(&self) -> &K {
+    &self.key
+  }
+
+  /// Returns the value.
+  #[inline]
+  pub const fn value(&self) -> &V {
+    &self.value
+  }
+
+  /// Consumes the entry and returns the key and value.
+  #[inline]
+  pub fn into_components(self) -> (K, V) {
+    (self.key, self.value)
   }
 }
 
@@ -274,13 +319,37 @@ where
   }
 }
 
-struct GenericOrderWalCore<K, V> {
+#[doc(hidden)]
+pub struct GenericOrderWalCore<K, V, S> {
   arena: Arena,
   map: SkipSet<Pointer<K, V>>,
-  reserved: u32,
+  opts: Options,
+  cks: S,
 }
 
-impl<K, V> GenericOrderWalCore<K, V> {
+impl<K, V, S> crate::wal::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S>
+where
+  K: 'static,
+  V: 'static,
+{
+  type Allocator = Arena;
+
+  type Base = SkipSet<Pointer<K, V>>;
+
+  type Pointer = Pointer<K, V>;
+
+  #[inline]
+  fn construct(arena: Self::Allocator, base: Self::Base, opts: Options, _cmp: (), cks: S) -> Self {
+    Self {
+      arena,
+      map: base,
+      opts,
+      cks,
+    }
+  }
+}
+
+impl<K, V, S> GenericOrderWalCore<K, V, S> {
   #[inline]
   fn len(&self) -> usize {
     self.map.len()
@@ -291,23 +360,23 @@ impl<K, V> GenericOrderWalCore<K, V> {
     self.map.is_empty()
   }
 
-  #[inline]
-  fn new(arena: Arena, magic_version: u16, flush: bool, reserved: u32) -> Result<Self, Error> {
-    unsafe {
-      let slice = arena.reserved_slice_mut();
-      slice[0..6].copy_from_slice(&MAGIC_TEXT);
-      slice[6..8].copy_from_slice(&magic_version.to_le_bytes());
-    }
+  // #[inline]
+  // fn new(arena: Arena, magic_version: u16, flush: bool, reserved: u32) -> Result<Self, Error> {
+  //   unsafe {
+  //     let slice = arena.reserved_slice_mut();
+  //     slice[0..6].copy_from_slice(&MAGIC_TEXT);
+  //     slice[6..8].copy_from_slice(&magic_version.to_le_bytes());
+  //   }
 
-    if !flush {
-      return Ok(Self::construct(arena, SkipSet::new(), reserved));
-    }
+  //   if !flush {
+  //     return Ok(Self::construct(arena, SkipSet::new(), reserved));
+  //   }
 
-    arena
-      .flush_range(0, HEADER_SIZE)
-      .map(|_| Self::construct(arena, SkipSet::new(), reserved))
-      .map_err(Into::into)
-  }
+  //   arena
+  //     .flush_range(0, HEADER_SIZE)
+  //     .map(|_| Self::construct(arena, SkipSet::new(), reserved))
+  //     .map_err(Into::into)
+  // }
 
   #[inline]
   fn first(&self) -> Option<EntryRef<'_, K, V>>
@@ -371,114 +440,32 @@ impl<K, V> GenericOrderWalCore<K, V> {
         .range((start_bound.map(Owned::new), end_bound.map(Owned::new))),
     )
   }
-
-  #[inline]
-  fn construct(arena: Arena, set: SkipSet<Pointer<K, V>>, reserved: u32) -> Self {
-    Self {
-      arena,
-      map: set,
-      reserved,
-    }
-  }
 }
 
-impl<K, V> GenericOrderWalCore<K, V>
+impl<K, V, S> Constructor<(), S> for GenericOrderWal<K, V, S>
 where
-  K: Type + Ord + 'static,
-  for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
-  V: Type + 'static,
+  K: 'static,
+  V: 'static,
 {
-  fn replay<S: BuildChecksumer>(
-    arena: Arena,
-    opts: &Options,
-    ro: bool,
-    checksumer: &mut S,
-  ) -> Result<Self, Error> {
-    let slice = arena.reserved_slice();
-    let magic_text = &slice[0..6];
-    let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
+  type Allocator = Arena;
 
-    if magic_text != MAGIC_TEXT {
-      return Err(Error::magic_text_mismatch());
+  type Core = GenericOrderWalCore<K, V, S>;
+
+  type Pointer = Pointer<K, V>;
+
+  fn allocator(&self) -> &Self::Allocator {
+    &self.core.arena
+  }
+
+  fn from_core(core: Self::Core) -> Self {
+    Self {
+      core: Arc::new(core),
+      ro: false,
     }
-
-    if magic_version != opts.magic_version() {
-      return Err(Error::magic_version_mismatch());
-    }
-
-    let map = SkipSet::new();
-
-    let mut cursor = arena.data_offset();
-    let allocated = arena.allocated();
-
-    loop {
-      unsafe {
-        // we reached the end of the arena, if we have any remaining, then if means two possibilities:
-        // 1. the remaining is a partial entry, but it does not be persisted to the disk, so following the write-ahead log principle, we should discard it.
-        // 2. our file may be corrupted, so we discard the remaining.
-        if cursor + STATUS_SIZE > allocated {
-          if !ro && cursor < allocated {
-            arena.rewind(ArenaPosition::Start(cursor as u32));
-            arena.flush()?;
-          }
-
-          break;
-        }
-
-        let header = arena.get_u8(cursor).unwrap();
-        let flag = Flags::from_bits_unchecked(header);
-
-        let (kvsize, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
-          #[cfg(feature = "tracing")]
-          tracing::error!(err=%e);
-
-          Error::corrupted(e)
-        })?;
-        let (key_len, value_len) = split_lengths(encoded_len);
-        let key_len = key_len as usize;
-        let value_len = value_len as usize;
-
-        // Same as above, if we reached the end of the arena, we should discard the remaining.
-        let cks_offset = STATUS_SIZE + kvsize + key_len + value_len;
-        if cks_offset + CHECKSUM_SIZE > allocated {
-          if !ro {
-            arena.rewind(ArenaPosition::Start(cursor as u32));
-            arena.flush()?;
-          }
-
-          break;
-        }
-
-        let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
-
-        if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
-          return Err(Error::corrupted("checksum mismatch"));
-        }
-
-        // If the entry is not committed, we should not rewind
-        if !flag.contains(Flags::COMMITTED) {
-          if !ro {
-            arena.rewind(ArenaPosition::Start(cursor as u32));
-            arena.flush()?;
-          }
-
-          break;
-        }
-
-        map.insert(Pointer::new(
-          key_len,
-          value_len,
-          arena.get_pointer(cursor + STATUS_SIZE + kvsize),
-        ));
-        cursor += cks_offset + CHECKSUM_SIZE;
-      }
-    }
-
-    Ok(Self::construct(arena, map, opts.reserved()))
   }
 }
 
-impl<K, V> GenericOrderWalCore<K, V>
+impl<K, V, S> GenericOrderWalCore<K, V, S>
 where
   K: Type + Ord,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
@@ -544,13 +531,15 @@ where
 ///
 /// Users can create multiple readers from the WAL by [`GenericOrderWal::reader`], but only one writer is allowed.
 pub struct GenericOrderWal<K, V, S = Crc32> {
-  core: Arc<GenericOrderWalCore<K, V>>,
-  opts: Options,
-  cks: S,
+  core: Arc<GenericOrderWalCore<K, V, S>>,
   ro: bool,
 }
 
-impl<K, V> GenericOrderWal<K, V> {
+impl<K, V> GenericOrderWal<K, V>
+where
+  K: 'static,
+  V: 'static,
+{
   /// Creates a new in-memory write-ahead log backed by an aligned vec with the given capacity and options.
   ///
   /// # Example
@@ -734,7 +723,7 @@ where
   pub unsafe fn map<P: AsRef<Path>>(
     path: P,
     opts: Options,
-  ) -> Result<GenericWalReader<K, V>, Error> {
+  ) -> Result<GenericWalReader<K, V, Crc32>, Error> {
     Self::map_with_path_builder::<_, ()>(|| dummy_path_builder(path), opts)
       .map_err(|e| e.unwrap_right())
   }
@@ -752,7 +741,7 @@ where
   pub unsafe fn map_with_path_builder<PB, E>(
     pb: PB,
     opts: Options,
-  ) -> Result<GenericWalReader<K, V>, Either<E, Error>>
+  ) -> Result<GenericWalReader<K, V, Crc32>, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
   {
@@ -760,10 +749,14 @@ where
   }
 }
 
-impl<K, V, S> GenericOrderWal<K, V, S> {
+impl<K, V, S> GenericOrderWal<K, V, S>
+where
+  K: 'static,
+  V: 'static,
+{
   /// Returns a read-only WAL instance.
   #[inline]
-  pub fn reader(&self) -> GenericWalReader<K, V> {
+  pub fn reader(&self) -> GenericWalReader<K, V, S> {
     GenericWalReader::new(self.core.clone())
   }
 
@@ -780,7 +773,7 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
   pub unsafe fn reserved_slice(&self) -> &[u8] {
-    if self.opts.reserved() == 0 {
+    if self.core.opts.reserved() == 0 {
       return &[];
     }
 
@@ -794,7 +787,7 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
   pub unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
-    if self.opts.reserved() == 0 {
+    if self.core.opts.reserved() == 0 {
       return &mut [];
     }
 
@@ -826,8 +819,7 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
     let arena = Arena::new(arena_options(opts.reserved()).with_capacity(opts.capacity()))
       .map_err(Error::from_insufficient_space)?;
 
-    GenericOrderWalCore::new(arena, opts.magic_version(), false, opts.reserved())
-      .map(|core| Self::from_core(core, opts, cks, false))
+    Self::new_in(arena, opts, (), cks).map(Self::from_core)
   }
 
   /// Creates a new in-memory write-ahead log backed by an anonymous memory map with the given options and [`Checksumer`].
@@ -845,19 +837,16 @@ impl<K, V, S> GenericOrderWal<K, V, S> {
       MmapOptions::new().len(opts.capacity()),
     )?;
 
-    GenericOrderWalCore::new(arena, opts.magic_version(), true, opts.reserved())
-      .map(|core| Self::from_core(core, opts, cks, false))
+    Self::new_in(arena, opts, (), cks).map(Self::from_core)
   }
 
-  #[inline]
-  fn from_core(core: GenericOrderWalCore<K, V>, opts: Options, cks: S, ro: bool) -> Self {
-    Self {
-      core: Arc::new(core),
-      ro,
-      opts,
-      cks,
-    }
-  }
+  // #[inline]
+  // fn from_core(core: GenericOrderWalCore<K, V>, opts: Options, cks: S, ro: bool) -> Self {
+  //   Self {
+  //     core: Arc::new(core),
+  //     ro,
+  //   }
+  // }
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S>
@@ -952,7 +941,7 @@ where
     path_builder: PB,
     opts: Options,
     open_options: OpenOptions,
-    mut cks: S,
+    cks: S,
   ) -> Result<Self, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
@@ -968,13 +957,13 @@ where
     .map_err(|e| e.map_right(Into::into))?;
 
     if !exist {
-      return GenericOrderWalCore::new(arena, opts.magic_version(), true, opts.reserved())
-        .map(|core| Self::from_core(core, opts, cks, false))
+      return Self::new_in(arena, opts, (), cks)
+        .map(Self::from_core)
         .map_err(Either::Right);
     }
 
-    GenericOrderWalCore::replay(arena, &opts, false, &mut cks)
-      .map(|core| Self::from_core(core, opts, cks, false))
+    Self::replay(arena, opts, false, (), cks)
+      .map(Self::from_core)
       .map_err(Either::Right)
   }
 
@@ -1018,7 +1007,7 @@ where
     path: P,
     opts: Options,
     cks: S,
-  ) -> Result<GenericWalReader<K, V>, Error> {
+  ) -> Result<GenericWalReader<K, V, S>, Error> {
     Self::map_with_path_builder_and_checksumer::<_, ()>(|| dummy_path_builder(path), opts, cks)
       .map_err(|e| e.unwrap_right())
   }
@@ -1036,8 +1025,8 @@ where
   pub unsafe fn map_with_path_builder_and_checksumer<PB, E>(
     path_builder: PB,
     opts: Options,
-    mut cks: S,
-  ) -> Result<GenericWalReader<K, V>, Either<E, Error>>
+    cks: S,
+  ) -> Result<GenericWalReader<K, V, S>, Either<E, Error>>
   where
     PB: FnOnce() -> Result<PathBuf, E>,
   {
@@ -1050,7 +1039,7 @@ where
     )
     .map_err(|e| e.map_right(Into::into))?;
 
-    GenericOrderWalCore::replay(arena, &opts, true, &mut cks)
+    Self::replay(arena, opts, true, (), cks)
       .map(|core| GenericWalReader::new(Arc::new(core)))
       .map_err(Either::Right)
   }
@@ -1487,7 +1476,7 @@ where
           // We allocate the buffer with the exact size, so it's safe to write to the buffer.
           let flag = Flags::COMMITTED.bits();
 
-          let mut cks = self.cks.build_checksumer();
+          let mut cks = self.core.cks.build_checksumer();
           cks.update(&[flag]);
 
           buf.put_u8_unchecked(Flags::empty().bits());
@@ -1516,7 +1505,7 @@ where
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.opts.sync_on_write() && self.core.arena.is_ondisk() {
+          if self.core.opts.sync_on_write() && self.core.arena.is_ondisk() {
             self
               .core
               .arena
@@ -1538,8 +1527,8 @@ where
     check(
       klen,
       vlen,
-      self.opts.maximum_key_size(),
-      self.opts.maximum_value_size(),
+      self.core.opts.maximum_key_size(),
+      self.core.opts.maximum_value_size(),
       self.ro,
     )
   }
@@ -1549,10 +1538,3 @@ where
 fn dummy_path_builder(p: impl AsRef<Path>) -> Result<PathBuf, ()> {
   Ok(p.as_ref().to_path_buf())
 }
-
-// #[inline]
-// fn encoded_batch_len<B: GenericBatch>(batch: &B) -> u64 {
-//   let (len, encoded_len) = batch.meta();
-
-//   STATUS_SIZE +
-// }

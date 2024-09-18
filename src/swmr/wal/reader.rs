@@ -14,10 +14,13 @@ impl<C, S> OrderWalReader<C, S> {
   }
 }
 
-impl<C: Send + 'static, S> Constructor<C, S> for OrderWalReader<C, S> {
+impl<C, S> Constructor<C, S> for OrderWalReader<C, S>
+where
+  C: Comparator + CheapClone + Send + 'static,
+{
   type Allocator = Arena;
-
   type Core = OrderWalCore<C, S>;
+  type Pointer = Pointer<C>;
 
   #[inline]
   fn allocator(&self) -> &Self::Allocator {
@@ -32,7 +35,10 @@ impl<C: Send + 'static, S> Constructor<C, S> for OrderWalReader<C, S> {
   }
 }
 
-impl<C: Send + 'static, S> ImmutableWal<C, S> for OrderWalReader<C, S> {
+impl<C, S> ImmutableWal<C, S> for OrderWalReader<C, S>
+where
+  C: Comparator + CheapClone + Send + 'static,
+{
   type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
   type Range<'a, Q, R> = Range<'a, Q, R, C>
   where

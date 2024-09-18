@@ -3,11 +3,10 @@ use core::{cmp, hash::Hash};
 use among::Among;
 use crossbeam_skiplist::{Comparable, Equivalent};
 
-mod type_impls;
-pub use type_impls::*;
+mod impls;
+pub use impls::*;
 
-mod container_impls;
-pub use container_impls::*;
+use super::GenericEntry;
 
 /// The container for entries in the [`GenericBatch`].
 pub trait GenericBatch {
@@ -18,12 +17,12 @@ pub trait GenericBatch {
   type Value;
 
   /// The iterator type.
-  type Iter<'a>: Iterator<Item = (&'a Self::Key, &'a Self::Value)>
+  type IterMut<'a>: Iterator<Item = &'a mut GenericEntry<Self::Key, Self::Value>>
   where
     Self: 'a;
 
   /// Returns an iterator over the keys and values.
-  fn iter(&self) -> Self::Iter<'_>;
+  fn iter_mut(&mut self) -> Self::IterMut<'_>;
 }
 
 /// The type trait for limiting the types that can be used as keys and values in the [`GenericOrderWal`].

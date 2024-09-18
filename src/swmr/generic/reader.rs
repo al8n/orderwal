@@ -1,16 +1,16 @@
 use super::*;
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
-pub struct GenericWalReader<K, V>(Arc<GenericOrderWalCore<K, V>>);
+pub struct GenericWalReader<K, V, S>(Arc<GenericOrderWalCore<K, V, S>>);
 
-impl<K, V> Clone for GenericWalReader<K, V> {
+impl<K, V, S> Clone for GenericWalReader<K, V, S> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<K, V> GenericWalReader<K, V> {
-  pub(super) fn new(wal: Arc<GenericOrderWalCore<K, V>>) -> Self {
+impl<K, V, S> GenericWalReader<K, V, S> {
+  pub(super) fn new(wal: Arc<GenericOrderWalCore<K, V, S>>) -> Self {
     Self(wal)
   }
 
@@ -27,7 +27,7 @@ impl<K, V> GenericWalReader<K, V> {
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
   pub unsafe fn reserved_slice(&self) -> &[u8] {
-    if self.0.reserved == 0 {
+    if self.0.opts.reserved() == 0 {
       return &[];
     }
 
@@ -47,7 +47,7 @@ impl<K, V> GenericWalReader<K, V> {
   }
 }
 
-impl<K, V> GenericWalReader<K, V>
+impl<K, V, S> GenericWalReader<K, V, S>
 where
   K: Type + Ord,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -97,7 +97,7 @@ where
   }
 }
 
-impl<K, V> GenericWalReader<K, V>
+impl<K, V, S> GenericWalReader<K, V, S>
 where
   K: Type + Ord,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,

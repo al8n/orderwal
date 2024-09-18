@@ -4,15 +4,47 @@ use rarena_allocator::ArenaPosition;
 
 use super::*;
 
-pub trait Base<C>: Default {
-  fn insert(&mut self, ele: Pointer<C>)
+pub trait Pointer {
+  type Comparator;
+
+  fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: Self::Comparator) -> Self;
+}
+
+impl<C> Pointer for crate::Pointer<C> {
+  type Comparator = C;
+
+  #[inline]
+  fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: C) -> Self {
+    crate::Pointer::<C>::new(klen, vlen, ptr, cmp)
+  }
+}
+
+pub trait Base: Default {
+  type Pointer: Pointer;
+
+  fn insert(&mut self, ele: Self::Pointer)
   where
-    C: Comparator;
+    Self::Pointer: Ord;
+}
+
+impl<P> Base for SkipSet<P>
+where
+  P: Pointer + Send + 'static,
+{
+  type Pointer = P;
+
+  fn insert(&mut self, ele: Self::Pointer)
+  where
+    P: Ord,
+  {
+    SkipSet::insert(self, ele);
+  }
 }
 
 pub trait WalCore<C, S> {
   type Allocator: Allocator;
-  type Base: Base<C>;
+  type Base: Base<Pointer = Self::Pointer>;
+  type Pointer: Pointer;
 
   fn construct(arena: Self::Allocator, base: Self::Base, opts: Options, cmp: C, cks: S) -> Self;
 }
@@ -53,11 +85,11 @@ pub trait Sealed<C, S>: Constructor<C, S> {
 
   fn comparator(&self) -> &C;
 
-  fn insert_pointer(&self, ptr: Pointer<C>)
+  fn insert_pointer(&self, ptr: Self::Pointer)
   where
     C: Comparator;
 
-  fn insert_pointers(&self, ptrs: impl Iterator<Item = Pointer<C>>)
+  fn insert_pointers(&self, ptrs: impl Iterator<Item = Self::Pointer>)
   where
     C: Comparator;
 
@@ -466,7 +498,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<Pointer<C>, Among<KE, VE, Error>>
+  ) -> Result<Self::Pointer, Among<KE, VE, Error>>
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
@@ -539,7 +571,8 @@ pub trait Sealed<C, S>: Constructor<C, S> {
 
 pub trait Constructor<C, S>: Sized {
   type Allocator: Allocator;
-  type Core: WalCore<C, S, Allocator = Self::Allocator>;
+  type Core: WalCore<C, S, Allocator = Self::Allocator, Pointer = Self::Pointer>;
+  type Pointer: Pointer<Comparator = C>;
 
   fn allocator(&self) -> &Self::Allocator;
 
@@ -564,8 +597,9 @@ pub trait Constructor<C, S>: Sized {
     checksumer: S,
   ) -> Result<Self::Core, Error>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Ord,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];

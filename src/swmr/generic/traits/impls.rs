@@ -7,6 +7,20 @@ pub use string::Str;
 
 mod net;
 
+impl<K, V, T> GenericBatch for T
+where
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut GenericEntry<K, V>>,
+{
+  type Key = K;
+  type Value = V;
+
+  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+
+  fn iter_mut(&mut self) -> Self::IterMut<'_> {
+    IntoIterator::into_iter(self)
+  }
+}
+
 impl Type for () {
   type Ref<'a> = ();
   type Error = ();

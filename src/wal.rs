@@ -357,9 +357,11 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
+pub trait Wal<C, S>:
+  sealed::Sealed<C, S, Pointer = crate::Pointer<C>> + ImmutableWal<C, S>
+{
   /// The read only reader type for this wal.
-  type Reader: ImmutableWal<C, S>;
+  type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>;
 
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///
@@ -434,6 +436,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Ord,
   {
     let open_options = OpenOptions::default().read(true);
 
