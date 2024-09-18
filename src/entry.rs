@@ -159,16 +159,40 @@ impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
 /// An entry in the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
 #[repr(transparent)]
 pub struct Generic<'a, T> {
-  value: Either<GenericVariant<'a, T>, &'a [u8]>,
+  data: Among<T, &'a T, &'a [u8]>,
 }
 
-impl<'a, T: Type> Generic<'a, T> {
+impl<T: Type> Generic<'_, T> {
+  #[inline]
+  pub(crate) fn encoded_len(&self) -> usize {
+    match &self.data {
+      Among::Left(val) => val.encoded_len(),
+      Among::Middle(val) => val.encoded_len(),
+      Among::Right(val) => val.len(),
+    }
+  }
+
+  #[inline]
+  pub(crate) fn encode(&self, buf: &mut [u8]) -> Result<(), T::Error> {
+    match &self.data {
+      Among::Left(val) => val.encode(buf),
+      Among::Middle(val) => val.encode(buf),
+      Among::Right(val) => {
+        buf.copy_from_slice(val);
+        Ok(())
+      }
+    }
+  }
+}
+
+impl<'a, T> Generic<'a, T> {
   /// Returns the value contained in the generic.
   #[inline]
-  pub const fn value(&self) -> Either<&GenericVariant<'a, T>, &'a [u8]> {
-    match &self.value {
-      Either::Left(v) => Either::Left(v),
-      Either::Right(v) => Either::Right(v),
+  pub const fn data(&self) -> Either<&T, &'a [u8]> {
+    match &self.data {
+      Among::Left(val) => Either::Left(val),
+      Among::Middle(val) => Either::Left(val),
+      Among::Right(val) => Either::Right(val),
     }
   }
 
@@ -179,50 +203,13 @@ impl<'a, T: Type> Generic<'a, T> {
   #[inline]
   pub const unsafe fn from_slice(slice: &'a [u8]) -> Self {
     Self {
-      value: Either::Right(slice),
+      data: Among::Right(slice),
     }
   }
 
   #[inline]
   pub(crate) fn into_among(self) -> Among<T, &'a T, &'a [u8]> {
-    match self.value {
-      Either::Left(val) => match val {
-        GenericVariant::Owned(val) => Among::Left(val),
-        GenericVariant::Ref(val) => Among::Middle(val),
-      },
-      Either::Right(val) => Among::Right(val),
-    }
-  }
-
-  #[inline]
-  pub(crate) fn encoded_len(&self) -> usize {
-    match &self.value {
-      Either::Left(val) => val.encoded_len(),
-      Either::Right(val) => val.len(),
-    }
-  }
-
-  #[inline]
-  pub(crate) fn encode(&self, buf: &mut [u8]) -> Result<(), T::Error> {
-    match &self.value {
-      Either::Left(val) => match val {
-        GenericVariant::Owned(val) => val.encode(buf),
-        GenericVariant::Ref(val) => val.encode(buf),
-      },
-      Either::Right(val) => {
-        buf.copy_from_slice(val);
-        Ok(())
-      }
-    }
-  }
-}
-
-impl<'a, T> From<GenericVariant<'a, T>> for Generic<'a, T> {
-  #[inline]
-  fn from(value: GenericVariant<'a, T>) -> Self {
-    Self {
-      value: Either::Left(value),
-    }
+    self.data
   }
 }
 
@@ -230,7 +217,7 @@ impl<'a, T> From<&'a T> for Generic<'a, T> {
   #[inline]
   fn from(value: &'a T) -> Self {
     Self {
-      value: Either::Left(GenericVariant::Ref(value)),
+      data: Among::Middle(value),
     }
   }
 }
@@ -239,46 +226,9 @@ impl<T> From<T> for Generic<'_, T> {
   #[inline]
   fn from(value: T) -> Self {
     Self {
-      value: Either::Left(GenericVariant::Owned(value)),
+      data: Among::Left(value),
     }
   }
-}
-
-/// The kind of a generic type.
-pub enum GenericVariant<'a, T> {
-  /// An owned `T`.
-  Owned(T),
-  /// A reference of `T`.
-  Ref(&'a T),
-}
-
-impl<T: Type> GenericVariant<'_, T> {
-  #[inline]
-  fn encoded_len(&self) -> usize {
-    match self {
-      Self::Owned(val) => val.encoded_len(),
-      Self::Ref(val) => val.encoded_len(),
-    }
-  }
-}
-
-impl<T> From<T> for GenericVariant<'_, T> {
-  fn from(value: T) -> Self {
-    Self::Owned(value)
-  }
-}
-
-impl<'a, T> From<&'a T> for GenericVariant<'a, T> {
-  fn from(value: &'a T) -> Self {
-    Self::Ref(value)
-  }
-}
-
-/// An entry in the generic write-ahead log.
-pub struct GenericEntryRefMut<'a, K, V> {
-  pub(crate) key: Generic<'a, K>,
-  pub(crate) value: Generic<'a, V>,
-  pub(crate) pointer: Option<&'a mut GenericPointer<K, V>>,
 }
 
 /// An entry in the generic write-ahead log.
@@ -301,51 +251,20 @@ impl<'a, K, V> GenericEntry<'a, K, V> {
 
   /// Returns the key.
   #[inline]
-  pub const fn key(&self) -> Either<&GenericVariant<'a, K>, &'a [u8]> {
-    match &self.key.value {
-      Either::Left(v) => Either::Left(v),
-      Either::Right(v) => Either::Right(v),
-    }
+  pub const fn key(&self) -> Either<&K, &[u8]> {
+    self.key.data()
   }
 
   /// Returns the value.
   #[inline]
-  pub const fn value(&self) -> Either<&GenericVariant<'a, V>, &'a [u8]> {
-    match &self.value.value {
-      Either::Left(v) => Either::Left(v),
-      Either::Right(v) => Either::Right(v),
-    }
+  pub const fn value(&self) -> Either<&V, &[u8]> {
+    self.value.data()
   }
 
   /// Consumes the entry and returns the key and value.
   #[inline]
   pub fn into_components(self) -> (Generic<'a, K>, Generic<'a, V>) {
     (self.key, self.value)
-  }
- 
-  #[inline]
-  pub(crate) fn as_ref_mut(&mut self) -> GenericEntryRefMut<'_, K, V> {
-    let k = match &self.key.value {
-      Either::Left(v) => match v {
-        GenericVariant::Owned(k) => Generic { value: Either::Left(GenericVariant::Ref(k)) },
-        GenericVariant::Ref(k) => Generic { value: Either::Left(GenericVariant::Ref(*k)) },
-      },
-      Either::Right(v) => Generic { value: Either::Right(v) },
-    };
-
-    let v = match &self.value.value {
-      Either::Left(v) => match v {
-        GenericVariant::Owned(v) => Generic { value: Either::Left(GenericVariant::Ref(v)) },
-        GenericVariant::Ref(v) => Generic { value: Either::Left(GenericVariant::Ref(*v)) },
-      },
-      Either::Right(v) => Generic { value: Either::Right(v) },
-    };
-
-    GenericEntryRefMut {
-      key: k,
-      value: v,
-      pointer: self.pointer.as_mut(),
-    }
   }
 }
 

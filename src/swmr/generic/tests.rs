@@ -157,72 +157,11 @@ impl<'a> TypeRef<'a> for PersonRef<'a> {
   }
 }
 
-fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
-  const N: u32 = 100;
-
-  let mut batch = vec![];
-  let output = (0..N).map(|i| ({ let mut p = Person::random(); p.id = i as u64; p }, format!("My id is {i}")).clone()).collect::<Vec<_>>();
-
-  for (person, val) in output.iter() {
-    if person.id % 3 == 0 {
-      batch.push(GenericEntry::new(person.clone(), val.clone()));
-    } else if person.id % 3 == 1 {
-      batch.push(GenericEntry::new(person, val));
-    } else {
-      unsafe { batch.push(GenericEntry::new(person, Generic::from_slice(val.as_bytes()))); }
-    }
-  }
-
-  wal.insert_batch(&mut batch).unwrap();
-
-  for (p, val) in output.iter() {
-    assert_eq!(wal.get(p).unwrap().value(), val);
-  }
-
-  let wal = wal.reader();
-  for (p, val) in output.iter() {
-    assert_eq!(wal.get(p).unwrap().value(), val);
-  }
-
-  // output
-  vec![]
-}
-
-#[test]
-fn test_insert_batch_inmemory() {
-  insert_batch(&mut GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap());
-}
-
-#[test]
-fn test_insert_batch_map_anon() {
-  insert_batch(&mut GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap());
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn test_insert_batch_map_file() {
-  let dir = ::tempfile::tempdir().unwrap();
-  let path = dir.path().join(concat!(
-    "test_",
-    stringify!($prefix),
-    "_insert_batch_map_file"
-  ));
-  let mut map = unsafe {
-    GenericBuilder::new().map_mut::<Person, String, _>(
-      &path,
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
-  };
-
-  insert_batch(&mut map);
-
-  let map = unsafe { GenericBuilder::new().map::<Person, String, _>(&path).unwrap() };
-
-  for i in 0..100u32 {
-    assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+impl PersonRef<'_> {
+  fn encode_into_vec(&self) -> Result<Vec<u8>, dbutils::leb128::EncodeVarintError> {
+    let mut buf = vec![0; encoded_u64_varint_len(self.id) + self.name.len()];
+    let id_size = encode_u64_varint(self.id, &mut buf)?;
+    buf[id_size..].copy_from_slice(self.name.as_bytes());
+    Ok(buf) 
   }
 }

@@ -12,8 +12,8 @@ fn owned_comparable() {
     name: "damaged-friend".into(),
   };
 
-  let p1bytes = p1.to_vec();
-  let p2bytes = p2.to_vec();
+  let p1bytes = p1.encode_into_vec().unwrap();
+  let p2bytes = p2.encode_into_vec().unwrap();
 
   let ptr1 = GenericPointer::<Person, String>::new(p1bytes.len(), 0, p1bytes.as_ptr());
   let ptr2 = GenericPointer::<Person, String>::new(p2bytes.len(), 0, p2bytes.as_ptr());
@@ -28,7 +28,10 @@ fn owned_comparable() {
   assert!(map.contains(&Owned::new(&p2)));
   assert!(map.get(&Owned::new(&p2)).is_some());
 
-  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   wal.insert(&p1, &"My name is Alice!".to_string()).unwrap();
   wal.insert(&p2, &"My name is Bob!".to_string()).unwrap();
 
@@ -50,8 +53,8 @@ fn ref_comparable() {
     name: "damaged-friend",
   };
 
-  let p1bytes = p1.to_vec();
-  let p2bytes = p2.to_vec();
+  let p1bytes = p1.encode_into_vec().unwrap();
+  let p2bytes = p2.encode_into_vec().unwrap();
 
   let ptr1 = GenericPointer::<Person, String>::new(p1bytes.len(), 0, p1bytes.as_ptr());
   let ptr2 = GenericPointer::<Person, String>::new(p2bytes.len(), 0, p2bytes.as_ptr());
@@ -66,7 +69,10 @@ fn ref_comparable() {
   assert!(map.contains(&Owned::new(&p2)));
   assert!(map.get(&Owned::new(&p2)).is_some());
 
-  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
 
   unsafe {
     wal
@@ -101,7 +107,10 @@ fn ref_comparable() {
 #[test]
 #[allow(clippy::needless_borrows_for_generic_args)]
 fn construct_inmemory() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
 
   let person = Person {
     id: 1,
@@ -123,7 +132,10 @@ fn construct_inmemory() {
 #[test]
 #[allow(clippy::needless_borrows_for_generic_args)]
 fn construct_map_anon() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   let person = Person {
     id: 1,
     name: "Alice".to_string(),
@@ -142,14 +154,15 @@ fn construct_map_file() {
   let path = dir.path().join("generic_wal_construct_map_file");
 
   unsafe {
-    let mut wal = GenericBuilder::new().map_mut::<Person, String, _>(
-      &path,
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap();
+    let mut wal = GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap();
     let person = Person {
       id: 1,
       name: "Alice".to_string(),
@@ -169,21 +182,28 @@ fn construct_map_file() {
   };
 
   unsafe {
-    let wal = GenericBuilder::new().map_mut::<Person, String, _>(
-      &path,
-      OpenOptions::new().create(Some(MB)).write(true).read(true),
-    )
-    .unwrap();
+    let wal = GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new().create(Some(MB)).write(true).read(true),
+      )
+      .unwrap();
     assert_eq!(wal.get(&pr).unwrap().value(), "My name is Alice!");
   }
 
-  let wal = unsafe { GenericBuilder::new().map::<Person, String, _>(&path).unwrap() };
+  let wal = unsafe {
+    GenericBuilder::new()
+      .map::<Person, String, _>(&path)
+      .unwrap()
+  };
   assert_eq!(wal.get(&pr).unwrap().value(), "My name is Alice!");
 }
 
 #[test]
 fn construct_with_small_capacity_inmemory() {
-  let wal = GenericBuilder::new().with_capacity(1).alloc::<Person, String>();
+  let wal = GenericBuilder::new()
+    .with_capacity(1)
+    .alloc::<Person, String>();
 
   assert!(wal.is_err());
   match wal {
@@ -194,7 +214,9 @@ fn construct_with_small_capacity_inmemory() {
 
 #[test]
 fn construct_with_small_capacity_map_anon() {
-  let wal = GenericBuilder::new().with_capacity(1).map_anon::<Person, String>();
+  let wal = GenericBuilder::new()
+    .with_capacity(1)
+    .map_anon::<Person, String>();
 
   assert!(wal.is_err());
   match wal {
@@ -239,14 +261,19 @@ fn zero_reserved(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn zero_reserved_inmemory() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   zero_reserved(&mut wal);
 }
 
 #[test]
 fn zero_reserved_map_anon() {
-  let mut wal =
-    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   zero_reserved(&mut wal);
 }
 
@@ -257,14 +284,15 @@ fn zero_reserved_map_file() {
   let path = dir.path().join("generic_wal_zero_reserved_map_file");
 
   let mut wal = unsafe {
-    GenericBuilder::new().map_mut::<Person, String, _>(
-      &path, 
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   zero_reserved(&mut wal);
@@ -284,14 +312,20 @@ fn reserved(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn reserved_inmemory() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).with_reserved(4).alloc()
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .with_reserved(4)
+    .alloc()
     .unwrap();
   reserved(&mut wal);
 }
 
 #[test]
 fn reserved_map_anon() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).with_reserved(4).map_anon()
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .with_reserved(4)
+    .map_anon()
     .unwrap();
   reserved(&mut wal);
 }
@@ -303,14 +337,16 @@ fn reserved_map_file() {
   let path = dir.path().join("generic_wal_reserved_map_file");
 
   let mut wal = unsafe {
-    GenericBuilder::new().with_reserved(4).map_mut::<Person, String, _>(
-      &path,
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .with_reserved(4)
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   reserved(&mut wal);

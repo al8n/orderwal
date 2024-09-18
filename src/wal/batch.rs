@@ -2,9 +2,9 @@ use core::borrow::Borrow;
 
 use dbutils::{buffer::VacantBuffer, Comparator};
 
-use super::{entry::{
+use super::entry::{
   Entry, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder, GenericEntry,
-}, GenericEntryRefMut};
+};
 
 /// A batch of keys and values that can be inserted into the [`Wal`].
 pub trait Batch {
@@ -186,75 +186,58 @@ where
   }
 }
 
-/// An iterator wrapper for any `&mut T: IntoIterator<Item = &mut GenericEntry<'_, K, V>>`.
-pub struct GenericBatchIterMut<'a, K, V, T> {
-  iter: T,
-  _m: core::marker::PhantomData<&'a (K, V)>,
-}
-
-impl<K, V, T> GenericBatchIterMut<'_, K, V, T> {
-  /// Creates a new iterator wrapper.
-  #[inline]
-  const fn new(iter: T) -> Self {
-    Self {
-      iter,
-      _m: core::marker::PhantomData,
-    }
-  }
-}
-
-impl<'a, K, V, T> Iterator for GenericBatchIterMut<'a, K, V, T>
-where
-  T: Iterator<Item = &'a mut GenericEntry<'a, K, V>>,
-{
-  type Item = GenericEntryRefMut<'a, K, V>;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(|entry| entry.as_ref_mut())
-  }
-}
-
 /// The container for entries in the [`GenericBatch`].
-pub trait GenericBatch {
+pub trait GenericBatch<'e> {
   /// The key type.
-  type Key;
+  type Key: 'e;
 
   /// The value type.
-  type Value;
+  type Value: 'e;
+
+  /// The mutable iterator type.
+  type IterMut<'a>: Iterator<Item = &'a mut GenericEntry<'e, Self::Key, Self::Value>>
+  where
+    Self: 'e,
+    'e: 'a;
 
   /// The iterator type.
-  type IterMut<'e>: Iterator<Item = &'e mut GenericEntry<'e, Self::Key, Self::Value>>
+  type Iter<'a>: Iterator<Item = &'a GenericEntry<'e, Self::Key, Self::Value>>
   where
-    Self: 'e;
+    Self: 'e,
+    'e: 'a;
+
+  /// Returns an mutable iterator over the keys and values.
+  fn iter_mut(&'e mut self) -> Self::IterMut<'e>;
 
   /// Returns an iterator over the keys and values.
-  fn iter_mut(&mut self) -> Self::IterMut<'_>;
+  fn iter(&'e self) -> Self::Iter<'e>;
 }
 
-impl<K, V, T> GenericBatch for T
+impl<'e, K, V, T> GenericBatch<'e> for T
 where
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut GenericEntry<'a, K, V>>,
+  K: 'e,
+  V: 'e,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut GenericEntry<'e, K, V>>,
+  for<'a> &'a T: IntoIterator<Item = &'a GenericEntry<'e, K, V>>,
 {
   type Key = K;
   type Value = V;
 
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter
+  where
+    Self: 'e,
+    'e: 'a;
 
-  fn iter_mut(&mut self) -> Self::IterMut<'_> {
+  type Iter<'a> = <&'a T as IntoIterator>::IntoIter
+  where
+    Self: 'e,
+    'e: 'a;
+
+  fn iter_mut(&'e mut self) -> Self::IterMut<'e> {
+    IntoIterator::into_iter(self)
+  }
+
+  fn iter(&'e self) -> Self::Iter<'e> {
     IntoIterator::into_iter(self)
   }
 }
-
-// impl<'a, K, V> GenericBatch for Vec<GenericEntry<'a, K, V>>
-// {
-//   type Key = K;
-//   type Value = V;
-
-//   type IterMut<'b> = GenericBatchIterMut<'b, K, V, core::slice::IterMut<'a, GenericEntry<'a, K, V>>>
-//   where
-//     Self: 'b;
-
-//   fn iter_mut(&mut self) -> Self::IterMut<'_> {
-//     GenericBatchIterMut::new(IntoIterator::into_iter(self))
-//   }
-// }

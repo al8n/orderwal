@@ -1,4 +1,10 @@
-use core::{cmp, marker::PhantomData, ops::Bound, slice};
+use core::{
+  cmp,
+  marker::PhantomData,
+  ops::Bound,
+  slice,
+  sync::atomic::{AtomicPtr, Ordering},
+};
 use std::{
   path::{Path, PathBuf},
   sync::Arc,
@@ -22,7 +28,7 @@ use crate::{
 };
 
 pub use crate::{
-  entry::{Generic, GenericEntry, GenericEntryRef, GenericVariant},
+  entry::{Generic, GenericEntry, GenericEntryRef},
   wal::{r#type::*, GenericBatch},
 };
 
@@ -37,17 +43,16 @@ pub use iter::*;
 mod builder;
 pub use builder::*;
 
-// #[cfg(all(
-//   test,
-//   any(
-//     all_tests,
-//     test_swmr_generic_constructor,
-//     test_swmr_generic_insert,
-//     test_swmr_generic_get,
-//     test_swmr_generic_iters,
-//   )
-// ))]
-#[cfg(test)]
+#[cfg(all(
+  test,
+  any(
+    all_tests,
+    test_swmr_generic_constructor,
+    test_swmr_generic_insert,
+    test_swmr_generic_get,
+    test_swmr_generic_iters,
+  )
+))]
 #[doc(hidden)]
 pub mod tests;
 
@@ -583,15 +588,8 @@ where
   ) -> Either<GenericEntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
     let key: Generic<'a, K> = key.into();
     let map = &self.core.map;
-    let ent = match key.value() {
-      Either::Left(key) => {
-        let k = match key {
-          GenericVariant::Owned(k) => k,
-          GenericVariant::Ref(k) => *k,
-        };
-
-        map.get(&Owned::new(k))
-      }
+    let ent = match key.data() {
+      Either::Left(k) => map.get(&Owned::new(k)),
       Either::Right(key) => map.get(&PartialPointer::new(key.len(), key.as_ptr())),
     };
 
@@ -610,15 +608,8 @@ where
   ) -> Either<GenericEntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
     let key: Generic<'a, K> = key.into();
     let map = &self.core.map;
-    let ent = match key.value() {
-      Either::Left(key) => {
-        let k = match key {
-          GenericVariant::Owned(k) => k,
-          GenericVariant::Ref(k) => *k,
-        };
-
-        map.get(&Owned::new(k))
-      }
+    let ent = match key.data() {
+      Either::Left(k) => map.get(&Owned::new(k)),
       Either::Right(key) => map.get(&PartialPointer::new(key.len(), key.as_ptr())),
     };
 
@@ -726,31 +717,33 @@ where
   }
 
   /// Inserts a batch of entries into the write-ahead log.
-  pub fn insert_batch<'a, B: GenericBatch<'a, Key = K, Value = V>>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Among<K::Error, V::Error, Error>>
-  {
-    let mut batch_encoded_size = 0u64;
+  pub fn insert_batch<'a, 'b: 'a, B: GenericBatch<'b, Key = K, Value = V>>(
+    &'a mut self,
+    batch: &'b mut B,
+  ) -> Result<(), Among<K::Error, V::Error, Error>> {
+    // TODO: is there another way to avoid the borrow checker?
+    let batch_ptr = AtomicPtr::new(batch);
 
-    let mut num_entries = 0u32;
-    {
-      for ent in batch.iter_mut() {
-        let klen = ent.key.encoded_len();
-        let vlen = ent.value.encoded_len();
-        crate::utils::check_batch_entry(
-          klen,
-          vlen,
-          self.core.opts.maximum_key_size(),
-          self.core.opts.maximum_value_size(),
-        )
-        .map_err(Among::Right)?;
-        let merged_len = merge_lengths(klen as u32, vlen as u32);
-        batch_encoded_size += klen as u64 + vlen as u64 + encoded_u64_varint_len(merged_len) as u64;
-  
-        num_entries += 1;
-      }
-    }
+    let batch = batch_ptr.load(Ordering::Acquire);
+    let (num_entries, batch_encoded_size) = unsafe {
+      (*batch)
+        .iter_mut()
+        .try_fold((0u32, 0u64), |(num_entries, size), ent| {
+          let klen = ent.key.encoded_len();
+          let vlen = ent.value.encoded_len();
+          crate::utils::check_batch_entry(
+            klen,
+            vlen,
+            self.core.opts.maximum_key_size(),
+            self.core.opts.maximum_value_size(),
+          )?;
+          let merged_len = merge_lengths(klen as u32, vlen as u32);
+
+          let ent_size = klen as u64 + vlen as u64 + encoded_u64_varint_len(merged_len) as u64;
+          Ok((num_entries + 1, size + ent_size))
+        })
+        .map_err(Among::Right)?
+    };
 
     // safe to cast batch_encoded_size to u32 here, we already checked it's less than capacity (less than u32::MAX).
     let batch_meta = merge_lengths(num_entries, batch_encoded_size as u32);
@@ -776,33 +769,33 @@ where
       let flag = Flags::BATCHING;
       buf.put_u8_unchecked(flag.bits);
       buf.put_u64_varint_unchecked(batch_meta);
-      let mut cursor = 1 + batch_meta_size;
+      let mut cursor = STATUS_SIZE + batch_meta_size;
 
-      for ent in batch.iter_mut() {
-        let klen = ent.key.encoded_len();
-        let vlen = ent.value.encoded_len();
-        let merged_kv_len = merge_lengths(klen as u32, vlen as u32);
-        let merged_kv_len_size = encoded_u64_varint_len(merged_kv_len);
+      {
+        let batch = batch_ptr.load(Ordering::Acquire);
+        for ent in (*batch).iter_mut() {
+          let klen = ent.key.encoded_len();
+          let vlen = ent.value.encoded_len();
+          let merged_kv_len = merge_lengths(klen as u32, vlen as u32);
+          let merged_kv_len_size = encoded_u64_varint_len(merged_kv_len);
 
-        let remaining = buf.remaining();
-        if remaining < merged_kv_len_size + klen + vlen {
-          return Err(Among::Right(Error::larger_batch_size(total_size as u32)));
+          let remaining = buf.remaining();
+          if remaining < merged_kv_len_size + klen + vlen {
+            return Err(Among::Right(Error::larger_batch_size(total_size as u32)));
+          }
+
+          let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
+          let ko = cursor as usize + ent_len_size;
+          let ptr = buf.as_mut_ptr().add(ko);
+
+          let key_buf = slice::from_raw_parts_mut(ptr, klen);
+          ent.key.encode(key_buf).map_err(Among::Left)?;
+          let value_buf = slice::from_raw_parts_mut(ptr.add(klen), vlen);
+          ent.value.encode(value_buf).map_err(Among::Middle)?;
+
+          cursor += ent_len_size + klen + vlen;
+          ent.pointer = Some(GenericPointer::new(klen, vlen, ptr));
         }
-
-        let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let ko = cursor as usize + ent_len_size;
-        let ptr = buf.as_mut_ptr().add(ko);
-
-        let key_buf = slice::from_raw_parts_mut(ptr, klen);
-        ent.key.encode(key_buf).map_err(Among::Left)?;
-        let value_buf = slice::from_raw_parts_mut(ptr.add(klen), vlen);
-        ent.value.encode(value_buf).map_err(Among::Middle)?;
-
-        cursor += ent_len_size + klen + vlen;
-        // if let Some(pointer) = ent.pointer {
-        //   *pointer = GenericPointer::new(klen, vlen, ptr);
-        // }
-        ent.pointer = Some(GenericPointer::new(klen, vlen, ptr));
       }
 
       if (cursor + CHECKSUM_SIZE) as u64 != total_size {
@@ -827,6 +820,14 @@ where
           .map_err(|e| Among::Right(e.into()))?;
       }
       buf.detach();
+
+      {
+        let batch = batch_ptr.load(Ordering::Acquire);
+        (*batch).iter_mut().for_each(|ent| {
+          self.core.map.insert(ent.pointer.take().unwrap());
+        });
+      }
+
       Ok(())
     }
   }
