@@ -25,14 +25,14 @@ fn first(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn first_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   first(&mut wal);
 }
 
 #[test]
 fn first_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   first(&mut wal);
 }
 
@@ -43,9 +43,8 @@ fn first_map_file() {
   let path = dir.path().join("generic_wal_first_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -81,14 +80,14 @@ fn last(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn last_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   last(&mut wal);
 }
 
 #[test]
 fn last_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   last(&mut wal);
 }
 
@@ -99,9 +98,8 @@ fn last_map_file() {
   let path = dir.path().join("generic_wal_last_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -113,6 +111,7 @@ fn last_map_file() {
   last(&mut wal);
 }
 
+#[allow(clippy::needless_borrows_for_generic_args)]
 fn get_or_insert(wal: &mut GenericOrderWal<Person, String>) {
   let people = (0..100)
     .map(|_| {
@@ -128,6 +127,7 @@ fn get_or_insert(wal: &mut GenericOrderWal<Person, String>) {
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
     assert!(wal.contains_key_by_ref(&p.as_ref()));
+    
     assert_eq!(
       wal
         .get_or_insert(p, &format!("Hello! {}!", p.name))
@@ -145,14 +145,14 @@ fn get_or_insert(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn get_or_insert_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   get_or_insert(&mut wal);
 }
 
 #[test]
 fn get_or_insert_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   get_or_insert(&mut wal);
 }
 
@@ -163,9 +163,8 @@ fn get_or_insert_map_file() {
   let path = dir.path().join("generic_wal_get_or_insert_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -183,7 +182,7 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
       let p = Person::random();
       let v = format!("My name is {}", p.name);
       wal
-        .get_or_insert_with(&p, || v.clone())
+        .get_or_insert_with(&p, || v.clone().into())
         .unwrap_right()
         .unwrap();
       (p, v)
@@ -197,7 +196,7 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
     assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
       wal
-        .get_or_insert_with(p, || format!("Hello! {}!", p.name))
+        .get_or_insert_with(p, || format!("Hello! {}!", p.name).into())
         .unwrap_left()
         .value(),
       pv
@@ -212,14 +211,14 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn get_or_insert_with_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   get_or_insert_with(&mut wal);
 }
 
 #[test]
 fn get_or_insert_with_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   get_or_insert_with(&mut wal);
 }
 
@@ -230,9 +229,8 @@ fn get_or_insert_with_map_file() {
   let path = dir.path().join("generic_wal_get_or_insert_with_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -244,6 +242,7 @@ fn get_or_insert_with_map_file() {
   get_or_insert_with(&mut wal);
 }
 
+#[allow(clippy::needless_borrows_for_generic_args)]
 fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
   let people = (0..100)
     .map(|_| {
@@ -252,7 +251,7 @@ fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>)
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .get_by_bytes_or_insert(pvec.as_ref(), &v)
+          .get_or_insert(Generic::from_slice(pvec.as_ref()), &v)
           .unwrap_right()
           .unwrap();
       }
@@ -265,6 +264,7 @@ fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>)
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
     assert!(wal.contains_key_by_ref(&p.as_ref()));
+    
     assert_eq!(
       wal
         .get_or_insert(p, &format!("Hello! {}!", p.name))
@@ -282,14 +282,14 @@ fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>)
 
 #[test]
 fn get_or_insert_key_with_value_bytes_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   get_or_insert_key_with_value_bytes(&mut wal);
 }
 
 #[test]
 fn get_or_insert_key_with_value_bytes_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   get_or_insert_key_with_value_bytes(&mut wal);
 }
 
@@ -302,9 +302,8 @@ fn get_or_insert_key_with_value_bytes_map_file() {
     .join("generic_wal_get_or_insert_key_with_value_bytes_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -323,7 +322,7 @@ fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .get_or_insert_bytes(&p, v.as_bytes())
+          .get_or_insert(&p, Generic::from_slice(v.as_bytes()))
           .unwrap_right()
           .unwrap();
       }
@@ -339,7 +338,7 @@ fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
     unsafe {
       assert_eq!(
         wal
-          .get_or_insert_bytes(p, pv.as_bytes())
+          .get_or_insert(p, Generic::from_slice(pv.as_bytes()))
           .unwrap_left()
           .value(),
         pv
@@ -355,14 +354,14 @@ fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn get_or_insert_value_bytes_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   get_or_insert_value_bytes(&mut wal);
 }
 
 #[test]
 fn get_or_insert_value_bytes_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   get_or_insert_value_bytes(&mut wal);
 }
 
@@ -375,9 +374,8 @@ fn get_or_insert_value_bytes_map_file() {
     .join("generic_wal_get_or_insert_value_bytes_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -397,7 +395,7 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .get_by_bytes_or_insert_with(pvec.as_ref(), || v.clone())
+          .get_or_insert_with(Generic::from_slice(pvec.as_ref()), || v.clone().into())
           .unwrap_right()
           .unwrap();
       }
@@ -413,7 +411,7 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
     unsafe {
       assert_eq!(
         wal
-          .get_by_bytes_or_insert_with(pvec, || format!("Hello! {}!", p.name))
+          .get_or_insert_with(Generic::from_slice(pvec), || format!("Hello! {}!", p.name).into())
           .unwrap_left()
           .value(),
         pv
@@ -429,14 +427,14 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn get_by_bytes_or_insert_with_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   get_by_bytes_or_insert_with(&mut wal);
 }
 
 #[test]
 fn get_by_bytes_or_insert_with_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   get_by_bytes_or_insert_with(&mut wal);
 }
 
@@ -449,9 +447,8 @@ fn get_by_bytes_or_insert_with_map_file() {
     .join("generic_wal_get_by_bytes_or_insert_with_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
+    GenericBuilder::new().map_mut(
       &path,
-      Options::new(),
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)
@@ -471,7 +468,7 @@ fn get_by_bytes_or_insert_bytes(wal: &mut GenericOrderWal<Person, String>) {
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .get_by_bytes_or_insert_bytes(pvec.as_ref(), v.as_bytes())
+          .get_or_insert(Generic::from_slice(pvec.as_ref()), Generic::from_slice(v.as_bytes()))
           .unwrap_right()
           .unwrap();
       }
@@ -487,7 +484,7 @@ fn get_by_bytes_or_insert_bytes(wal: &mut GenericOrderWal<Person, String>) {
     unsafe {
       assert_eq!(
         wal
-          .get_by_bytes_or_insert_bytes(pvec, pv.as_bytes())
+          .get_or_insert(Generic::from_slice(pvec), Generic::from_slice(pv.as_bytes()))
           .unwrap_left()
           .value(),
         pv
@@ -503,14 +500,14 @@ fn get_by_bytes_or_insert_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn get_by_bytes_or_insert_bytes_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap();
   get_by_bytes_or_insert_bytes(&mut wal);
 }
 
 #[test]
 fn get_by_bytes_or_insert_bytes_map_anon() {
   let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+    GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap();
   get_by_bytes_or_insert_bytes(&mut wal);
 }
 
@@ -523,9 +520,8 @@ fn get_by_bytes_or_insert_bytes_map_file() {
     .join("generic_wal_get_by_bytes_or_insert_bytes_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
+    GenericBuilder::new().map_mut(
+      &path, 
       OpenOptions::new()
         .create_new(Some(MB))
         .write(true)

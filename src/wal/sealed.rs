@@ -1,5 +1,6 @@
 use core::ptr::NonNull;
 
+use checksum::{BuildChecksumer, Checksumer};
 use rarena_allocator::ArenaPosition;
 
 use super::*;
@@ -10,32 +11,23 @@ pub trait Pointer {
   fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: Self::Comparator) -> Self;
 }
 
-impl<C> Pointer for crate::Pointer<C> {
-  type Comparator = C;
-
-  #[inline]
-  fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: C) -> Self {
-    crate::Pointer::<C>::new(klen, vlen, ptr, cmp)
-  }
-}
-
 pub trait Base: Default {
   type Pointer: Pointer;
 
   fn insert(&mut self, ele: Self::Pointer)
   where
-    Self::Pointer: Ord;
+    Self::Pointer: Ord + 'static;
 }
 
 impl<P> Base for SkipSet<P>
 where
-  P: Pointer + Send + 'static,
+  P: Pointer + Send,
 {
   type Pointer = P;
 
   fn insert(&mut self, ele: Self::Pointer)
   where
-    P: Ord,
+    P: Ord + 'static,
   {
     SkipSet::insert(self, ele);
   }
@@ -68,15 +60,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     let max_key_size = opts.maximum_key_size();
     let max_value_size = opts.maximum_value_size();
 
-    if klen > max_key_size as usize {
-      return Err(Error::key_too_large(klen as u64, max_key_size));
-    }
-
-    if vlen > max_value_size as usize {
-      return Err(Error::value_too_large(vlen as u64, max_value_size));
-    }
-
-    Ok(())
+    crate::utils::check_batch_entry(klen, vlen, max_key_size, max_value_size)
   }
 
   fn hasher(&self) -> &S;
@@ -599,7 +583,7 @@ pub trait Constructor<C, S>: Sized {
   where
     C: CheapClone,
     S: BuildChecksumer,
-    Self::Pointer: Ord,
+    Self::Pointer: Ord + 'static,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];

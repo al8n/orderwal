@@ -2,7 +2,7 @@ use core::ops::Bound;
 
 use crossbeam_skiplist::Comparable;
 
-use super::{EntryRef, KeyRef, Owned, Pointer, Ref, Type};
+use super::{GenericEntryRef, GenericPointer as Pointer, KeyRef, Owned, Ref, Type};
 
 type SetRefRange<'a, Q, K, V> = crossbeam_skiplist::set::Range<
   'a,
@@ -34,11 +34,11 @@ where
   K: Type + Ord,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
 {
-  type Item = EntryRef<'a, K, V>;
+  type Item = GenericEntryRef<'a, K, V>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(|ptr| EntryRef::new(ptr))
+    self.iter.next().map(|ptr| GenericEntryRef::new(ptr))
   }
 
   #[inline]
@@ -54,7 +54,7 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(|ptr| EntryRef::new(ptr))
+    self.iter.next_back().map(|ptr| GenericEntryRef::new(ptr))
   }
 }
 
@@ -86,11 +86,11 @@ where
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
 {
-  type Item = EntryRef<'a, K, V>;
+  type Item = GenericEntryRef<'a, K, V>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(|ptr| EntryRef::new(ptr))
+    self.iter.next().map(|ptr| GenericEntryRef::new(ptr))
   }
 }
 
@@ -102,7 +102,7 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(|ptr| EntryRef::new(ptr))
+    self.iter.next_back().map(|ptr| GenericEntryRef::new(ptr))
   }
 }
 
@@ -134,11 +134,11 @@ where
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>> + Comparable<K>,
 {
-  type Item = EntryRef<'a, K, V>;
+  type Item = GenericEntryRef<'a, K, V>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(|ptr| EntryRef::new(ptr))
+    self.iter.next().map(|ptr| GenericEntryRef::new(ptr))
   }
 }
 
@@ -150,6 +150,6 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(|ptr| EntryRef::new(ptr))
+    self.iter.next_back().map(|ptr| GenericEntryRef::new(ptr))
   }
 }

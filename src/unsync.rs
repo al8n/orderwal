@@ -3,12 +3,17 @@ use std::{collections::BTreeSet, rc::Rc};
 
 use super::*;
 
+use checksum::BuildChecksumer;
 use either::Either;
 use error::Error;
+use pointer::Pointer;
 use rarena_allocator::unsync::Arena;
-use wal::{
-  sealed::{Constructor, Sealed},
-  ImmutableWal,
+use wal::sealed::{Constructor, Sealed};
+
+pub use super::{
+  builder::Builder,
+  wal::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal},
+  Comparator, KeyBuilder, VacantBuffer, ValueBuilder,
 };
 
 /// Iterators for the `OrderWal`.
@@ -79,7 +84,7 @@ where
 impl<C, S> OrderWal<C, S> {
   /// Returns the path of the WAL if it is backed by a file.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{unsync::OrderWal, Wal, Builder};

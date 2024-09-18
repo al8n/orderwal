@@ -1,3 +1,6 @@
+use checksum::BuildChecksumer;
+use wal::{sealed::Constructor, Wal};
+
 use super::*;
 
 /// A write-ahead log builder.
@@ -29,7 +32,7 @@ impl Builder {
 impl<C, S> Builder<C, S> {
   /// Returns a new write-ahead log builder with the new comparator
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{Builder, Ascend};
@@ -47,7 +50,7 @@ impl<C, S> Builder<C, S> {
 
   /// Returns a new write-ahead log builder with the new checksumer
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{Builder, Crc32};
@@ -65,7 +68,7 @@ impl<C, S> Builder<C, S> {
 
   /// Returns a new write-ahead log builder with the new options
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{Builder, Options};
@@ -88,7 +91,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default reserved is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -108,7 +111,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default reserved is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -126,7 +129,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -143,7 +146,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -160,7 +163,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `u16::MAX`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -177,7 +180,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `u32::MAX`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -194,7 +197,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `true`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -221,7 +224,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `None`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -240,7 +243,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -256,7 +259,7 @@ impl<C, S> Builder<C, S> {
 
   /// Sets the maximum key length.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -272,7 +275,7 @@ impl<C, S> Builder<C, S> {
 
   /// Sets the maximum value length.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -300,7 +303,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `None`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -318,7 +321,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `true`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -336,7 +339,7 @@ impl<C, S> Builder<C, S> {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Builder;
@@ -354,7 +357,7 @@ impl<C, S> Builder<C, S> {
 impl<C, S> Builder<C, S> {
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{swmr::OrderWal, Builder};
@@ -373,12 +376,12 @@ impl<C, S> Builder<C, S> {
       arena_options(opts.reserved()).with_capacity(opts.capacity()),
     )
     .map_err(Error::from_insufficient_space)?;
-    <W as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
+    <W as Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
   }
 
   /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{swmr::OrderWal, Builder};
@@ -396,9 +399,7 @@ impl<C, S> Builder<C, S> {
     let mmap_opts = MmapOptions::new().len(opts.capacity());
     <W::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
       .map_err(Into::into)
-      .and_then(|arena| {
-        <W as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
-      })
+      .and_then(|arena| <W as Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core))
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
@@ -433,7 +434,7 @@ impl<C, S> Builder<C, S> {
   /// };
   pub unsafe fn map<W, P>(self, path: P) -> Result<W::Reader, Error>
   where
-    C: Comparator + CheapClone,
+    C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Wal<C, S>,
@@ -479,16 +480,16 @@ impl<C, S> Builder<C, S> {
   ) -> Result<W::Reader, Either<E, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    C: Comparator + CheapClone,
+    C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     W: Wal<C, S>,
-    W::Pointer: Ord,
+    W::Pointer: Ord + 'static,
   {
     let open_options = OpenOptions::default().read(true);
 
     let Self { opts, cmp, cks } = self;
 
-    <<W::Reader as sealed::Constructor<C, S>>::Allocator as Allocator>::map_with_path_builder(
+    <<W::Reader as Constructor<C, S>>::Allocator as Allocator>::map_with_path_builder(
       path_builder,
       arena_options(opts.reserved()),
       open_options,
@@ -496,8 +497,8 @@ impl<C, S> Builder<C, S> {
     )
     .map_err(|e| e.map_right(Into::into))
     .and_then(|arena| {
-      <W::Reader as sealed::Constructor<C, S>>::replay(arena, Options::new(), true, cmp, cks)
-        .map(<W::Reader as sealed::Constructor<C, S>>::from_core)
+      <W::Reader as Constructor<C, S>>::replay(arena, Options::new(), true, cmp, cks)
+        .map(<W::Reader as Constructor<C, S>>::from_core)
         .map_err(Either::Right)
     })
   }
@@ -528,7 +529,7 @@ impl<C, S> Builder<C, S> {
   /// ```
   pub unsafe fn map_mut<W, P>(self, path: P, open_opts: OpenOptions) -> Result<W, Error>
   where
-    C: Comparator + CheapClone,
+    C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Wal<C, S>,
@@ -571,7 +572,7 @@ impl<C, S> Builder<C, S> {
   ) -> Result<W, Either<E, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    C: Comparator + CheapClone,
+    C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     W: Wal<C, S>,
   {
@@ -590,9 +591,9 @@ impl<C, S> Builder<C, S> {
     .map_err(Into::into)
     .and_then(|arena| {
       if !exist {
-        <W as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
+        <W as Constructor<C, S>>::new_in(arena, opts, cmp, cks).map(W::from_core)
       } else {
-        <W as sealed::Constructor<C, S>>::replay(arena, opts, false, cmp, cks).map(W::from_core)
+        <W as Constructor<C, S>>::replay(arena, opts, false, cmp, cks).map(W::from_core)
       }
     })
     .map_err(Either::Right)

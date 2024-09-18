@@ -1,194 +1,13 @@
+use checksum::BuildChecksumer;
 use core::ops::RangeBounds;
 
 use super::*;
 
-mod builder;
-pub use builder::*;
-
-mod generic_builder;
-pub use generic_builder::*;
-
 pub(crate) mod sealed;
+pub(crate) mod r#type;
 
-/// A batch of keys and values that can be inserted into the [`Wal`].
-pub trait Batch {
-  /// The key type.
-  type Key: Borrow<[u8]>;
-
-  /// The value type.
-  type Value: Borrow<[u8]>;
-
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
-
-  /// The iterator type.
-  type IterMut<'a>: Iterator<Item = &'a mut Entry<Self::Key, Self::Value, Self::Comparator>>
-  where
-    Self: 'a;
-
-  /// Returns an iterator over the keys and values.
-  fn iter_mut(&mut self) -> Self::IterMut<'_>;
-}
-
-impl<K, V, C, T> Batch for T
-where
-  K: Borrow<[u8]>,
-  V: Borrow<[u8]>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut Entry<K, V, C>>,
-{
-  type Key = K;
-  type Value = V;
-  type Comparator = C;
-
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
-
-  fn iter_mut(&mut self) -> Self::IterMut<'_> {
-    IntoIterator::into_iter(self)
-  }
-}
-
-/// A batch of keys and values that can be inserted into the [`Wal`].
-/// Comparing to [`Batch`], this trait is used to build
-/// the key in place.
-pub trait BatchWithKeyBuilder {
-  /// The key builder type.
-  type KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
-
-  /// The error for the key builder.
-  type Error;
-
-  /// The value type.
-  type Value: Borrow<[u8]>;
-
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
-
-  /// The iterator type.
-  type IterMut<'a>: Iterator<
-    Item = &'a mut EntryWithKeyBuilder<Self::KeyBuilder, Self::Value, Self::Comparator>,
-  >
-  where
-    Self: 'a;
-
-  /// Returns an iterator over the keys and values.
-  fn iter_mut(&mut self) -> Self::IterMut<'_>;
-}
-
-impl<KB, E, V, C, T> BatchWithKeyBuilder for T
-where
-  KB: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
-  V: Borrow<[u8]>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithKeyBuilder<KB, V, C>>,
-{
-  type KeyBuilder = KB;
-  type Error = E;
-  type Value = V;
-  type Comparator = C;
-
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
-
-  fn iter_mut(&mut self) -> Self::IterMut<'_> {
-    IntoIterator::into_iter(self)
-  }
-}
-
-/// A batch of keys and values that can be inserted into the [`Wal`].
-/// Comparing to [`Batch`], this trait is used to build
-/// the value in place.
-pub trait BatchWithValueBuilder {
-  /// The value builder type.
-  type ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
-
-  /// The error for the value builder.
-  type Error;
-
-  /// The key type.
-  type Key: Borrow<[u8]>;
-
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
-
-  /// The iterator type.
-  type IterMut<'a>: Iterator<
-    Item = &'a mut EntryWithValueBuilder<Self::Key, Self::ValueBuilder, Self::Comparator>,
-  >
-  where
-    Self: 'a;
-
-  /// Returns an iterator over the keys and values.
-  fn iter_mut(&mut self) -> Self::IterMut<'_>;
-}
-
-impl<K, VB, E, C, T> BatchWithValueBuilder for T
-where
-  VB: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
-  K: Borrow<[u8]>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithValueBuilder<K, VB, C>>,
-{
-  type Key = K;
-  type Error = E;
-  type ValueBuilder = VB;
-  type Comparator = C;
-
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
-
-  fn iter_mut(&mut self) -> Self::IterMut<'_> {
-    IntoIterator::into_iter(self)
-  }
-}
-
-/// A batch of keys and values that can be inserted into the [`Wal`].
-/// Comparing to [`Batch`], this trait is used to build
-/// the key and value in place.
-pub trait BatchWithBuilders {
-  /// The value builder type.
-  type ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::ValueError>;
-
-  /// The error for the value builder.
-  type ValueError;
-
-  /// The value builder type.
-  type KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::KeyError>;
-
-  /// The error for the value builder.
-  type KeyError;
-
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
-
-  /// The iterator type.
-  type IterMut<'a>: Iterator<
-    Item = &'a mut EntryWithBuilders<Self::KeyBuilder, Self::ValueBuilder, Self::Comparator>,
-  >
-  where
-    Self: 'a;
-
-  /// Returns an iterator over the keys and values.
-  fn iter_mut(&mut self) -> Self::IterMut<'_>;
-}
-
-impl<KB, KE, VB, VE, C, T> BatchWithBuilders for T
-where
-  VB: Fn(&mut VacantBuffer<'_>) -> Result<(), VE>,
-  KB: Fn(&mut VacantBuffer<'_>) -> Result<(), KE>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithBuilders<KB, VB, C>>,
-{
-  type KeyBuilder = KB;
-  type KeyError = KE;
-  type ValueBuilder = VB;
-  type ValueError = VE;
-  type Comparator = C;
-
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
-
-  fn iter_mut(&mut self) -> Self::IterMut<'_> {
-    IntoIterator::into_iter(self)
-  }
-}
+mod batch;
+pub use batch::*;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
@@ -239,7 +58,7 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 
   /// Returns the reserved space in the WAL.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The writer must ensure that the returned slice is not modified.
   /// - This method is not thread-safe, so be careful when using it.
   unsafe fn reserved_slice<'a>(&'a self) -> &'a [u8]
@@ -361,7 +180,7 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 
 /// An abstract layer for the write-ahead log.
 pub trait Wal<C, S>:
-  sealed::Sealed<C, S, Pointer = crate::Pointer<C>> + ImmutableWal<C, S>
+  sealed::Sealed<C, S, Pointer = super::pointer::Pointer<C>> + ImmutableWal<C, S>
 {
   /// The read only reader type for this wal.
   type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>;
@@ -373,7 +192,7 @@ pub trait Wal<C, S>:
 
   /// Returns the mutable reference to the reserved slice.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
   /// - This method is not thread-safe, so be careful when using it.
   unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]

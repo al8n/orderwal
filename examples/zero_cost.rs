@@ -1,6 +1,10 @@
 use std::{cmp, sync::Arc, thread::spawn};
 
-use orderwal::{swmr::generic::*, utils::*, OpenOptions, Options};
+use orderwal::{
+  swmr::generic::{Comparable, Equivalent, GenericBuilder, KeyRef, Type, TypeRef},
+  utils::*,
+  OpenOptions,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Person {
@@ -132,15 +136,15 @@ fn main() {
     .collect::<Vec<_>>();
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(1024 * 1024))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(1024 * 1024))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   // Create 100 readers

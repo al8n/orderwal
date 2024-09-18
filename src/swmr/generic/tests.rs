@@ -20,27 +20,33 @@ mod iters;
 #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
 mod get;
 
+#[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
-struct Person {
-  id: u64,
-  name: String,
+pub struct Person {
+  #[doc(hidden)]
+  pub id: u64,
+  #[doc(hidden)]
+  pub name: String,
 }
 
 impl Person {
-  fn random() -> Self {
+  #[doc(hidden)]
+  pub fn random() -> Self {
     Self {
       id: rand::random(),
       name: names::Generator::default().next().unwrap(),
     }
   }
 
-  fn as_ref(&self) -> PersonRef<'_> {
+  #[doc(hidden)]
+  pub fn as_ref(&self) -> PersonRef<'_> {
     PersonRef {
       id: self.id,
       name: &self.name,
     }
   }
 
+  #[doc(hidden)]
   fn to_vec(&self) -> Vec<u8> {
     let mut buf = vec![0; self.encoded_len()];
     self.encode(&mut buf).unwrap();
@@ -48,28 +54,11 @@ impl Person {
   }
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
-struct PersonRef<'a> {
+pub struct PersonRef<'a> {
   id: u64,
   name: &'a str,
-}
-
-impl PersonRef<'_> {
-  fn encoded_len(&self) -> usize {
-    encoded_u64_varint_len(self.id) + self.name.len()
-  }
-
-  fn encode(&self, buf: &mut [u8]) -> Result<(), dbutils::leb128::EncodeVarintError> {
-    let id_size = encode_u64_varint(self.id, buf)?;
-    buf[id_size..].copy_from_slice(self.name.as_bytes());
-    Ok(())
-  }
-
-  fn to_vec(&self) -> Vec<u8> {
-    let mut buf = vec![0; self.encoded_len()];
-    self.encode(&mut buf).unwrap();
-    buf
-  }
 }
 
 impl PartialEq for PersonRef<'_> {
@@ -165,5 +154,75 @@ impl<'a> TypeRef<'a> for PersonRef<'a> {
     let (id_size, id) = decode_u64_varint(src).unwrap();
     let name = std::str::from_utf8(&src[id_size..]).unwrap();
     PersonRef { id, name }
+  }
+}
+
+fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
+  const N: u32 = 100;
+
+  let mut batch = vec![];
+  let output = (0..N).map(|i| ({ let mut p = Person::random(); p.id = i as u64; p }, format!("My id is {i}")).clone()).collect::<Vec<_>>();
+
+  for (person, val) in output.iter() {
+    if person.id % 3 == 0 {
+      batch.push(GenericEntry::new(person.clone(), val.clone()));
+    } else if person.id % 3 == 1 {
+      batch.push(GenericEntry::new(person, val));
+    } else {
+      unsafe { batch.push(GenericEntry::new(person, Generic::from_slice(val.as_bytes()))); }
+    }
+  }
+
+  wal.insert_batch(&mut batch).unwrap();
+
+  for (p, val) in output.iter() {
+    assert_eq!(wal.get(p).unwrap().value(), val);
+  }
+
+  let wal = wal.reader();
+  for (p, val) in output.iter() {
+    assert_eq!(wal.get(p).unwrap().value(), val);
+  }
+
+  // output
+  vec![]
+}
+
+#[test]
+fn test_insert_batch_inmemory() {
+  insert_batch(&mut GenericBuilder::new().with_capacity(MB).alloc::<Person, String>().unwrap());
+}
+
+#[test]
+fn test_insert_batch_map_anon() {
+  insert_batch(&mut GenericBuilder::new().with_capacity(MB).map_anon::<Person, String>().unwrap());
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_insert_batch_map_file() {
+  let dir = ::tempfile::tempdir().unwrap();
+  let path = dir.path().join(concat!(
+    "test_",
+    stringify!($prefix),
+    "_insert_batch_map_file"
+  ));
+  let mut map = unsafe {
+    GenericBuilder::new().map_mut::<Person, String, _>(
+      &path,
+      OpenOptions::new()
+        .create_new(Some(MB))
+        .write(true)
+        .read(true),
+    )
+    .unwrap()
+  };
+
+  insert_batch(&mut map);
+
+  let map = unsafe { GenericBuilder::new().map::<Person, String, _>(&path).unwrap() };
+
+  for i in 0..100u32 {
+    assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }

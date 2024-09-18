@@ -1,4 +1,12 @@
-use super::*;
+use core::ops::Bound;
+use std::sync::Arc;
+
+use dbutils::equivalent::Comparable;
+use rarena_allocator::Allocator;
+
+use super::{
+  GenericEntryRef, GenericOrderWalCore, Iter, KeyRef, Range, RefRange, Type, HEADER_SIZE,
+};
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
 pub struct GenericWalReader<K, V, S>(Arc<GenericOrderWalCore<K, V, S>>);
@@ -22,7 +30,7 @@ impl<K, V, S> GenericWalReader<K, V, S> {
 
   /// Returns the reserved space in the WAL.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The writer must ensure that the returned slice is not modified.
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
@@ -54,13 +62,13 @@ where
 {
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  pub fn first(&self) -> Option<EntryRef<'_, K, V>> {
+  pub fn first(&self) -> Option<GenericEntryRef<'_, K, V>> {
     self.0.first()
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  pub fn last(&self) -> Option<EntryRef<'_, K, V>> {
+  pub fn last(&self) -> Option<GenericEntryRef<'_, K, V>> {
     self.0.last()
   }
 
@@ -123,7 +131,7 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
   pub unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
@@ -132,7 +140,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
+  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
   {
@@ -141,7 +149,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<EntryRef<'a, K, V>>
+  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
@@ -150,10 +158,10 @@ where
 
   /// Gets the value associated with the key.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<EntryRef<'_, K, V>> {
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>> {
     self.0.get_by_bytes(key)
   }
 }

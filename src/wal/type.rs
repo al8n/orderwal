@@ -1,29 +1,10 @@
-use core::{cmp, hash::Hash};
+use core::cmp;
 
 use among::Among;
-use crossbeam_skiplist::{Comparable, Equivalent};
+use dbutils::equivalent::Comparable;
 
 mod impls;
 pub use impls::*;
-
-use super::GenericEntry;
-
-/// The container for entries in the [`GenericBatch`].
-pub trait GenericBatch {
-  /// The key type.
-  type Key;
-
-  /// The value type.
-  type Value;
-
-  /// The iterator type.
-  type IterMut<'a>: Iterator<Item = &'a mut GenericEntry<Self::Key, Self::Value>>
-  where
-    Self: 'a;
-
-  /// Returns an iterator over the keys and values.
-  fn iter_mut(&mut self) -> Self::IterMut<'_>;
-}
 
 /// The type trait for limiting the types that can be used as keys and values in the [`GenericOrderWal`].
 ///
@@ -39,8 +20,16 @@ pub trait Type {
   /// Returns the length of the encoded type size.
   fn encoded_len(&self) -> usize;
 
-  /// Encodes the type into a binary slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
+  /// Encodes the type into a bytes slice, you can assume that the buf length is equal to the value returned by [`encoded_len`](Type::encoded_len).
   fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error>;
+
+  /// Encodes the type into a [`Vec<u8>`].
+  #[inline]
+  fn encode_into_vec(&self) -> Result<Vec<u8>, Self::Error> {
+    let mut buf = vec![0; self.encoded_len()];
+    self.encode(&mut buf)?;
+    Ok(buf)
+  }
 }
 
 impl<T: Type> Type for &T {
@@ -58,7 +47,7 @@ impl<T: Type> Type for &T {
   }
 }
 
-pub(super) trait InsertAmongExt<T: Type> {
+pub(crate) trait InsertAmongExt<T: Type> {
   fn encoded_len(&self) -> usize;
   fn encode(&self, buf: &mut [u8]) -> Result<(), T::Error>;
 }
@@ -91,7 +80,7 @@ pub trait TypeRef<'a> {
   /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
   /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
   ///
-  /// # Safety
+  /// ## Safety
   /// - the `src` must the same as the one returned by [`encode`](Type::encode).
   unsafe fn from_slice(src: &'a [u8]) -> Self;
 }

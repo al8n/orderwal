@@ -86,3 +86,21 @@ pub(crate) const fn check(
 
   Ok(())
 }
+
+#[inline]
+pub(crate) fn check_batch_entry(
+  klen: usize,
+  vlen: usize,
+  max_key_size: u32,
+  max_value_size: u32,
+) -> Result<(), Error> {
+  if klen > max_key_size as usize {
+    return Err(Error::key_too_large(klen as u64, max_key_size));
+  }
+
+  if vlen > max_value_size as usize {
+    return Err(Error::value_too_large(vlen as u64, max_value_size));
+  }
+
+  Ok(())
+}
