@@ -10,18 +10,24 @@ pub struct OrderWalCore<C, S> {
   pub(super) cks: S,
 }
 
-impl<C> Base<C> for BTreeSet<Pointer<C>> {
-  fn insert(&mut self, ele: Pointer<C>)
-  where
-    C: Comparator,
-  {
+impl<C> Base for BTreeSet<Pointer<C>>
+where
+  C: Comparator,
+{
+  type Pointer = Pointer<C>;
+
+  fn insert(&mut self, ele: Self::Pointer) {
     BTreeSet::insert(self, ele);
   }
 }
 
-impl<C, S> WalCore<C, S> for OrderWalCore<C, S> {
+impl<C, S> WalCore<C, S> for OrderWalCore<C, S>
+where
+  C: Comparator,
+{
   type Allocator = Arena;
   type Base = BTreeSet<Pointer<C>>;
+  type Pointer = Pointer<C>;
 
   #[inline]
   fn construct(

@@ -31,14 +31,19 @@ fn iter(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
 
 #[test]
 fn iter_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   iter(&mut wal);
 }
 
 #[test]
 fn iter_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   iter(&mut wal);
 }
 
@@ -49,15 +54,15 @@ fn iter_map_file() {
   let path = dir.path().join("generic_wal_iter_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   let people = iter(&mut wal);
@@ -113,14 +118,19 @@ fn range(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn range_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   range(&mut wal);
 }
 
 #[test]
 fn range_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   range(&mut wal);
 }
 
@@ -131,15 +141,15 @@ fn range_map_file() {
   let path = dir.path().join("generic_wal_range_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   range(&mut wal);
@@ -190,14 +200,19 @@ fn range_ref(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn range_ref_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   range(&mut wal);
 }
 
 #[test]
 fn range_ref_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   range_ref(&mut wal);
 }
 
@@ -208,15 +223,15 @@ fn range_ref_map_file() {
   let path = dir.path().join("generic_wal_range_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   range_ref(&mut wal);

@@ -1,15 +1,19 @@
-use core::{cell::UnsafeCell, ops::RangeBounds, ptr::NonNull};
+use core::{cell::UnsafeCell, ops::RangeBounds};
 use std::{collections::BTreeSet, rc::Rc};
 
 use super::*;
 
-use among::Among;
+use checksum::BuildChecksumer;
 use either::Either;
 use error::Error;
+use pointer::Pointer;
 use rarena_allocator::unsync::Arena;
-use wal::{
-  sealed::{Constructor, Sealed},
-  ImmutableWal,
+use wal::sealed::{Constructor, Sealed};
+
+pub use super::{
+  builder::Builder,
+  wal::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal},
+  Comparator, KeyBuilder, VacantBuffer, ValueBuilder,
 };
 
 /// Iterators for the `OrderWal`.
@@ -51,22 +55,26 @@ mod tests;
 // ```
 pub struct OrderWal<C = Ascend, S = Crc32> {
   core: Rc<UnsafeCell<OrderWalCore<C, S>>>,
-  ro: bool,
   _s: PhantomData<S>,
 }
 
 impl<C, S> Constructor<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   type Allocator = Arena;
   type Core = OrderWalCore<C, S>;
+  type Pointer = Pointer<C>;
 
   #[inline]
-  fn from_core(core: Self::Core, ro: bool) -> Self {
+  fn allocator(&self) -> &Self::Allocator {
+    &self.core().arena
+  }
+
+  #[inline]
+  fn from_core(core: Self::Core) -> Self {
     Self {
       core: Rc::new(UnsafeCell::new(core)),
-      ro,
       _s: PhantomData,
     }
   }
@@ -75,13 +83,13 @@ where
 impl<C, S> OrderWal<C, S> {
   /// Returns the path of the WAL if it is backed by a file.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::{unsync::OrderWal, Wal, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = OrderWal::new(Builder::new().with_capacity(100)).unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```
@@ -93,99 +101,51 @@ impl<C, S> OrderWal<C, S> {
   fn core(&self) -> &OrderWalCore<C, S> {
     unsafe { &*self.core.get() }
   }
-
-  #[inline]
-  fn core_mut(&mut self) -> &mut OrderWalCore<C, S> {
-    unsafe { &mut *self.core.get() }
-  }
 }
 
 impl<C, S> Sealed<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
-  fn insert_with_in<KE, VE>(
-    &mut self,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>>
+  #[inline]
+  fn hasher(&self) -> &S {
+    &self.core().cks
+  }
+
+  #[inline]
+  fn options(&self) -> &Options {
+    &self.core().opts
+  }
+
+  #[inline]
+  fn comparator(&self) -> &C {
+    &self.core().cmp
+  }
+
+  #[inline]
+  fn insert_pointer(&self, ptr: Pointer<C>)
   where
-    C: Comparator + CheapClone,
-    S: Checksumer,
+    C: Comparator,
   {
-    let (klen, kf) = kb.into_components();
-    let (vlen, vf) = vb.into_components();
-    let (len_size, kvlen, elen) = entry_size(klen, vlen);
-    let klen = klen as usize;
-    let vlen = vlen as usize;
-    let core = self.core_mut();
-    let buf = core.arena.alloc_bytes(elen);
+    unsafe {
+      (*self.core.get()).map.insert(ptr);
+    }
+  }
 
-    match buf {
-      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
-      Ok(mut buf) => {
-        unsafe {
-          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
-          let flag = Flags::COMMITTED.bits();
-
-          core.cks.reset();
-          core.cks.update(&[flag]);
-
-          buf.put_u8_unchecked(Flags::empty().bits());
-          let written = buf.put_u64_varint_unchecked(kvlen);
-          debug_assert_eq!(
-            written, len_size,
-            "the precalculated size should be equal to the written size"
-          );
-
-          let ko = STATUS_SIZE + written;
-          buf.set_len(ko + klen + vlen);
-
-          kf(&mut VacantBuffer::new(
-            klen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(ko)),
-          ))
-          .map_err(Among::Left)?;
-
-          let vo = ko + klen;
-          vf(&mut VacantBuffer::new(
-            vlen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
-          ))
-          .map_err(Among::Middle)?;
-
-          let cks = {
-            core.cks.update(&buf[1..]);
-            core.cks.digest()
-          };
-          buf.put_u64_le_unchecked(cks);
-
-          // commit the entry
-          buf[0] |= Flags::COMMITTED.bits();
-
-          if core.opts.sync_on_write() && core.arena.is_ondisk() {
-            core
-              .arena
-              .flush_range(buf.offset(), elen as usize)
-              .map_err(|e| Among::Right(e.into()))?;
-          }
-          buf.detach();
-          core.map.insert(Pointer::new(
-            klen,
-            vlen,
-            buf.as_ptr().add(ko),
-            core.cmp.cheap_clone(),
-          ));
-          Ok(())
-        }
-      }
+  #[inline]
+  fn insert_pointers(&self, ptrs: impl Iterator<Item = Pointer<C>>)
+  where
+    C: Comparator,
+  {
+    unsafe {
+      (*self.core.get()).map.extend(ptrs);
     }
   }
 }
 
 impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
   type Range<'a, Q, R> = Range<'a, C>
@@ -216,13 +176,9 @@ where
         Self: 'a,
         C: Comparator;
 
-  unsafe fn reserved_slice(&self) -> &[u8] {
-    let core = self.core();
-    if core.opts.reserved() == 0 {
-      return &[];
-    }
-
-    &core.arena.reserved_slice()[HEADER_SIZE..]
+  #[inline]
+  fn options(&self) -> &Options {
+    &self.core().opts
   }
 
   #[inline]
@@ -250,6 +206,11 @@ where
   #[inline]
   fn maximum_value_size(&self) -> u32 {
     self.core().opts.maximum_value_size()
+  }
+
+  #[inline]
+  fn remaining(&self) -> u32 {
+    self.core().arena.remaining() as u32
   }
 
   #[inline]
@@ -356,50 +317,16 @@ where
 
 impl<C, S> Wal<C, S> for OrderWal<C, S>
 where
-  C: 'static,
+  C: Comparator + 'static,
 {
   type Reader = Self;
-
-  #[inline]
-  fn read_only(&self) -> bool {
-    self.ro
-  }
 
   #[inline]
   fn reader(&self) -> Self::Reader {
     Self {
       core: self.core.clone(),
-      ro: true,
       _s: PhantomData,
     }
-  }
-
-  #[inline]
-  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
-    let core = self.core_mut();
-    if core.opts.reserved() == 0 {
-      return &mut [];
-    }
-
-    &mut core.arena.reserved_slice_mut()[HEADER_SIZE..]
-  }
-
-  #[inline]
-  fn flush(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core().arena.flush().map_err(Into::into)
-  }
-
-  #[inline]
-  fn flush_async(&self) -> Result<(), Error> {
-    if self.ro {
-      return Err(error::Error::read_only());
-    }
-
-    self.core().arena.flush_async().map_err(Into::into)
   }
 
   fn get_or_insert_with_value_builder<E>(
@@ -409,7 +336,7 @@ where
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(

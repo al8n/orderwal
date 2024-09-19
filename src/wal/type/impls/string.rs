@@ -70,7 +70,7 @@ macro_rules! impls {
 }
 
 impl<'a> TypeRef<'a> for &'a str {
-  fn from_slice(src: &'a [u8]) -> Self {
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
     core::str::from_utf8(src).unwrap()
   }
 }
@@ -92,7 +92,7 @@ impl<'a> From<Str<'a>> for &'a str {
 }
 
 impl<'a> TypeRef<'a> for Str<'a> {
-  fn from_slice(src: &'a [u8]) -> Self {
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
     Self(core::str::from_utf8(src).unwrap())
   }
 }

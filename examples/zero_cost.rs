@@ -1,6 +1,10 @@
 use std::{cmp, sync::Arc, thread::spawn};
 
-use orderwal::{swmr::generic::*, utils::*, OpenOptions, Options};
+use orderwal::{
+  swmr::generic::{Comparable, Equivalent, GenericBuilder, KeyRef, Type, TypeRef},
+  utils::*,
+  OpenOptions,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Person {
@@ -112,7 +116,7 @@ impl Type for Person {
 }
 
 impl<'a> TypeRef<'a> for PersonRef<'a> {
-  fn from_slice(src: &'a [u8]) -> Self {
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
     let (id_size, id) = decode_u64_varint(src).unwrap();
     let name = std::str::from_utf8(&src[id_size..]).unwrap();
     PersonRef { id, name }
@@ -132,15 +136,15 @@ fn main() {
     .collect::<Vec<_>>();
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(1024 * 1024))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(1024 * 1024))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   // Create 100 readers

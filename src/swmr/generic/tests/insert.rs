@@ -4,6 +4,7 @@ fn insert_to_full(wal: &mut GenericOrderWal<Person, String>) {
   let mut full = false;
   for _ in 0u32.. {
     let p = Person::random();
+    #[allow(clippy::needless_borrows_for_generic_args)]
     match wal.insert(&p, &format!("My name is {}", p.name)) {
       Ok(_) => {}
       Err(e) => match e {
@@ -20,14 +21,13 @@ fn insert_to_full(wal: &mut GenericOrderWal<Person, String>) {
 
 #[test]
 fn insert_to_full_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(100)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(100).alloc().unwrap();
   insert_to_full(&mut wal);
 }
 
 #[test]
 fn insert_to_full_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(100)).unwrap();
+  let mut wal = GenericBuilder::new().with_capacity(100).map_anon().unwrap();
   insert_to_full(&mut wal);
 }
 
@@ -38,15 +38,15 @@ fn insert_to_full_map_file() {
   let path = dir.path().join("generic_wal_insert_to_full_map_file");
 
   unsafe {
-    let mut wal = GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(100))
-        .write(true)
-        .read(true),
-    )
-    .unwrap();
+    let mut wal = GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(100))
+          .write(true)
+          .read(true),
+      )
+      .unwrap();
     insert_to_full(&mut wal);
   }
 }
@@ -55,6 +55,7 @@ fn insert(wal: &mut GenericOrderWal<Person, String>) -> Vec<Person> {
   let people = (0..100)
     .map(|_| {
       let p = Person::random();
+      #[allow(clippy::needless_borrows_for_generic_args)]
       wal.insert(&p, &format!("My name is {}", p.name)).unwrap();
       p
     })
@@ -76,14 +77,19 @@ fn insert(wal: &mut GenericOrderWal<Person, String>) -> Vec<Person> {
 
 #[test]
 fn insert_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   insert(&mut wal);
 }
 
 #[test]
 fn insert_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   insert(&mut wal);
 }
 
@@ -94,19 +100,23 @@ fn insert_map_file() {
   let path = dir.path().join("generic_wal_insert_map_file");
 
   let people = unsafe {
-    let mut wal = GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap();
+    let mut wal = GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap();
     insert(&mut wal)
   };
 
-  let wal = unsafe { GenericOrderWal::<Person, String>::map(&path, Options::new()).unwrap() };
+  let wal = unsafe {
+    GenericBuilder::new()
+      .map::<Person, String, _>(&path)
+      .unwrap()
+  };
 
   for p in people {
     assert!(wal.contains_key(&p));
@@ -127,7 +137,10 @@ fn insert_key_bytes_with_value(
       let pbytes = p.to_vec();
       unsafe {
         wal
-          .insert_key_bytes_with_value(&pbytes, &format!("My name is {}", p.name))
+          .insert(
+            Generic::from_slice(&pbytes),
+            &format!("My name is {}", p.name),
+          )
           .unwrap();
       }
       (pbytes, p)
@@ -157,14 +170,19 @@ fn insert_key_bytes_with_value(
 
 #[test]
 fn insert_key_bytes_with_value_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   insert_key_bytes_with_value(&mut wal);
 }
 
 #[test]
 fn insert_key_bytes_with_value_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   insert_key_bytes_with_value(&mut wal);
 }
 
@@ -177,15 +195,15 @@ fn insert_key_bytes_with_value_map_file() {
     .join("generic_wal_insert_key_bytes_with_value_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
   let people = insert_key_bytes_with_value(&mut wal);
 
@@ -206,7 +224,11 @@ fn insert_key_bytes_with_value_map_file() {
     );
   }
 
-  let wal = unsafe { GenericOrderWal::<Person, String>::map(&path, Options::new()).unwrap() };
+  let wal = unsafe {
+    GenericBuilder::new()
+      .map::<Person, String, _>(&path)
+      .unwrap()
+  };
 
   for (pbytes, p) in people {
     assert!(wal.contains_key(&p));
@@ -230,7 +252,10 @@ fn insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>) -> Vec
       let p = Person::random();
       unsafe {
         wal
-          .insert_key_with_value_bytes(&p, format!("My name is {}", p.name).as_bytes())
+          .insert(
+            &p,
+            Generic::from_slice(format!("My name is {}", p.name).as_bytes()),
+          )
           .unwrap();
       }
       p
@@ -253,14 +278,19 @@ fn insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>) -> Vec
 
 #[test]
 fn insert_key_with_value_bytes_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   insert_key_with_value_bytes(&mut wal);
 }
 
 #[test]
 fn insert_key_with_value_bytes_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   insert_key_with_value_bytes(&mut wal);
 }
 
@@ -273,15 +303,15 @@ fn insert_key_with_value_bytes_map_file() {
     .join("generic_wal_insert_key_with_value_bytes_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   let people = insert_key_with_value_bytes(&mut wal);
@@ -304,7 +334,10 @@ fn insert_bytes(wal: &mut GenericOrderWal<Person, String>) -> Vec<Person> {
       let pbytes = p.to_vec();
       unsafe {
         wal
-          .insert_bytes(&pbytes, format!("My name is {}", p.name).as_bytes())
+          .insert(
+            Generic::from_slice(&pbytes),
+            Generic::from_slice(format!("My name is {}", p.name).as_bytes()),
+          )
           .unwrap();
       }
       p
@@ -329,14 +362,19 @@ fn insert_bytes(wal: &mut GenericOrderWal<Person, String>) -> Vec<Person> {
 
 #[test]
 fn insert_bytes_inmemory() {
-  let mut wal = GenericOrderWal::<Person, String>::new(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .alloc::<Person, String>()
+    .unwrap();
   insert_bytes(&mut wal);
 }
 
 #[test]
 fn insert_bytes_map_anon() {
-  let mut wal =
-    GenericOrderWal::<Person, String>::map_anon(Options::new().with_capacity(MB)).unwrap();
+  let mut wal = GenericBuilder::new()
+    .with_capacity(MB)
+    .map_anon::<Person, String>()
+    .unwrap();
   insert_bytes(&mut wal);
 }
 
@@ -347,15 +385,15 @@ fn insert_bytes_map_file() {
   let path = dir.path().join("generic_wal_insert_bytes_map_file");
 
   let mut wal = unsafe {
-    GenericOrderWal::<Person, String>::map_mut(
-      &path,
-      Options::new(),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   let people = insert_bytes(&mut wal);
@@ -389,6 +427,7 @@ fn concurrent_basic(mut w: GenericOrderWal<u32, [u8; 4]>) {
 
   spawn(move || {
     for i in 0..100u32 {
+      #[allow(clippy::needless_borrows_for_generic_args)]
       w.insert(&i, &i.to_le_bytes()).unwrap();
     }
   });
@@ -400,16 +439,13 @@ fn concurrent_basic(mut w: GenericOrderWal<u32, [u8; 4]>) {
 
 #[test]
 fn concurrent_basic_inmemory() {
-  let wal = GenericOrderWal::<u32, [u8; 4]>::new(Options::new().with_capacity(MB).with_reserved(4))
-    .unwrap();
+  let wal = GenericBuilder::new().with_capacity(MB).alloc().unwrap();
   concurrent_basic(wal);
 }
 
 #[test]
 fn concurrent_basic_map_anon() {
-  let wal =
-    GenericOrderWal::<u32, [u8; 4]>::map_anon(Options::new().with_capacity(MB).with_reserved(4))
-      .unwrap();
+  let wal = GenericBuilder::new().with_capacity(MB).map_anon().unwrap();
   concurrent_basic(wal);
 }
 
@@ -420,21 +456,20 @@ fn concurrent_basic_map_file() {
   let path = dir.path().join("generic_wal_concurrent_basic_map_file");
 
   let wal = unsafe {
-    GenericOrderWal::<u32, [u8; 4]>::map_mut(
-      &path,
-      Options::new().with_reserved(4),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   concurrent_basic(wal);
 
-  let wal =
-    unsafe { GenericOrderWal::<u32, [u8; 4]>::map(path, Options::new().with_reserved(4)).unwrap() };
+  let wal = unsafe { GenericBuilder::new().map::<u32, [u8; 4], _>(path).unwrap() };
 
   for i in 0..100u32 {
     assert!(wal.contains_key(&i));
@@ -453,7 +488,7 @@ fn concurrent_one_key(mut w: GenericOrderWal<u32, [u8; 4]>) {
     })
   });
 
-  w.insert(&1, &1u32.to_le_bytes()).unwrap();
+  w.insert(1, 1u32.to_le_bytes()).unwrap();
 
   for handle in handles {
     handle.join().unwrap();
@@ -462,16 +497,13 @@ fn concurrent_one_key(mut w: GenericOrderWal<u32, [u8; 4]>) {
 
 #[test]
 fn concurrent_one_key_inmemory() {
-  let wal = GenericOrderWal::<u32, [u8; 4]>::new(Options::new().with_capacity(MB).with_reserved(4))
-    .unwrap();
+  let wal = GenericBuilder::new().with_capacity(MB).alloc().unwrap();
   concurrent_one_key(wal);
 }
 
 #[test]
 fn concurrent_one_key_map_anon() {
-  let wal =
-    GenericOrderWal::<u32, [u8; 4]>::map_anon(Options::new().with_capacity(MB).with_reserved(4))
-      .unwrap();
+  let wal = GenericBuilder::new().with_capacity(MB).map_anon().unwrap();
   concurrent_one_key(wal);
 }
 
@@ -482,21 +514,135 @@ fn concurrent_one_key_map_file() {
   let path = dir.path().join("generic_wal_concurrent_basic_map_file");
 
   let wal = unsafe {
-    GenericOrderWal::<u32, [u8; 4]>::map_mut(
-      &path,
-      Options::new().with_reserved(4),
-      OpenOptions::new()
-        .create_new(Some(MB))
-        .write(true)
-        .read(true),
-    )
-    .unwrap()
+    GenericBuilder::new()
+      .map_mut(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
   };
 
   concurrent_one_key(wal);
 
-  let wal =
-    unsafe { GenericOrderWal::<u32, [u8; 4]>::map(path, Options::new().with_reserved(4)).unwrap() };
+  let wal = unsafe { GenericBuilder::new().map::<u32, [u8; 4], _>(path).unwrap() };
 
   assert!(wal.contains_key(&1));
+}
+
+fn insert_batch(
+  wal: &mut GenericOrderWal<Person, String>,
+) -> (Person, Vec<(Person, String)>, Person) {
+  const N: u32 = 5;
+
+  let mut batch = vec![];
+  let output = (0..N)
+    .map(|i| {
+      (
+        {
+          let mut p = Person::random();
+          p.id = i as u64;
+          p
+        },
+        format!("My id is {i}"),
+      )
+        .clone()
+    })
+    .collect::<Vec<_>>();
+
+  for (person, val) in output.iter() {
+    if person.id % 3 == 0 {
+      batch.push(GenericEntry::new(person.clone(), val.clone()));
+    } else if person.id % 3 == 1 {
+      batch.push(GenericEntry::new(person, val));
+    } else {
+      unsafe {
+        batch.push(GenericEntry::new(
+          person,
+          Generic::from_slice(val.as_bytes()),
+        ));
+      }
+    }
+  }
+
+  let rp1 = Person::random();
+  wal.insert(&rp1, "rp1".to_string()).unwrap();
+  wal.insert_batch(&mut batch).unwrap();
+  let rp2 = Person::random();
+  wal.insert(&rp2, "rp2".to_string()).unwrap();
+
+  for (p, val) in output.iter() {
+    assert_eq!(wal.get(p).unwrap().value(), val);
+  }
+
+  assert_eq!(wal.get(&rp1).unwrap().value(), "rp1");
+  assert_eq!(wal.get(&rp2).unwrap().value(), "rp2");
+
+  let wal = wal.reader();
+  for (p, val) in output.iter() {
+    assert_eq!(wal.get(p).unwrap().value(), val);
+  }
+
+  assert_eq!(wal.get(&rp1).unwrap().value(), "rp1");
+  assert_eq!(wal.get(&rp2).unwrap().value(), "rp2");
+
+  (rp1, output, rp2)
+}
+
+#[test]
+fn test_insert_batch_inmemory() {
+  insert_batch(
+    &mut GenericBuilder::new()
+      .with_capacity(MB)
+      .alloc::<Person, String>()
+      .unwrap(),
+  );
+}
+
+#[test]
+fn test_insert_batch_map_anon() {
+  insert_batch(
+    &mut GenericBuilder::new()
+      .with_capacity(MB)
+      .map_anon::<Person, String>()
+      .unwrap(),
+  );
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_insert_batch_map_file() {
+  let dir = ::tempfile::tempdir().unwrap();
+  let path = dir.path().join(concat!(
+    "test_",
+    stringify!($prefix),
+    "_insert_batch_map_file"
+  ));
+  let mut map = unsafe {
+    GenericBuilder::new()
+      .map_mut::<Person, String, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB))
+          .write(true)
+          .read(true),
+      )
+      .unwrap()
+  };
+
+  let (rp1, data, rp2) = insert_batch(&mut map);
+
+  let map = unsafe {
+    GenericBuilder::new()
+      .map::<Person, String, _>(&path)
+      .unwrap()
+  };
+
+  for (p, val) in data {
+    assert_eq!(map.get(&p).unwrap().value(), val);
+  }
+  assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
+  assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
 }

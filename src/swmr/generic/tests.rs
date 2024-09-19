@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, thread::spawn};
 
-use arbitrary::Arbitrary;
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
 use tempfile::tempdir;
 
@@ -20,27 +19,36 @@ mod iters;
 #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
 mod get;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
-struct Person {
-  id: u64,
-  name: String,
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Person {
+  #[doc(hidden)]
+  pub id: u64,
+  #[doc(hidden)]
+  pub name: String,
 }
 
 impl Person {
-  fn random() -> Self {
+  #[doc(hidden)]
+  #[cfg(test)]
+  pub fn random() -> Self {
     Self {
       id: rand::random(),
       name: names::Generator::default().next().unwrap(),
     }
   }
 
-  fn as_ref(&self) -> PersonRef<'_> {
+  #[doc(hidden)]
+  pub fn as_ref(&self) -> PersonRef<'_> {
     PersonRef {
       id: self.id,
       name: &self.name,
     }
   }
 
+  #[doc(hidden)]
+  #[cfg(test)]
+  #[allow(dead_code)]
   fn to_vec(&self) -> Vec<u8> {
     let mut buf = vec![0; self.encoded_len()];
     self.encode(&mut buf).unwrap();
@@ -48,28 +56,11 @@ impl Person {
   }
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
-struct PersonRef<'a> {
+pub struct PersonRef<'a> {
   id: u64,
   name: &'a str,
-}
-
-impl PersonRef<'_> {
-  fn encoded_len(&self) -> usize {
-    encoded_u64_varint_len(self.id) + self.name.len()
-  }
-
-  fn encode(&self, buf: &mut [u8]) -> Result<(), dbutils::leb128::EncodeVarintError> {
-    let id_size = encode_u64_varint(self.id, buf)?;
-    buf[id_size..].copy_from_slice(self.name.as_bytes());
-    Ok(())
-  }
-
-  fn to_vec(&self) -> Vec<u8> {
-    let mut buf = vec![0; self.encoded_len()];
-    self.encode(&mut buf).unwrap();
-    buf
-  }
 }
 
 impl PartialEq for PersonRef<'_> {
@@ -133,7 +124,6 @@ impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
   fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
     let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
     let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
-
     PersonRef {
       id: this_id,
       name: std::str::from_utf8(&this[this_id_size..]).unwrap(),
@@ -161,9 +151,20 @@ impl Type for Person {
 }
 
 impl<'a> TypeRef<'a> for PersonRef<'a> {
-  fn from_slice(src: &'a [u8]) -> Self {
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
     let (id_size, id) = decode_u64_varint(src).unwrap();
     let name = std::str::from_utf8(&src[id_size..]).unwrap();
     PersonRef { id, name }
+  }
+}
+
+impl PersonRef<'_> {
+  #[cfg(test)]
+  #[allow(dead_code)]
+  fn encode_into_vec(&self) -> Result<Vec<u8>, dbutils::leb128::EncodeVarintError> {
+    let mut buf = vec![0; encoded_u64_varint_len(self.id) + self.name.len()];
+    let id_size = encode_u64_varint(self.id, &mut buf)?;
+    buf[id_size..].copy_from_slice(self.name.as_bytes());
+    Ok(buf)
   }
 }

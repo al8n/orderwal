@@ -21,7 +21,7 @@ impl Options {
   /// Create a new `Options` instance.
   ///
   ///
-  /// # Example
+  /// ## Example
   ///
   /// **Note:** If you are creating in-memory WAL, then you must specify the capacity.
   ///
@@ -50,7 +50,7 @@ impl Options {
   ///
   /// The default reserved is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -70,7 +70,7 @@ impl Options {
   ///
   /// The default reserved is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -88,7 +88,7 @@ impl Options {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -105,7 +105,7 @@ impl Options {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -122,7 +122,7 @@ impl Options {
   ///
   /// The default value is `u16::MAX`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -139,7 +139,7 @@ impl Options {
   ///
   /// The default value is `u32::MAX`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -156,7 +156,7 @@ impl Options {
   ///
   /// The default value is `true`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -183,7 +183,7 @@ impl Options {
   ///
   /// The default value is `None`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -202,7 +202,7 @@ impl Options {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -218,7 +218,7 @@ impl Options {
 
   /// Sets the maximum key length.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -234,7 +234,7 @@ impl Options {
 
   /// Sets the maximum value length.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -262,7 +262,7 @@ impl Options {
   ///
   /// The default value is `None`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -280,7 +280,7 @@ impl Options {
   ///
   /// The default value is `true`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;
@@ -298,7 +298,7 @@ impl Options {
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use orderwal::Options;

@@ -1,12 +1,15 @@
+use checksum::BuildChecksumer;
 use core::ops::RangeBounds;
 
 use super::*;
 
-mod builder;
-pub use builder::*;
-
 pub(crate) mod sealed;
+pub(crate) mod r#type;
 
+mod batch;
+pub use batch::*;
+
+/// An abstract layer for the immutable write-ahead log.
 pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   /// The iterator type.
   type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])> + DoubleEndedIterator
@@ -55,10 +58,22 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 
   /// Returns the reserved space in the WAL.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The writer must ensure that the returned slice is not modified.
   /// - This method is not thread-safe, so be careful when using it.
-  unsafe fn reserved_slice(&self) -> &[u8];
+  unsafe fn reserved_slice<'a>(&'a self) -> &'a [u8]
+  where
+    Self::Allocator: 'a,
+  {
+    let reserved = self.options().reserved();
+    if reserved == 0 {
+      return &[];
+    }
+
+    let allocator = self.allocator();
+    let reserved_slice = allocator.reserved_slice();
+    &reserved_slice[HEADER_SIZE..]
+  }
 
   /// Returns the path of the WAL if it is backed by a file.
   fn path(&self) -> Option<&std::path::Path>;
@@ -67,15 +82,37 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
   fn len(&self) -> usize;
 
   /// Returns `true` if the WAL is empty.
+  #[inline]
   fn is_empty(&self) -> bool {
     self.len() == 0
   }
 
   /// Returns the maximum key size allowed in the WAL.
-  fn maximum_key_size(&self) -> u32;
+  #[inline]
+  fn maximum_key_size(&self) -> u32 {
+    self.options().maximum_key_size()
+  }
 
   /// Returns the maximum value size allowed in the WAL.
-  fn maximum_value_size(&self) -> u32;
+  #[inline]
+  fn maximum_value_size(&self) -> u32 {
+    self.options().maximum_value_size()
+  }
+
+  /// Returns the remaining capacity of the WAL.
+  #[inline]
+  fn remaining(&self) -> u32 {
+    self.allocator().remaining() as u32
+  }
+
+  /// Returns the capacity of the WAL.
+  #[inline]
+  fn capacity(&self) -> u32 {
+    self.options().capacity()
+  }
+
+  /// Returns the options used to create this WAL instance.
+  fn options(&self) -> &Options;
 
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, key: &Q) -> bool
@@ -142,186 +179,53 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
+pub trait Wal<C, S>:
+  sealed::Sealed<C, S, Pointer = super::pointer::Pointer<C>> + ImmutableWal<C, S>
+{
   /// The read only reader type for this wal.
-  type Reader: ImmutableWal<C, S>;
-
-  /// Creates a new in-memory write-ahead log backed by an aligned vec.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder, Options, Wal};
-  ///
-  /// let wal = OrderWal::new(Builder::new().with_capacity(1024)).unwrap();
-  /// ```
-  fn new(b: Builder<C, S>) -> Result<Self, Error> {
-    let Builder { opts, cmp, cks } = b;
-    let arena = <Self::Allocator as Allocator>::new(
-      arena_options(opts.reserved()).with_capacity(opts.capacity()),
-    )
-    .map_err(Error::from_insufficient_space)?;
-    <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
-      .map(|core| Self::from_core(core, false))
-  }
-
-  /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder, Wal};
-  ///
-  /// let wal = OrderWal::map_anon(Builder::new().with_capacity(1024)).unwrap();
-  /// ```
-  fn map_anon(b: Builder<C, S>) -> Result<Self, Error> {
-    let Builder { opts, cmp, cks } = b;
-    let mmap_opts = MmapOptions::new().len(opts.capacity());
-    <Self::Allocator as Allocator>::map_anon(arena_options(opts.reserved()), mmap_opts)
-      .map_err(Into::into)
-      .and_then(|arena| {
-        <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
-          .map(|core| Self::from_core(core, false))
-      })
-  }
-
-  /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  ///
-  /// ## Safety
-  ///
-  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
-  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
-  /// out of process. Applications must consider the risk and take appropriate precautions when
-  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
-  /// unlinked) files exist but are platform specific and limited.
-  unsafe fn map<P>(path: P, b: Builder<C, S>) -> Result<Self::Reader, Error>
-  where
-    C: Comparator + CheapClone,
-    S: Checksumer,
-    P: AsRef<std::path::Path>,
-  {
-    <Self as Wal<C, S>>::map_with_path_builder::<_, ()>(|| Ok(path.as_ref().to_path_buf()), b)
-      .map_err(|e| e.unwrap_right())
-  }
-
-  /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
-  ///
-  /// ## Safety
-  ///
-  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
-  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
-  /// out of process. Applications must consider the risk and take appropriate precautions when
-  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
-  /// unlinked) files exist but are platform specific and limited.
-  unsafe fn map_with_path_builder<PB, E>(
-    path_builder: PB,
-    b: Builder<C, S>,
-  ) -> Result<Self::Reader, Either<E, Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    C: Comparator + CheapClone,
-    S: Checksumer,
-  {
-    let open_options = OpenOptions::default().read(true);
-
-    let Builder { opts, cmp, cks } = b;
-
-    <<Self::Reader as sealed::Constructor<C, S>>::Allocator as Allocator>::map_with_path_builder(
-      path_builder,
-      arena_options(opts.reserved()),
-      open_options,
-      MmapOptions::new(),
-    )
-    .map_err(|e| e.map_right(Into::into))
-    .and_then(|arena| {
-      <Self::Reader as sealed::Constructor<C, S>>::replay(arena, Options::new(), true, cmp, cks)
-        .map(|core| <Self::Reader as sealed::Constructor<C, S>>::from_core(core, true))
-        .map_err(Either::Right)
-    })
-  }
-
-  /// Opens a write-ahead log backed by a file backed memory map.
-  ///  
-  /// ## Safety
-  ///
-  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
-  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
-  /// out of process. Applications must consider the risk and take appropriate precautions when
-  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
-  /// unlinked) files exist but are platform specific and limited.
-  unsafe fn map_mut<P>(path: P, b: Builder<C, S>, open_opts: OpenOptions) -> Result<Self, Error>
-  where
-    C: Comparator + CheapClone,
-    S: Checksumer,
-    P: AsRef<std::path::Path>,
-  {
-    <Self as Wal<C, S>>::map_mut_with_path_builder::<_, ()>(
-      || Ok(path.as_ref().to_path_buf()),
-      b,
-      open_opts,
-    )
-    .map_err(|e| e.unwrap_right())
-  }
-
-  /// Opens a write-ahead log backed by a file backed memory map.
-  ///
-  /// ## Safety
-  ///
-  /// All file-backed memory map constructors are marked `unsafe` because of the potential for
-  /// *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
-  /// out of process. Applications must consider the risk and take appropriate precautions when
-  /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
-  /// unlinked) files exist but are platform specific and limited.
-  unsafe fn map_mut_with_path_builder<PB, E>(
-    path_builder: PB,
-    b: Builder<C, S>,
-    open_options: OpenOptions,
-  ) -> Result<Self, Either<E, Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    C: Comparator + CheapClone,
-    S: Checksumer,
-  {
-    let path = path_builder().map_err(Either::Left)?;
-
-    let exist = path.exists();
-
-    let Builder { opts, cmp, cks } = b;
-
-    <Self::Allocator as Allocator>::map_mut(
-      path,
-      arena_options(opts.reserved()),
-      open_options,
-      MmapOptions::new(),
-    )
-    .map_err(Into::into)
-    .and_then(|arena| {
-      if !exist {
-        <Self as sealed::Constructor<C, S>>::new_in(arena, opts, cmp, cks)
-          .map(|core| Self::from_core(core, false))
-      } else {
-        <Self as sealed::Constructor<C, S>>::replay(arena, opts, false, cmp, cks)
-          .map(|core| Self::from_core(core, false))
-      }
-    })
-    .map_err(Either::Right)
-  }
+  type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>;
 
   /// Returns `true` if this WAL instance is read-only.
-  fn read_only(&self) -> bool;
+  fn read_only(&self) -> bool {
+    self.allocator().read_only()
+  }
 
   /// Returns the mutable reference to the reserved slice.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
   /// - This method is not thread-safe, so be careful when using it.
-  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8];
+  unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]
+  where
+    Self::Allocator: 'a,
+  {
+    let reserved = sealed::Sealed::options(self).reserved();
+    if reserved == 0 {
+      return &mut [];
+    }
+
+    let allocator = self.allocator();
+    let reserved_slice = allocator.reserved_slice_mut();
+    &mut reserved_slice[HEADER_SIZE..]
+  }
 
   /// Flushes the to disk.
-  fn flush(&self) -> Result<(), Error>;
+  fn flush(&self) -> Result<(), Error> {
+    if !self.read_only() {
+      self.allocator().flush().map_err(Into::into)
+    } else {
+      Err(Error::read_only())
+    }
+  }
 
   /// Flushes the to disk.
-  fn flush_async(&self) -> Result<(), Error>;
+  fn flush_async(&self) -> Result<(), Error> {
+    if !self.read_only() {
+      self.allocator().flush_async().map_err(Into::into)
+    } else {
+      Err(Error::read_only())
+    }
+  }
 
   /// Returns the read-only view for the WAL.
   fn reader(&self) -> Self::Reader;
@@ -330,12 +234,12 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .get_or_insert_with_value_builder::<()>(
         key,
-        ValueBuilder::new(value.len() as u32, |buf| {
+        ValueBuilder::once(value.len() as u32, |buf| {
           buf.put_slice(value).unwrap();
           Ok(())
         }),
@@ -351,7 +255,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer;
+    S: BuildChecksumer;
 
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
@@ -364,7 +268,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<(), Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(
@@ -379,11 +283,12 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
     self
       .insert_with_in::<E, ()>(
         kb,
-        ValueBuilder::new(value.len() as u32, |buf| {
+        ValueBuilder::once(value.len() as u32, |buf| {
           buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
+      .map(|ptr| self.insert_pointer(ptr))
       .map_err(Among::into_left_right)
   }
 
@@ -398,7 +303,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<(), Either<E, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(
@@ -412,12 +317,13 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
 
     self
       .insert_with_in::<(), E>(
-        KeyBuilder::new(key.len() as u32, |buf| {
+        KeyBuilder::once(key.len() as u32, |buf| {
           buf.put_slice(key).unwrap();
           Ok(())
         }),
         vb,
       )
+      .map(|ptr| self.insert_pointer(ptr))
       .map_err(Among::into_middle_right)
   }
 
@@ -430,7 +336,7 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
   ) -> Result<(), Among<KE, VE, Error>>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self
       .check(
@@ -442,14 +348,85 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
       )
       .map_err(Among::Right)?;
 
-    self.insert_with_in(kb, vb)
+    self
+      .insert_with_in(kb, vb)
+      .map(|ptr| self.insert_pointer(ptr))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_key_builder<B: BatchWithKeyBuilder<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    if self.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    self
+      .insert_batch_with_key_builder_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_value_builder<B: BatchWithValueBuilder<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    if self.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    self
+      .insert_batch_with_value_builder_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch_with_builders<B: BatchWithBuilders<Comparator = C>>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    if self.read_only() {
+      return Err(Among::Right(Error::read_only()));
+    }
+
+    self
+      .insert_batch_with_builders_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  fn insert_batch<B: Batch<Comparator = C>>(&mut self, batch: &mut B) -> Result<(), Error>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    if self.read_only() {
+      return Err(Error::read_only());
+    }
+
+    self
+      .insert_batch_in(batch)
+      .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
   }
 
   /// Inserts a key-value pair into the WAL.
   fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
     C: Comparator + CheapClone,
-    S: Checksumer,
+    S: BuildChecksumer,
   {
     self.check(
       key.len(),
@@ -461,15 +438,16 @@ pub trait Wal<C, S>: sealed::Sealed<C, S> + ImmutableWal<C, S> {
 
     self
       .insert_with_in::<(), ()>(
-        KeyBuilder::new(key.len() as u32, |buf| {
+        KeyBuilder::once(key.len() as u32, |buf: &mut VacantBuffer<'_>| {
           buf.put_slice(key).unwrap();
           Ok(())
         }),
-        ValueBuilder::new(value.len() as u32, |buf| {
+        ValueBuilder::once(value.len() as u32, |buf: &mut VacantBuffer<'_>| {
           buf.put_slice(value).unwrap();
           Ok(())
         }),
       )
+      .map(|ptr| self.insert_pointer(ptr))
       .map_err(Among::unwrap_right)
   }
 }

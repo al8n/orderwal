@@ -1,33 +1,31 @@
 use core::ops::Bound;
 
 use super::*;
-use tempfile::tempdir;
-use wal::ImmutableWal;
+use wal::{ImmutableWal, Wal};
 
 const MB: usize = 1024 * 1024;
 
 macro_rules! common_unittests {
-  ($prefix:ident::insert::$wal:ident) => {
+  ($prefix:ident::insert::$wal:ty) => {
     paste::paste! {
       #[test]
       fn test_insert_to_full_inmemory() {
-        insert_to_full(&mut OrderWal::new(Builder::new().with_capacity(100)).unwrap());
+        $crate::tests::insert_to_full(&mut $crate::Builder::new().with_capacity(100).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_to_full_map_anon() {
-        insert_to_full(&mut OrderWal::map_anon(Builder::new().with_capacity(100)).unwrap());
+        $crate::tests::insert_to_full(&mut $crate::Builder::new().with_capacity(100).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_insert_to_full_map_file() {
-        let dir = tempdir().unwrap();
-        insert_to_full(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::insert_to_full(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_to_full_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(100))
               .write(true)
               .read(true),
@@ -38,23 +36,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_inmemory() {
-        insert(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_map_anon() {
-        insert(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_insert_map_file() {
-        let dir = tempdir().unwrap();
-        insert(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::insert(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -65,23 +62,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_with_key_builder_inmemory() {
-        insert_with_key_builder(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert_with_key_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_with_key_builder_map_anon() {
-        insert_with_key_builder(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert_with_key_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_insert_with_key_builder_map_file() {
-        let dir = tempdir().unwrap();
-        insert_with_key_builder(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::insert_with_key_builder(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_key_builder_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -92,23 +88,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_with_value_builder_inmemory() {
-        insert_with_value_builder(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_with_value_builder_map_anon() {
-        insert_with_value_builder(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_insert_with_value_builder_map_file() {
-        let dir = tempdir().unwrap();
-        insert_with_value_builder(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::insert_with_value_builder(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_value_builder_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -119,23 +114,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_with_builders_inmemory() {
-        insert_with_builders(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert_with_builders(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_with_builders_map_anon() {
-        insert_with_builders(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::insert_with_builders(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_insert_with_builders_map_file() {
-        let dir = tempdir().unwrap();
-        insert_with_builders(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::insert_with_builders(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_insert_with_builders_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -145,27 +139,187 @@ macro_rules! common_unittests {
       }
     }
   };
+  ($prefix:ident::insert_batch::$wal:ident) => {
+    paste::paste! {
+      #[test]
+      fn test_insert_batch_inmemory() {
+        $crate::tests::insert_batch(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_map_anon() {
+        $crate::tests::insert_batch(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_map_file() {
+        let dir = ::tempfile::tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_map_file"
+        ));
+        let mut map = unsafe {
+          $crate::Builder::new().map_mut::<$wal, _>(
+            &path,
+            $crate::OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        $crate::tests::insert_batch(&mut map);
+
+        let map = unsafe { $crate::Builder::new().map::<$wal, _>(&path).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+
+        assert_eq!(map.get(&1000u32.to_be_bytes()).unwrap(), 1000u32.to_be_bytes());
+      }
+
+      #[test]
+      fn test_insert_batch_with_key_builder_inmemory() {
+        $crate::tests::insert_batch_with_key_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_with_key_builder_map_anon() {
+        $crate::tests::insert_batch_with_key_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_with_key_builder_map_file() {
+        let dir = ::tempfile::tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_with_key_builder_map_file"
+        ));
+        let mut map = unsafe {
+          $crate::Builder::new().map_mut::<$wal, _>(
+            &path,
+            $crate::OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        $crate::tests::insert_batch_with_key_builder(&mut map);
+
+        let map = unsafe { $crate::Builder::new().map::<$wal, _>(&path).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+
+      #[test]
+      fn test_insert_batch_with_value_builder_inmemory() {
+        $crate::tests::insert_batch_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_with_value_builder_map_anon() {
+        $crate::tests::insert_batch_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_with_value_builder_map_file() {
+        let dir = ::tempfile::tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_with_value_builder_map_file"
+        ));
+        let mut map = unsafe {
+          $crate::Builder::new().map_mut::<$wal, _>(
+            &path,
+            $crate::OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        $crate::tests::insert_batch_with_value_builder(&mut map);
+
+        let map = unsafe { $crate::Builder::new().map::<$wal, _>(&path).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+
+      #[test]
+      fn test_insert_batch_with_builders_inmemory() {
+        $crate::tests::insert_batch_with_builders(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+      }
+
+      #[test]
+      fn test_insert_batch_with_builders_map_anon() {
+        $crate::tests::insert_batch_with_builders(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]
+      fn test_insert_batch_with_builders_map_file() {
+        let dir = ::tempfile::tempdir().unwrap();
+        let path = dir.path().join(concat!(
+          "test_",
+          stringify!($prefix),
+          "_insert_batch_with_builders_map_file"
+        ));
+        let mut map = unsafe {
+          $crate::Builder::new().map_mut::<$wal, _>(
+            &path,
+            $crate::OpenOptions::new()
+              .create_new(Some(MB))
+              .write(true)
+              .read(true),
+          )
+          .unwrap()
+        };
+
+        $crate::tests::insert_batch_with_builders(&mut map);
+
+        let map = unsafe { $crate::Builder::new().map::<$wal, _>(&path).unwrap() };
+
+        for i in 0..100u32 {
+          assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+        }
+      }
+    }
+  };
   ($prefix:ident::iters::$wal:ident) => {
     paste::paste! {
       #[test]
       fn test_iter_inmemory() {
-        iter(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::iter(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_iter_map_anon() {
-        iter(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::iter(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_iter_map_file() {
-        let dir = tempdir().unwrap();
-        iter(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::iter(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_iter_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -176,23 +330,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_range() {
-        range(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::range(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_range_map_anon() {
-        range(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::range(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_range_map_file() {
-        let dir = tempdir().unwrap();
-        range(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::range(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_range_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -203,23 +356,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_keys() {
-        keys(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::keys(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_keys_map_anon() {
-        keys(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::keys(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_keys_map_file() {
-        let dir = tempdir().unwrap();
-        keys(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::keys(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_keys_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -230,23 +382,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_values() {
-        values(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::values(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_values_map_anon() {
-        values(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::values(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_values_map_file() {
-        let dir = tempdir().unwrap();
-        values(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::values(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_values_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -257,23 +408,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_range_keys() {
-        range_keys(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::range_keys(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_range_keys_map_anon() {
-        range_keys(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::range_keys(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_range_keys_map_file() {
-        let dir = tempdir().unwrap();
-        range_keys(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::range_keys(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_range_keys_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -284,23 +434,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_range_values() {
-        range_values(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::range_values(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_range_values_map_anon() {
-        range_values(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::range_values(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_range_values_map_file() {
-        let dir = tempdir().unwrap();
-        range_values(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::range_values(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test", stringify!($prefix), "_range_values_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -314,23 +463,22 @@ macro_rules! common_unittests {
     paste::paste! {
       #[test]
       fn test_first_inmemory() {
-        first(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::first(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_first_map_anon() {
-        first(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::first(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_first_map_file() {
-        let dir = tempdir().unwrap();
-        first(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::first(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_first_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -341,23 +489,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_last_inmemory() {
-        last(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::last(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_last_map_anon() {
-        last(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::last(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_last_map_file() {
-        let dir = tempdir().unwrap();
-        last(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::last(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_last_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -368,30 +515,29 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_get_or_insert_inmemory() {
-        get_or_insert(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::get_or_insert(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_get_or_insert_map_anon() {
-        get_or_insert(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::get_or_insert(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_get_or_insert_map_file() {
-        let dir = tempdir().unwrap();
+        let dir = ::tempfile::tempdir().unwrap();
 
-        let mut wal = unsafe { OrderWal::map_mut(
+        let mut wal = unsafe { $crate::Builder::new().map_mut::<$wal, _>(
           dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_map_file")),
-          Builder::new(),
-          OpenOptions::new()
+          $crate::OpenOptions::new()
             .create_new(Some(MB))
             .write(true)
             .read(true),
         )
         .unwrap() };
 
-        get_or_insert(
+        $crate::tests::get_or_insert(
           &mut wal,
         );
 
@@ -400,29 +546,28 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_get_or_insert_with_value_builder_inmemory() {
-        get_or_insert_with_value_builder(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::get_or_insert_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_get_or_insert_with_value_builder_map_anon() {
-        get_or_insert_with_value_builder(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::get_or_insert_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_get_or_insert_with_value_builder_map_file() {
-        let dir = tempdir().unwrap();
+        let dir = ::tempfile::tempdir().unwrap();
         let path = dir.path().join(concat!("test_", stringify!($prefix), "_get_or_insert_with_value_builder_map_file"));
-        let mut wal = unsafe { OrderWal::map_mut(
+        let mut wal = unsafe { $crate::Builder::new().map_mut::<$wal, _>(
           &path,
-          Builder::new(),
-          OpenOptions::new()
+          $crate::OpenOptions::new()
             .create_new(Some(MB))
             .write(true)
             .read(true),
         )
         .unwrap() };
-        get_or_insert_with_value_builder(
+      $crate::tests::get_or_insert_with_value_builder(
           &mut wal,
         );
 
@@ -436,55 +581,54 @@ macro_rules! common_unittests {
     paste::paste! {
       #[test]
       fn test_construct_inmemory() {
-        construct_inmemory::<OrderWal<Ascend, Crc32>>();
+        $crate::tests::construct_inmemory::<OrderWal<Ascend, Crc32>>();
       }
 
       #[test]
       fn test_construct_map_anon() {
-        construct_map_anon::<OrderWal<Ascend, Crc32>>();
+        $crate::tests::construct_map_anon::<OrderWal<Ascend, Crc32>>();
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_construct_map_file() {
-        construct_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
+        $crate::tests::construct_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
       }
 
       #[test]
       fn test_construct_with_small_capacity_inmemory() {
-        construct_with_small_capacity_inmemory::<OrderWal<Ascend, Crc32>>();
+        $crate::tests::construct_with_small_capacity_inmemory::<OrderWal<Ascend, Crc32>>();
       }
 
       #[test]
       fn test_construct_with_small_capacity_map_anon() {
-        construct_with_small_capacity_map_anon::<OrderWal<Ascend, Crc32>>();
+        $crate::tests::construct_with_small_capacity_map_anon::<OrderWal<Ascend, Crc32>>();
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_construct_with_small_capacity_map_file() {
-        construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
+        $crate::tests::construct_with_small_capacity_map_file::<OrderWal<Ascend, Crc32>>(stringify!($prefix));
       }
 
       #[test]
       fn test_zero_reserved_inmemory() {
-        zero_reserved(&mut OrderWal::new(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::zero_reserved(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_zero_reserved_map_anon() {
-        zero_reserved(&mut OrderWal::map_anon(Builder::new().with_capacity(MB)).unwrap());
+        $crate::tests::zero_reserved(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_zero_reserved_map_file() {
-        let dir = tempdir().unwrap();
-        zero_reserved(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::zero_reserved(
+          &mut unsafe { $crate::Builder::new().map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_zero_reserved_map_file")),
-            Builder::new(),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -495,23 +639,22 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_reserved_inmemory() {
-        reserved(&mut OrderWal::new(Builder::new().with_capacity(MB).with_reserved(4)).unwrap());
+        $crate::tests::reserved(&mut $crate::Builder::new().with_capacity(MB).with_reserved(4).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_reserved_map_anon() {
-        reserved(&mut OrderWal::map_anon(Builder::new().with_capacity(MB).with_reserved(4)).unwrap());
+        $crate::tests::reserved(&mut $crate::Builder::new().with_capacity(MB).with_reserved(4).map_anon::<$wal>().unwrap());
       }
 
       #[test]
       #[cfg_attr(miri, ignore)]
       fn test_reserved_map_file() {
-        let dir = tempdir().unwrap();
-        reserved(
-          &mut unsafe { OrderWal::map_mut(
+        let dir = ::tempfile::tempdir().unwrap();
+        $crate::tests::reserved(
+          &mut unsafe { Builder::new().with_reserved(4).map_mut::<$wal, _>(
             dir.path().join(concat!("test_", stringify!($prefix), "_reserved_map_file")),
-            Builder::new().with_reserved(4),
-            OpenOptions::new()
+            $crate::OpenOptions::new()
               .create_new(Some(MB))
               .write(true)
               .read(true),
@@ -524,32 +667,38 @@ macro_rules! common_unittests {
 }
 
 pub(crate) fn construct_inmemory<W: Wal<Ascend, Crc32>>() {
-  let mut wal = W::new(Builder::new().with_capacity(MB as u32)).unwrap();
+  let mut wal = Builder::new()
+    .with_capacity(MB as u32)
+    .alloc::<W>()
+    .unwrap();
   let wal = &mut wal;
   assert!(wal.is_empty());
   wal.insert(b"key1", b"value1").unwrap();
 }
 
 pub(crate) fn construct_map_anon<W: Wal<Ascend, Crc32>>() {
-  let mut wal = W::map_anon(Builder::new().with_capacity(MB as u32)).unwrap();
+  let mut wal = Builder::new()
+    .with_capacity(MB as u32)
+    .map_anon::<W>()
+    .unwrap();
   let wal = &mut wal;
   wal.insert(b"key1", b"value1").unwrap();
 }
 
 pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
-  let dir = tempdir().unwrap();
+  let dir = ::tempfile::tempdir().unwrap();
   let path = dir.path().join(format!("{prefix}_construct_map_file"));
 
   unsafe {
-    let mut wal = W::map_mut(
-      &path,
-      Builder::new(),
-      OpenOptions::new()
-        .create_new(Some(MB as u32))
-        .write(true)
-        .read(true),
-    )
-    .unwrap();
+    let mut wal = Builder::new()
+      .map_mut::<W, _>(
+        &path,
+        OpenOptions::new()
+          .create_new(Some(MB as u32))
+          .write(true)
+          .read(true),
+      )
+      .unwrap();
 
     let wal = &mut wal;
     wal.insert(b"key1", b"value1").unwrap();
@@ -557,21 +706,21 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
   }
 
   unsafe {
-    let wal = W::map_mut(
-      &path,
-      Builder::new(),
-      OpenOptions::new()
-        .create(Some(MB as u32))
-        .write(true)
-        .read(true),
-    )
-    .unwrap();
+    let wal = Builder::new()
+      .map_mut::<W, _>(
+        &path,
+        OpenOptions::new()
+          .create(Some(MB as u32))
+          .write(true)
+          .read(true),
+      )
+      .unwrap();
 
     assert_eq!(wal.get(b"key1").unwrap(), b"value1");
     assert!(!wal.read_only());
   }
 
-  let wal = unsafe { W::map(&path, Builder::new()).unwrap() };
+  let wal = unsafe { Builder::new().map::<W, _>(&path).unwrap() };
   assert_eq!(wal.get(b"key1").unwrap(), b"value1");
   assert_eq!(wal.path().unwrap(), path);
   assert_eq!(wal.maximum_key_size(), Options::new().maximum_key_size());
@@ -582,7 +731,7 @@ pub(crate) fn construct_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
 }
 
 pub(crate) fn construct_with_small_capacity_inmemory<W: Wal<Ascend, Crc32>>() {
-  let wal = W::new(Builder::new().with_capacity(1));
+  let wal = Builder::new().with_capacity(1).alloc::<W>();
 
   assert!(wal.is_err());
   match wal {
@@ -592,7 +741,7 @@ pub(crate) fn construct_with_small_capacity_inmemory<W: Wal<Ascend, Crc32>>() {
 }
 
 pub(crate) fn construct_with_small_capacity_map_anon<W: Wal<Ascend, Crc32>>() {
-  let wal = W::map_anon(Builder::new().with_capacity(1));
+  let wal = Builder::new().with_capacity(1).map_anon::<W>();
 
   assert!(wal.is_err());
   match wal {
@@ -602,15 +751,14 @@ pub(crate) fn construct_with_small_capacity_map_anon<W: Wal<Ascend, Crc32>>() {
 }
 
 pub(crate) fn construct_with_small_capacity_map_file<W: Wal<Ascend, Crc32>>(prefix: &str) {
-  let dir = tempdir().unwrap();
+  let dir = ::tempfile::tempdir().unwrap();
   let path = dir
     .path()
     .join(format!("{prefix}_construct_with_small_capacity_map_file"));
 
   let wal = unsafe {
-    W::map_mut(
+    Builder::new().map_mut::<W, _>(
       &path,
-      Builder::new(),
       OpenOptions::new()
         .create_new(Some(1))
         .write(true)
@@ -669,7 +817,7 @@ pub(crate) fn insert_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..100u32 {
     wal
       .insert_with_key_builder::<()>(
-        KeyBuilder::<_>::new(4, |buf| {
+        KeyBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -693,7 +841,7 @@ pub(crate) fn insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
     wal
       .insert_with_value_builder::<()>(
         &i.to_be_bytes(),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -715,11 +863,11 @@ pub(crate) fn insert_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
   for i in 0..100u32 {
     wal
       .insert_with_builders::<(), ()>(
-        KeyBuilder::<_>::new(4, |buf| {
+        KeyBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -1023,7 +1171,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
     wal
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i);
           Ok(())
         }),
@@ -1035,7 +1183,7 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
     wal
       .get_or_insert_with_value_builder::<()>(
         &i.to_be_bytes(),
-        ValueBuilder::<_>::new(4, |buf| {
+        ValueBuilder::<_>::once(4, |buf| {
           let _ = buf.put_u32_be(i * 2);
           Ok(())
         }),
@@ -1049,6 +1197,112 @@ pub(crate) fn get_or_insert_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut 
 
   let wal = wal.reader();
   for i in 0..100u32 {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
+  let mut batch = vec![];
+
+  for i in 0..N {
+    batch.push(Entry::new(i.to_be_bytes(), i.to_be_bytes()));
+  }
+
+  wal.insert_batch(&mut batch).unwrap();
+
+  wal
+    .insert(&1000u32.to_be_bytes(), &1000u32.to_be_bytes())
+    .unwrap();
+
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  assert_eq!(
+    wal.get(&1000u32.to_be_bytes()).unwrap(),
+    1000u32.to_be_bytes()
+  );
+
+  let wal = wal.reader();
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  assert_eq!(
+    wal.get(&1000u32.to_be_bytes()).unwrap(),
+    1000u32.to_be_bytes()
+  );
+}
+
+pub(crate) fn insert_batch_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
+  let mut batch = vec![];
+
+  for i in 0..N {
+    batch.push(EntryWithKeyBuilder::new(
+      KeyBuilder::new(4, move |buf| buf.put_u32_be(i)),
+      i.to_be_bytes(),
+    ));
+  }
+
+  wal.insert_batch_with_key_builder(&mut batch).unwrap();
+
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
+  let mut batch = vec![];
+  for i in 0..N {
+    batch.push(EntryWithValueBuilder::new(
+      i.to_be_bytes(),
+      ValueBuilder::new(4, move |buf| buf.put_u32_be(i)),
+    ));
+  }
+
+  wal.insert_batch_with_value_builder(&mut batch).unwrap();
+
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+}
+
+pub(crate) fn insert_batch_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
+  const N: u32 = 100;
+
+  let mut batch = vec![];
+
+  for i in 0..N {
+    batch.push(EntryWithBuilders::new(
+      KeyBuilder::new(4, move |buf| buf.put_u32_be(i)),
+      ValueBuilder::new(4, move |buf| buf.put_u32_be(i)),
+    ));
+  }
+
+  wal.insert_batch_with_builders(&mut batch).unwrap();
+
+  for i in 0..N {
+    assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
+  }
+
+  let wal = wal.reader();
+  for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 }

@@ -2,11 +2,19 @@ pub use dbutils::leb128::*;
 
 use super::*;
 
+/// Merge two `u32` into a `u64`.
+///
+/// - high 32 bits: `a`
+/// - low 32 bits: `b`
 #[inline]
-pub(crate) const fn merge_lengths(klen: u32, vlen: u32) -> u64 {
-  (klen as u64) << 32 | vlen as u64
+pub(crate) const fn merge_lengths(a: u32, b: u32) -> u64 {
+  (a as u64) << 32 | b as u64
 }
 
+/// Split a `u64` into two `u32`.
+///
+/// - high 32 bits: the first `u32`
+/// - low 32 bits: the second `u32`
 #[inline]
 pub(crate) const fn split_lengths(len: u64) -> (u32, u32) {
   ((len >> 32) as u32, len as u32)
@@ -60,11 +68,11 @@ pub(crate) const fn check(
   let max_vsize = min_u64(max_value_size as u64, u32::MAX as u64);
 
   if max_ksize < klen as u64 {
-    return Err(error::Error::key_too_large(klen as u32, max_key_size));
+    return Err(error::Error::key_too_large(klen as u64, max_key_size));
   }
 
   if max_vsize < vlen as u64 {
-    return Err(error::Error::value_too_large(vlen as u32, max_value_size));
+    return Err(error::Error::value_too_large(vlen as u64, max_value_size));
   }
 
   let (_, _, elen) = entry_size(klen as u32, vlen as u32);
@@ -74,6 +82,24 @@ pub(crate) const fn check(
       elen as u64,
       min_u64(max_key_size as u64 + max_value_size as u64, u32::MAX as u64),
     ));
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub(crate) fn check_batch_entry(
+  klen: usize,
+  vlen: usize,
+  max_key_size: u32,
+  max_value_size: u32,
+) -> Result<(), Error> {
+  if klen > max_key_size as usize {
+    return Err(Error::key_too_large(klen as u64, max_key_size));
+  }
+
+  if vlen > max_value_size as usize {
+    return Err(Error::value_too_large(vlen as u64, max_value_size));
   }
 
   Ok(())

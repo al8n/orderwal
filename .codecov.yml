@@ -7,12 +7,11 @@ ignore:
   - "**/benches/"
   - "src/tests.rs"
   - "src/error.rs"
-  - "src/swmr/generic/traits/impls/"
-  - "src/swmr/generic/traits/impls.rs"
   - "src/swmr/generic/tests.rs"
   - "src/swmr/generic/tests/"
   - "src/swmr/wal/tests.rs"
   - "src/swmr/wal/tests/"
+  - "src/wal/type/"
   - "src/unsync/tests.rs"
   - "src/unsync/tests/"
 

@@ -3,7 +3,7 @@
 </div>
 <div align="center">
 
-A generic-purpose, ordered, zero-copy, Write-Ahead Log implementation for Rust.
+A generic-purpose, atomic, ordered, zero-copy, Write-Ahead Log implementation for Rust.
 
 [<img alt="github" src="https://img.shields.io/badge/github-al8n/orderwal-8da0cb?style=for-the-badge&logo=Github" height="22">][Github-url]
 <img alt="LoC" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fal8n%2F327b2a8aef9003246e45c6e47fe63937%2Fraw%2Forderwal" height="22">
@@ -21,7 +21,7 @@ English | [简体中文][zh-cn-url]
 
 ## Introduction
 
-`orderwal` is a generic-purpose, ordered, zero-copy, concurrent-safe, pre-allocate style (memory map) write-ahead-log for developing databases.
+`orderwal` is generic-purpose, atomic, ordered, zero-copy, concurrent-safe, pre-allocate style (memory map) write-ahead-log for developing databases.
 
 `orderwal` also supports generic structured key and value types, which is not limited to just bytes like other implementations.
 
@@ -29,8 +29,12 @@ English | [简体中文][zh-cn-url]
 
 ```toml
 [dependencies]
-orderwal = "0.1"
+orderwal = "0.2"
 ```
+
+## Example
+
+See [examples](./examples/) for more information.
 
 ## Related projects
 
@@ -44,7 +48,7 @@ Apache License (Version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE), [LICENSE-MIT](LICENSE-MIT) for details.
 
-Copyright (c) 2021 Al Liu.
+Copyright (c) 2024 Al Liu.
 
 [Github-url]: https://github.com/al8n/orderwal/
 [CI-url]: https://github.com/al8n/orderwal/actions/workflows/ci.yml

@@ -69,7 +69,7 @@ macro_rules! impls {
 }
 
 impl<'a> TypeRef<'a> for &'a [u8] {
-  fn from_slice(src: &'a [u8]) -> Self {
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
     src
   }
 }
@@ -97,7 +97,7 @@ impl<'a> From<SliceRef<'a>> for &'a [u8] {
 }
 
 impl<'a> TypeRef<'a> for SliceRef<'a> {
-  fn from_slice(src: &'a [u8]) -> Self {
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
     Self(src)
   }
 }
@@ -171,6 +171,24 @@ impls! {
   Arc<[u8]>,
   #[cfg(feature = "bytes")]
   ::bytes::Bytes,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::OneOrMore<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::TinyVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::TriVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::SmallVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::MediumVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::LargeVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::XLargeVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::XXLargeVec<u8>,
+  #[cfg(feature = "smallvec-wrapper")]
+  ::smallvec_wrapper::XXXLargeVec<u8>,
 }
 
 #[cfg(feature = "smallvec")]

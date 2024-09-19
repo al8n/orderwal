@@ -1,3 +1,19 @@
+/// The batch error type.
+#[derive(Debug, thiserror::Error)]
+pub enum BatchError {
+  /// Returned when the expected batch encoding size does not match the actual size.
+  #[error("the expected batch encoding size ({expected}) does not match the actual size {actual}")]
+  EncodedSizeMismatch {
+    /// The expected size.
+    expected: u32,
+    /// The actual size.
+    actual: u32,
+  },
+  /// Larger encoding size than the expected batch encoding size.
+  #[error("larger encoding size than the expected batch encoding size {0}")]
+  LargerEncodedSize(u32),
+}
+
 /// The error type.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -5,7 +21,7 @@ pub enum Error {
   #[error("insufficient space in the WAL (requested: {requested}, available: {available})")]
   InsufficientSpace {
     /// The requested size
-    requested: u32,
+    requested: u64,
     /// The remaining size
     available: u32,
   },
@@ -13,7 +29,7 @@ pub enum Error {
   #[error("the key size is {size} larger than the maximum key size {maximum_key_size}")]
   KeyTooLarge {
     /// The size of the key.
-    size: u32,
+    size: u64,
     /// The maximum key size.
     maximum_key_size: u32,
   },
@@ -21,7 +37,7 @@ pub enum Error {
   #[error("the value size is {size} larger than the maximum value size {maximum_value_size}")]
   ValueTooLarge {
     /// The size of the value.
-    size: u32,
+    size: u64,
     /// The maximum value size.
     maximum_value_size: u32,
   },
@@ -33,6 +49,9 @@ pub enum Error {
     /// The maximum entry size.
     maximum_entry_size: u64,
   },
+  /// Returned when the expected batch encoding size does not match the actual size.
+  #[error(transparent)]
+  Batch(#[from] BatchError),
   /// I/O error.
   #[error("{0}")]
   IO(#[from] std::io::Error),
@@ -43,7 +62,7 @@ pub enum Error {
 
 impl Error {
   /// Create a new `Error::InsufficientSpace` instance.
-  pub(crate) const fn insufficient_space(requested: u32, available: u32) -> Self {
+  pub(crate) const fn insufficient_space(requested: u64, available: u32) -> Self {
     Self::InsufficientSpace {
       requested,
       available,
@@ -51,7 +70,7 @@ impl Error {
   }
 
   /// Create a new `Error::KeyTooLarge` instance.
-  pub(crate) const fn key_too_large(size: u32, maximum_key_size: u32) -> Self {
+  pub(crate) const fn key_too_large(size: u64, maximum_key_size: u32) -> Self {
     Self::KeyTooLarge {
       size,
       maximum_key_size,
@@ -59,7 +78,7 @@ impl Error {
   }
 
   /// Create a new `Error::ValueTooLarge` instance.
-  pub(crate) const fn value_too_large(size: u32, maximum_value_size: u32) -> Self {
+  pub(crate) const fn value_too_large(size: u64, maximum_value_size: u32) -> Self {
     Self::ValueTooLarge {
       size,
       maximum_value_size,
@@ -80,18 +99,44 @@ impl Error {
       rarena_allocator::Error::InsufficientSpace {
         requested,
         available,
-      } => Self::insufficient_space(requested, available),
+      } => Self::insufficient_space(requested as u64, available),
       _ => unreachable!(),
     }
   }
 
   /// Create a new corrupted error.
   #[inline]
-  pub(crate) fn corrupted() -> Error {
+  pub(crate) fn corrupted<E>(e: E) -> Error
+  where
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+  {
+    #[derive(Debug)]
+    struct Corrupted(Box<dyn std::error::Error + Send + Sync>);
+
+    impl std::fmt::Display for Corrupted {
+      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "corrupted write-ahead log: {}", self.0)
+      }
+    }
+
+    impl std::error::Error for Corrupted {}
+
     Self::IO(std::io::Error::new(
       std::io::ErrorKind::InvalidData,
-      "corrupted write-ahead log",
+      Corrupted(e.into()),
     ))
+  }
+
+  /// Create a new batch size mismatch error.
+  #[inline]
+  pub(crate) const fn batch_size_mismatch(expected: u32, actual: u32) -> Self {
+    Self::Batch(BatchError::EncodedSizeMismatch { expected, actual })
+  }
+
+  /// Create a new larger batch size error.
+  #[inline]
+  pub(crate) const fn larger_batch_size(size: u32) -> Self {
+    Self::Batch(BatchError::LargerEncodedSize(size))
   }
 
   /// Create a read-only error.
