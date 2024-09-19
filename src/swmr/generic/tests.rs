@@ -162,6 +162,6 @@ impl PersonRef<'_> {
     let mut buf = vec![0; encoded_u64_varint_len(self.id) + self.name.len()];
     let id_size = encode_u64_varint(self.id, &mut buf)?;
     buf[id_size..].copy_from_slice(self.name.as_bytes());
-    Ok(buf) 
+    Ok(buf)
   }
 }

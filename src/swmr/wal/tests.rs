@@ -12,7 +12,4 @@ mod iter;
 #[cfg(all(test, any(test_swmr_get, all_tests)))]
 mod get;
 
-#[cfg(all(test, any(test_swmr_insert_batch, all_tests)))]
-mod insert_batch;
-
 const MB: u32 = 1024 * 1024;

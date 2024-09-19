@@ -24,7 +24,7 @@ use crate::{
   merge_lengths,
   pointer::GenericPointer,
   wal::sealed::Constructor,
-  Flags, Options, CHECKSUM_SIZE, HEADER_SIZE, STATUS_SIZE,
+  BatchEncodedEntryMeta, Flags, Options, CHECKSUM_SIZE, HEADER_SIZE, STATUS_SIZE,
 };
 
 pub use crate::{
@@ -738,8 +738,10 @@ where
             self.core.opts.maximum_value_size(),
           )?;
           let merged_len = merge_lengths(klen as u32, vlen as u32);
+          let merged_len_size = encoded_u64_varint_len(merged_len);
 
-          let ent_size = klen as u64 + vlen as u64 + encoded_u64_varint_len(merged_len) as u64;
+          let ent_size = klen as u64 + vlen as u64 + merged_len_size as u64;
+          ent.meta = BatchEncodedEntryMeta::new(klen, vlen, merged_len, merged_len_size);
           Ok((num_entries + 1, size + ent_size))
         })
         .map_err(Among::Right)?
@@ -774,28 +776,23 @@ where
       {
         let batch = batch_ptr.load(Ordering::Acquire);
         for ent in (*batch).iter_mut() {
-          let klen = ent.key.encoded_len();
-          let vlen = ent.value.encoded_len();
-          let merged_kv_len = merge_lengths(klen as u32, vlen as u32);
-          let merged_kv_len_size = encoded_u64_varint_len(merged_kv_len);
-
           let remaining = buf.remaining();
-          if remaining < merged_kv_len_size + klen + vlen {
+          if remaining < ent.meta.kvlen_size + ent.meta.klen + ent.meta.vlen {
             return Err(Among::Right(Error::larger_batch_size(total_size as u32)));
           }
 
-          let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
+          let ent_len_size = buf.put_u64_varint_unchecked(ent.meta.kvlen);
           let ko = cursor as usize + ent_len_size;
-          buf.set_len(ko + klen + vlen);
+          buf.set_len(ko + ent.meta.klen + ent.meta.vlen);
           let ptr = buf.as_mut_ptr().add(ko);
 
-          let key_buf = slice::from_raw_parts_mut(ptr, klen);
+          let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
           ent.key.encode(key_buf).map_err(Among::Left)?;
-          let value_buf = slice::from_raw_parts_mut(ptr.add(klen), vlen);
+          let value_buf = slice::from_raw_parts_mut(ptr.add(ent.meta.klen), ent.meta.vlen);
           ent.value.encode(value_buf).map_err(Among::Middle)?;
 
-          cursor += ent_len_size + klen + vlen;
-          ent.pointer = Some(GenericPointer::new(klen, vlen, ptr));
+          cursor += ent_len_size + ent.meta.klen + ent.meta.vlen;
+          ent.pointer = Some(GenericPointer::new(ent.meta.klen, ent.meta.vlen, ptr));
         }
       }
 

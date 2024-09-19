@@ -1,3 +1,5 @@
+use core::borrow::Borrow;
+
 use among::Among;
 use crossbeam_skiplist::set::Entry as SetEntry;
 use rarena_allocator::either::Either;
@@ -8,11 +10,61 @@ use super::{
   KeyBuilder, ValueBuilder,
 };
 
+pub(crate) struct BatchEncodedEntryMeta {
+  /// The output of `merge_lengths(klen, vlen)`
+  pub(crate) kvlen: u64,
+  /// the length of `encoded_u64_varint(merge_lengths(klen, vlen))`
+  pub(crate) kvlen_size: usize,
+  pub(crate) klen: usize,
+  pub(crate) vlen: usize,
+}
+
+impl BatchEncodedEntryMeta {
+  #[inline]
+  pub(crate) const fn new(klen: usize, vlen: usize, kvlen: u64, kvlen_size: usize) -> Self {
+    Self {
+      klen,
+      vlen,
+      kvlen,
+      kvlen_size,
+    }
+  }
+
+  #[inline]
+  const fn zero() -> Self {
+    Self {
+      klen: 0,
+      vlen: 0,
+      kvlen: 0,
+      kvlen_size: 0,
+    }
+  }
+}
+
 /// An entry in the write-ahead log.
 pub struct Entry<K, V, C> {
   pub(crate) key: K,
   pub(crate) value: V,
   pub(crate) pointer: Option<Pointer<C>>,
+  pub(crate) meta: BatchEncodedEntryMeta,
+}
+
+impl<K, V, C> Entry<K, V, C>
+where
+  K: Borrow<[u8]>,
+  V: Borrow<[u8]>,
+{
+  /// Returns the length of the value.
+  #[inline]
+  pub fn key_len(&self) -> usize {
+    self.key.borrow().len()
+  }
+
+  /// Returns the length of the value.
+  #[inline]
+  pub fn value_len(&self) -> usize {
+    self.value.borrow().len()
+  }
 }
 
 impl<K, V, C> Entry<K, V, C> {
@@ -23,6 +75,7 @@ impl<K, V, C> Entry<K, V, C> {
       key,
       value,
       pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
     }
   }
 
@@ -50,6 +103,18 @@ pub struct EntryWithKeyBuilder<KB, V, C> {
   pub(crate) kb: KeyBuilder<KB>,
   pub(crate) value: V,
   pub(crate) pointer: Option<Pointer<C>>,
+  pub(crate) meta: BatchEncodedEntryMeta,
+}
+
+impl<KB, V, C> EntryWithKeyBuilder<KB, V, C>
+where
+  V: Borrow<[u8]>,
+{
+  /// Returns the length of the value.
+  #[inline]
+  pub fn value_len(&self) -> usize {
+    self.value.borrow().len()
+  }
 }
 
 impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
@@ -60,6 +125,7 @@ impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
       kb,
       value,
       pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
     }
   }
 
@@ -75,6 +141,12 @@ impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
     &self.value
   }
 
+  /// Returns the length of the key.
+  #[inline]
+  pub const fn key_len(&self) -> usize {
+    self.kb.size() as usize
+  }
+
   /// Consumes the entry and returns the key and value.
   #[inline]
   pub fn into_components(self) -> (KeyBuilder<KB>, V) {
@@ -87,6 +159,18 @@ pub struct EntryWithValueBuilder<K, VB, C> {
   pub(crate) key: K,
   pub(crate) vb: ValueBuilder<VB>,
   pub(crate) pointer: Option<Pointer<C>>,
+  pub(crate) meta: BatchEncodedEntryMeta,
+}
+
+impl<K, VB, C> EntryWithValueBuilder<K, VB, C>
+where
+  K: Borrow<[u8]>,
+{
+  /// Returns the length of the key.
+  #[inline]
+  pub fn key_len(&self) -> usize {
+    self.key.borrow().len()
+  }
 }
 
 impl<K, VB, C> EntryWithValueBuilder<K, VB, C> {
@@ -97,6 +181,7 @@ impl<K, VB, C> EntryWithValueBuilder<K, VB, C> {
       key,
       vb,
       pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
     }
   }
 
@@ -112,6 +197,12 @@ impl<K, VB, C> EntryWithValueBuilder<K, VB, C> {
     &self.key
   }
 
+  /// Returns the length of the value.
+  #[inline]
+  pub const fn value_len(&self) -> usize {
+    self.vb.size() as usize
+  }
+
   /// Consumes the entry and returns the key and value.
   #[inline]
   pub fn into_components(self) -> (K, ValueBuilder<VB>) {
@@ -124,6 +215,7 @@ pub struct EntryWithBuilders<KB, VB, C> {
   pub(crate) kb: KeyBuilder<KB>,
   pub(crate) vb: ValueBuilder<VB>,
   pub(crate) pointer: Option<Pointer<C>>,
+  pub(crate) meta: BatchEncodedEntryMeta,
 }
 
 impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
@@ -134,6 +226,7 @@ impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
       kb,
       vb,
       pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
     }
   }
 
@@ -147,6 +240,18 @@ impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
   #[inline]
   pub const fn key_builder(&self) -> &KeyBuilder<KB> {
     &self.kb
+  }
+
+  /// Returns the length of the key.
+  #[inline]
+  pub const fn key_len(&self) -> usize {
+    self.kb.size() as usize
+  }
+
+  /// Returns the length of the value.
+  #[inline]
+  pub const fn value_len(&self) -> usize {
+    self.vb.size() as usize
   }
 
   /// Consumes the entry and returns the key and value.
@@ -236,6 +341,7 @@ pub struct GenericEntry<'a, K, V> {
   pub(crate) key: Generic<'a, K>,
   pub(crate) value: Generic<'a, V>,
   pub(crate) pointer: Option<GenericPointer<K, V>>,
+  pub(crate) meta: BatchEncodedEntryMeta,
 }
 
 impl<'a, K, V> GenericEntry<'a, K, V> {
@@ -246,6 +352,7 @@ impl<'a, K, V> GenericEntry<'a, K, V> {
       key: key.into(),
       value: value.into(),
       pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
     }
   }
 
