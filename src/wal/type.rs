@@ -10,7 +10,7 @@ pub use impls::*;
 ///
 /// This trait and its implementors can only be used with the [`GenericOrderWal`] type, otherwise
 /// the correctness of the implementations is not guaranteed.
-pub trait Type {
+pub trait Type: core::fmt::Debug {
   /// The reference type for the type.
   type Ref<'a>: TypeRef<'a>;
 
@@ -76,7 +76,7 @@ impl<T: Type> InsertAmongExt<T> for Among<T, &T, &[u8]> {
 }
 
 /// The reference type trait for the [`Type`] trait.
-pub trait TypeRef<'a> {
+pub trait TypeRef<'a>: core::fmt::Debug {
   /// Creates a reference type from a binary slice, when using it with [`GenericOrderWal`],
   /// you can assume that the slice is the same as the one returned by [`encode`](Type::encode).
   ///

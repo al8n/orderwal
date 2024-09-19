@@ -11,7 +11,8 @@ const MB: u32 = 1024 * 1024;
 #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
 
-#[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
+// #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
+#[cfg(test)]
 mod insert;
 
 #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
@@ -122,7 +123,6 @@ impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
   fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
     let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
     let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
-
     PersonRef {
       id: this_id,
       name: std::str::from_utf8(&this[this_id_size..]).unwrap(),

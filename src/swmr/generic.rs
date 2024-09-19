@@ -786,6 +786,7 @@ where
 
           let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
           let ko = cursor as usize + ent_len_size;
+          buf.set_len(ko + klen + vlen);
           let ptr = buf.as_mut_ptr().add(ko);
 
           let key_buf = slice::from_raw_parts_mut(ptr, klen);

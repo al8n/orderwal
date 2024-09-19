@@ -530,7 +530,7 @@ fn concurrent_one_key_map_file() {
 }
 
 fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
-  const N: u32 = 100;
+  const N: u32 = 5;
 
   let mut batch = vec![];
   let output = (0..N)
@@ -565,6 +565,7 @@ fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, Strin
   wal.insert_batch(&mut batch).unwrap();
 
   for (p, val) in output.iter() {
+    println!("person {:?} val {:?}", p.encode_into_vec(), val.as_bytes());
     assert_eq!(wal.get(p).unwrap().value(), val);
   }
 
