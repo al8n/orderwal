@@ -385,7 +385,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// 
+  ///
   /// use orderwal::{swmr::{GenericOrderWal, GenericBuilder, generic::*}, OpenOptions};
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir

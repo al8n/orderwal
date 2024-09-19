@@ -1212,21 +1212,28 @@ pub(crate) fn insert_batch<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 
   wal.insert_batch(&mut batch).unwrap();
 
-  wal.insert(&1000u32.to_be_bytes(), &1000u32.to_be_bytes())
+  wal
+    .insert(&1000u32.to_be_bytes(), &1000u32.to_be_bytes())
     .unwrap();
 
   for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 
-  assert_eq!(wal.get(&1000u32.to_be_bytes()).unwrap(), 1000u32.to_be_bytes());
+  assert_eq!(
+    wal.get(&1000u32.to_be_bytes()).unwrap(),
+    1000u32.to_be_bytes()
+  );
 
   let wal = wal.reader();
   for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
 
-  assert_eq!(wal.get(&1000u32.to_be_bytes()).unwrap(), 1000u32.to_be_bytes());
+  assert_eq!(
+    wal.get(&1000u32.to_be_bytes()).unwrap(),
+    1000u32.to_be_bytes()
+  );
 }
 
 pub(crate) fn insert_batch_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {

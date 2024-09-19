@@ -529,7 +529,9 @@ fn concurrent_one_key_map_file() {
   assert!(wal.contains_key(&1));
 }
 
-fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> (Person, Vec<(Person, String)>, Person) {
+fn insert_batch(
+  wal: &mut GenericOrderWal<Person, String>,
+) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
   let mut batch = vec![];

@@ -19,7 +19,6 @@ mod iters;
 #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
 mod get;
 
-
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Person {
