@@ -83,9 +83,7 @@ pub mod utils;
 use utils::*;
 
 mod wal;
-// pub use wal::{
-//   Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal,
-// };
+pub use wal::{ImmutableWal, Wal};
 
 mod options;
 pub use options::Options;

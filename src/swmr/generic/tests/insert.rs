@@ -529,7 +529,7 @@ fn concurrent_one_key_map_file() {
   assert!(wal.contains_key(&1));
 }
 
-fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
+fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -562,19 +562,28 @@ fn insert_batch(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, Strin
     }
   }
 
+  let rp1 = Person::random();
+  wal.insert(&rp1, "rp1".to_string()).unwrap();
   wal.insert_batch(&mut batch).unwrap();
+  let rp2 = Person::random();
+  wal.insert(&rp2, "rp2".to_string()).unwrap();
 
   for (p, val) in output.iter() {
-    println!("person {:?} val {:?}", p.encode_into_vec(), val.as_bytes());
     assert_eq!(wal.get(p).unwrap().value(), val);
   }
+
+  assert_eq!(wal.get(&rp1).unwrap().value(), "rp1");
+  assert_eq!(wal.get(&rp2).unwrap().value(), "rp2");
 
   let wal = wal.reader();
   for (p, val) in output.iter() {
     assert_eq!(wal.get(p).unwrap().value(), val);
   }
 
-  output
+  assert_eq!(wal.get(&rp1).unwrap().value(), "rp1");
+  assert_eq!(wal.get(&rp2).unwrap().value(), "rp2");
+
+  (rp1, output, rp2)
 }
 
 #[test]
@@ -618,7 +627,7 @@ fn test_insert_batch_map_file() {
       .unwrap()
   };
 
-  let data = insert_batch(&mut map);
+  let (rp1, data, rp2) = insert_batch(&mut map);
 
   let map = unsafe {
     GenericBuilder::new()
@@ -629,4 +638,6 @@ fn test_insert_batch_map_file() {
   for (p, val) in data {
     assert_eq!(map.get(&p).unwrap().value(), val);
   }
+  assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
+  assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
 }

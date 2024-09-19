@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, thread::spawn};
 
-use arbitrary::Arbitrary;
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
 use tempfile::tempdir;
 
@@ -11,8 +10,7 @@ const MB: u32 = 1024 * 1024;
 #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
 
-// #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
-#[cfg(test)]
+#[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
 mod insert;
 
 #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
@@ -21,8 +19,9 @@ mod iters;
 #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
 mod get;
 
+
 #[doc(hidden)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Person {
   #[doc(hidden)]
   pub id: u64,
@@ -32,6 +31,7 @@ pub struct Person {
 
 impl Person {
   #[doc(hidden)]
+  #[cfg(test)]
   pub fn random() -> Self {
     Self {
       id: rand::random(),
@@ -48,6 +48,8 @@ impl Person {
   }
 
   #[doc(hidden)]
+  #[cfg(test)]
+  #[allow(dead_code)]
   fn to_vec(&self) -> Vec<u8> {
     let mut buf = vec![0; self.encoded_len()];
     self.encode(&mut buf).unwrap();
@@ -158,6 +160,8 @@ impl<'a> TypeRef<'a> for PersonRef<'a> {
 }
 
 impl PersonRef<'_> {
+  #[cfg(test)]
+  #[allow(dead_code)]
   fn encode_into_vec(&self) -> Result<Vec<u8>, dbutils::leb128::EncodeVarintError> {
     let mut buf = vec![0; encoded_u64_varint_len(self.id) + self.name.len()];
     let id_size = encode_u64_varint(self.id, &mut buf)?;

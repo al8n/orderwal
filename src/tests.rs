@@ -178,16 +178,18 @@ macro_rules! common_unittests {
         for i in 0..100u32 {
           assert_eq!(map.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
         }
+
+        assert_eq!(map.get(&1000u32.to_be_bytes()).unwrap(), 1000u32.to_be_bytes());
       }
 
       #[test]
       fn test_insert_batch_with_key_builder_inmemory() {
-        $crate::tests::insert_batch(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+        $crate::tests::insert_batch_with_key_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_batch_with_key_builder_map_anon() {
-        $crate::tests::insert_batch(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+        $crate::tests::insert_batch_with_key_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
@@ -221,12 +223,12 @@ macro_rules! common_unittests {
 
       #[test]
       fn test_insert_batch_with_value_builder_inmemory() {
-        $crate::tests::insert_batch(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+        $crate::tests::insert_batch_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
       }
 
       #[test]
       fn test_insert_batch_with_value_builder_map_anon() {
-        $crate::tests::insert_batch(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+        $crate::tests::insert_batch_with_value_builder(&mut $crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
       }
 
       #[test]
@@ -1210,14 +1212,21 @@ pub(crate) fn insert_batch<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 
   wal.insert_batch(&mut batch).unwrap();
 
+  wal.insert(&1000u32.to_be_bytes(), &1000u32.to_be_bytes())
+    .unwrap();
+
   for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
+
+  assert_eq!(wal.get(&1000u32.to_be_bytes()).unwrap(), 1000u32.to_be_bytes());
 
   let wal = wal.reader();
   for i in 0..N {
     assert_eq!(wal.get(&i.to_be_bytes()).unwrap(), i.to_be_bytes());
   }
+
+  assert_eq!(wal.get(&1000u32.to_be_bytes()).unwrap(), 1000u32.to_be_bytes());
 }
 
 pub(crate) fn insert_batch_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) {

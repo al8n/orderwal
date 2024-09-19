@@ -53,8 +53,7 @@ pub use builder::*;
     test_swmr_generic_iters,
   )
 ))]
-#[doc(hidden)]
-pub mod tests;
+mod tests;
 
 struct PartialPointer<K> {
   key_len: usize,
@@ -637,7 +636,7 @@ where
   ///
   /// 1. **Inserting an owned key-value pair with structured key and value**
   ///
-  ///   ```rust
+  ///   ```ignore
   ///   use orderwal::swmr::{*, generic::*};
   ///   # use orderwal::swmr::generic::tests::Person;
   ///
@@ -653,7 +652,7 @@ where
   ///
   /// 2. **Inserting a key-value pair, key is a reference, value is owned**
   ///    
-  ///    ```rust
+  ///    ```ignore
   ///    use orderwal::swmr::{*, generic::*};
   ///    # use orderwal::swmr::generic::tests::Person;
   ///
@@ -669,7 +668,7 @@ where
   ///
   /// 3. **Inserting a key-value pair, both of them are in encoded format**
   ///
-  ///    ```rust
+  ///    ```ignore
   ///    use orderwal::swmr::{*, generic::*};
   ///    # use orderwal::swmr::generic::tests::Person;
   ///  

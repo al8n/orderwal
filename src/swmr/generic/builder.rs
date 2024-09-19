@@ -34,7 +34,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{GenericBuilder, Crc32};
+  /// use orderwal::{swmr::GenericBuilder, Crc32};
   ///
   /// let opts = GenericBuilder::new().with_checksumer(Crc32::new());
   /// ```
@@ -51,7 +51,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{GenericBuilder, Options};
+  /// use orderwal::{swmr::GenericBuilder, Options};
   ///
   /// let opts = GenericBuilder::new().with_options(Options::default());
   /// ```
@@ -73,7 +73,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let opts = GenericBuilder::new().with_reserved(8);
   /// ```
@@ -93,7 +93,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let opts = GenericBuilder::new().with_reserved(8);
   ///
@@ -111,7 +111,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
@@ -128,7 +128,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_capacity(1000);
   /// assert_eq!(options.capacity(), 1000);
@@ -145,7 +145,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
@@ -162,7 +162,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
@@ -179,7 +179,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new();
   /// assert_eq!(options.sync_on_write(), true);
@@ -206,7 +206,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_huge(64);
   /// assert_eq!(options.huge(), Some(64));
@@ -225,7 +225,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_capacity(100);
   /// assert_eq!(options.capacity(), 100);
@@ -241,7 +241,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
@@ -257,7 +257,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
@@ -285,7 +285,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_huge(64);
   /// assert_eq!(options.huge(), Some(64));
@@ -303,7 +303,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_sync_on_write(false);
   /// assert_eq!(options.sync_on_write(), false);
@@ -321,7 +321,7 @@ impl<S> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::GenericBuilder;
+  /// use orderwal::swmr::GenericBuilder;
   ///
   /// let options = GenericBuilder::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
@@ -385,6 +385,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
+  /// 
   /// use orderwal::{swmr::{GenericOrderWal, GenericBuilder, generic::*}, OpenOptions};
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir
@@ -393,7 +394,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// #
   /// # let mut wal = unsafe {
   /// #   GenericBuilder::new()
-  /// #      .map_mut::<String, String>(
+  /// #      .map_mut::<String, String, _>(
   /// #       &path,
   /// #       OpenOptions::new()
   /// #         .create_new(Some(1024))
@@ -438,7 +439,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// #
   /// # let mut wal = unsafe {
   /// #   GenericBuilder::new()
-  /// #      .map_mut::<String, String>(
+  /// #      .map_mut::<String, String, _>(
   /// #       &path,
   /// #       OpenOptions::new()
   /// #         .create_new(Some(1024))
@@ -489,7 +490,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::{GenericOrderWal, GenericBuilder generic::*}, OpenOptions};
+  /// use orderwal::{swmr::{GenericOrderWal, GenericBuilder, generic::*}, OpenOptions};
   ///
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir
@@ -497,7 +498,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// #  .join("generic_wal_map_mut");
   ///
   /// let mut wal = unsafe {
-  ///   GenericBuilder::new().map_mut::<String, String>(
+  ///   GenericBuilder::new().map_mut::<String, String, _>(
   ///     &path,
   ///     OpenOptions::new()
   ///       .create_new(Some(1024))
@@ -541,7 +542,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// let dir = tempfile::tempdir().unwrap();
   ///
   /// let mut wal = unsafe {
-  ///  GenericBuilder::new().map_mut_with_path_builder::<<String, String, _, ()>(
+  ///  GenericBuilder::new().map_mut_with_path_builder::<String, String, _, ()>(
   ///    || {
   ///       Ok(dir.path().join("generic_wal_map_mut_with_path_builder_and_checksumer"))
   ///    },

@@ -90,7 +90,7 @@ impl<C, S> OrderWal<C, S> {
   /// use orderwal::{unsync::OrderWal, Wal, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = OrderWal::new(Builder::new().with_capacity(100)).unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```
