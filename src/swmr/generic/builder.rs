@@ -577,13 +577,11 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
     .map_err(|e| e.map_right(Into::into))?;
 
     if !exist {
-      return GenericOrderWal::new_in(arena, opts, (), cks)
-        .map(GenericOrderWal::from_core)
-        .map_err(Either::Right);
+      GenericOrderWal::new_in(arena, opts, (), cks)
+    } else {
+      GenericOrderWal::replay(arena, opts, false, (), cks)
     }
-
-    GenericOrderWal::replay(arena, opts, false, (), cks)
-      .map(GenericOrderWal::from_core)
-      .map_err(Either::Right)
+    .map(GenericOrderWal::from_core)
+    .map_err(Either::Right)
   }
 }
