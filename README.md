@@ -32,6 +32,10 @@ English | [简体中文][zh-cn-url]
 orderwal = "0.1"
 ```
 
+## Example
+
+See [examples](./examples/) for more information.
+
 ## Related projects
 
 - [`aol`](https://github.com/al8n/aol): Yet another generic purpose, append-only write-ahead log implementation based on `std::fs::File`.
