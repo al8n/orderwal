@@ -23,7 +23,7 @@ An ordered, zero-copy, Write-Ahead Log implementation for Rust.
 
 ```toml
 [dependencies]
-orderwal = "0.1"
+orderwal = "0.3"
 ```
 
 #### License
@@ -33,7 +33,7 @@ Apache License (Version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE), [LICENSE-MIT](LICENSE-MIT) for details.
 
-Copyright (c) 2021 Al Liu.
+Copyright (c) 2024 Al Liu.
 
 [Github-url]: https://github.com/al8n/orderwal/
 [CI-url]: https://github.com/al8n/template/actions/workflows/template.yml
