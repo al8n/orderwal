@@ -422,8 +422,8 @@ impl<S> GenericBuilder<S> {
   /// The file must be opened with write or append access in order to create
   /// a new file.
   ///
-  /// [`.with_create()`]: Options::with_create
-  /// [`.with_truncate()`]: Options::with_truncate
+  /// [`.with_create()`]: GenericBuilder::with_create
+  /// [`.with_truncate()`]: GenericBuilder::with_truncate
   ///
   /// ## Examples
   ///
