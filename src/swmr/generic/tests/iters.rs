@@ -55,13 +55,11 @@ fn iter_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap()
   };
 
@@ -142,13 +140,11 @@ fn range_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap()
   };
 
@@ -224,13 +220,11 @@ fn range_ref_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap()
   };
 

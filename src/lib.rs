@@ -14,10 +14,8 @@ use crossbeam_skiplist::SkipSet;
 use error::Error;
 use rarena_allocator::{
   either::{self, Either},
-  Allocator, ArenaOptions, Freelist, Memory, MmapOptions,
+  Allocator, Buffer, Freelist, Options as ArenaOptions,
 };
-
-pub use rarena_allocator::OpenOptions;
 
 #[cfg(feature = "std")]
 extern crate std;

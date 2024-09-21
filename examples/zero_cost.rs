@@ -3,7 +3,6 @@ use std::{cmp, sync::Arc, thread::spawn};
 use orderwal::{
   swmr::generic::{Comparable, Equivalent, GenericBuilder, KeyRef, Type, TypeRef},
   utils::*,
-  OpenOptions,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -137,13 +136,11 @@ fn main() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(1024 * 1024))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(1024 * 1024)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap()
   };
 
