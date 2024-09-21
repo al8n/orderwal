@@ -16,7 +16,7 @@ use dbutils::{
   checksum::{BuildChecksumer, Checksumer, Crc32},
   leb128::encoded_u64_varint_len,
 };
-use rarena_allocator::{either::Either, sync::Arena, Allocator, Memory, MmapOptions, OpenOptions};
+use rarena_allocator::{either::Either, sync::Arena, Allocator, Buffer};
 
 use crate::{
   arena_options, check, entry_size,

@@ -39,13 +39,11 @@ fn insert_to_full_map_file() {
 
   unsafe {
     let mut wal = GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(100))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(100)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap();
     insert_to_full(&mut wal);
   }
@@ -101,13 +99,11 @@ fn insert_map_file() {
 
   let people = unsafe {
     let mut wal = GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap();
     insert(&mut wal)
   };
@@ -196,13 +192,11 @@ fn insert_key_bytes_with_value_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap()
   };
   let people = insert_key_bytes_with_value(&mut wal);
@@ -304,13 +298,11 @@ fn insert_key_with_value_bytes_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap()
   };
 
@@ -386,13 +378,11 @@ fn insert_bytes_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap()
   };
 
@@ -457,13 +447,11 @@ fn concurrent_basic_map_file() {
 
   let wal = unsafe {
     GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap()
   };
 
@@ -515,13 +503,11 @@ fn concurrent_one_key_map_file() {
 
   let wal = unsafe {
     GenericBuilder::new()
-      .map_mut(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut(&path)
       .unwrap()
   };
 
@@ -622,13 +608,11 @@ fn test_insert_batch_map_file() {
   ));
   let mut map = unsafe {
     GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap()
   };
 

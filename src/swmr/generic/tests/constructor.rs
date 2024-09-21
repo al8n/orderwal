@@ -161,13 +161,11 @@ fn construct_map_file() {
 
   unsafe {
     let mut wal = GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap();
     let person = Person {
       id: 1,
@@ -178,7 +176,6 @@ fn construct_map_file() {
       .insert(&person, &"My name is Alice!".to_string())
       .unwrap();
     assert_eq!(wal.get(&person).unwrap().value(), "My name is Alice!");
-
     assert_eq!(*wal.path().unwrap().as_ref(), path);
   }
 
@@ -189,10 +186,11 @@ fn construct_map_file() {
 
   unsafe {
     let wal = GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new().create(Some(MB)).write(true).read(true),
-      )
+      .with_capacity(MB)
+      .with_create(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap();
     assert_eq!(wal.get(&pr).unwrap().value(), "My name is Alice!");
   }
@@ -239,13 +237,12 @@ fn construct_with_small_capacity_map_file() {
     .join("generic_wal_construct_with_small_capacity_map_file");
 
   let wal = unsafe {
-    GenericBuilder::new().map_mut::<Person, String, _>(
-      &path,
-      OpenOptions::new()
-        .create_new(Some(1))
-        .write(true)
-        .read(true),
-    )
+    GenericBuilder::new()
+      .with_capacity(1)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
   };
 
   assert!(wal.is_err());
@@ -291,13 +288,11 @@ fn zero_reserved_map_file() {
 
   let mut wal = unsafe {
     GenericBuilder::new()
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap()
   };
 
@@ -345,13 +340,11 @@ fn reserved_map_file() {
   let mut wal = unsafe {
     GenericBuilder::new()
       .with_reserved(4)
-      .map_mut::<Person, String, _>(
-        &path,
-        OpenOptions::new()
-          .create_new(Some(MB))
-          .write(true)
-          .read(true),
-      )
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<Person, String, _>(&path)
       .unwrap()
   };
 
