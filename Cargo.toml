@@ -1,6 +1,6 @@
 [package]
 name = "orderwal"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
@@ -26,7 +26,7 @@ xxhash64 = ["dbutils/xxhash64", "std"]
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "1", default-features = false }
-dbutils = { version = "0.3", default-features = false, features = ["crc32fast"] }
+dbutils = { version = "0.4", default-features = false, features = ["crc32fast"] }
 rarena-allocator = { version = "0.3", default-features = false, features = ["memmap"] }
 crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132" }
 paste = "1"

@@ -137,7 +137,8 @@ where
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
-    <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_key_slice(), other.as_key_slice())
+    // SAFETY: WALs guarantee that the self and other must be the same as the result returned by `<K as Type>::encode`.
+    unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_key_slice(), other.as_key_slice()) }
   }
 }
 

@@ -121,7 +121,7 @@ impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
     Comparable::compare(a, self).reverse()
   }
 
-  fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
+  unsafe fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
     let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
     let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
     PersonRef {
@@ -143,10 +143,10 @@ impl Type for Person {
     encoded_u64_varint_len(self.id) + self.name.len()
   }
 
-  fn encode(&self, buf: &mut [u8]) -> Result<(), Self::Error> {
+  fn encode(&self, buf: &mut [u8]) -> Result<usize, Self::Error> {
     let id_size = encode_u64_varint(self.id, buf)?;
     buf[id_size..].copy_from_slice(self.name.as_bytes());
-    Ok(())
+    Ok(id_size + self.name.len())
   }
 }
 

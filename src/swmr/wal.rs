@@ -4,12 +4,9 @@ use crate::{
   error::Error,
   pointer::Pointer,
   wal::sealed::{Constructor, Sealed, WalCore},
-  Options,
+  Ascend, Options,
 };
-use dbutils::{
-  checksum::{BuildChecksumer, Crc32},
-  Ascend,
-};
+use dbutils::checksum::{BuildChecksumer, Crc32};
 use rarena_allocator::{either::Either, Allocator};
 
 pub use crate::{

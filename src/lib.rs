@@ -22,7 +22,8 @@ extern crate std;
 
 pub use dbutils::{
   checksum::{self, Crc32},
-  Ascend, CheapClone, Comparator, Descend,
+  traits::{Ascend, Descend},
+  CheapClone, Comparator,
 };
 
 #[cfg(feature = "xxhash3")]

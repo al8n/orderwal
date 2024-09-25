@@ -85,7 +85,7 @@ where
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
-    <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_key_slice(), other.as_key_slice())
+    unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_key_slice(), other.as_key_slice()) }
   }
 }
 

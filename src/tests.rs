@@ -1179,7 +1179,7 @@ pub(crate) fn insert_batch_with_key_builder<W: Wal<Ascend, Crc32>>(wal: &mut W) 
 
   for i in 0..N {
     batch.push(EntryWithKeyBuilder::new(
-      KeyBuilder::new(4, move |buf| buf.put_u32_be(i)),
+      KeyBuilder::new(4, move |buf: &mut VacantBuffer<'_>| buf.put_u32_be(i)),
       i.to_be_bytes(),
     ));
   }
@@ -1203,7 +1203,7 @@ pub(crate) fn insert_batch_with_value_builder<W: Wal<Ascend, Crc32>>(wal: &mut W
   for i in 0..N {
     batch.push(EntryWithValueBuilder::new(
       i.to_be_bytes(),
-      ValueBuilder::new(4, move |buf| buf.put_u32_be(i)),
+      ValueBuilder::new(4, move |buf: &mut VacantBuffer<'_>| buf.put_u32_be(i)),
     ));
   }
 
@@ -1226,8 +1226,8 @@ pub(crate) fn insert_batch_with_builders<W: Wal<Ascend, Crc32>>(wal: &mut W) {
 
   for i in 0..N {
     batch.push(EntryWithBuilders::new(
-      KeyBuilder::new(4, move |buf| buf.put_u32_be(i)),
-      ValueBuilder::new(4, move |buf| buf.put_u32_be(i)),
+      KeyBuilder::new(4, move |buf: &mut VacantBuffer<'_>| buf.put_u32_be(i)),
+      ValueBuilder::new(4, move |buf: &mut VacantBuffer<'_>| buf.put_u32_be(i)),
     ));
   }
 

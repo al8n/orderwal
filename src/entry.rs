@@ -278,13 +278,13 @@ impl<T: Type> Generic<'_, T> {
   }
 
   #[inline]
-  pub(crate) fn encode(&self, buf: &mut [u8]) -> Result<(), T::Error> {
+  pub(crate) fn encode(&self, buf: &mut [u8]) -> Result<usize, T::Error> {
     match &self.data {
       Among::Left(val) => val.encode(buf),
       Among::Middle(val) => val.encode(buf),
       Among::Right(val) => {
         buf.copy_from_slice(val);
-        Ok(())
+        Ok(buf.len())
       }
     }
   }
