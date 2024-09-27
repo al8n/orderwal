@@ -352,9 +352,10 @@ pub trait Sealed<C, S>: Constructor<C, S> {
 
           if self.options().sync_on_write() && is_ondisk {
             allocator
-              .flush_range(buf.offset(), elen as usize)
+              .flush_header_and_range(buf.offset(), elen as usize)
               .map_err(|e| Among::Right(e.into()))?;
           }
+
           buf.detach();
           let cmp = self.comparator().cheap_clone();
           let ptr = buf.as_ptr().add(ko);
@@ -395,7 +396,7 @@ trait SealedExt<C, S>: Sealed<C, S> {
     let buf_cap = buf.capacity();
 
     if self.options().sync_on_write() && allocator.is_ondisk() {
-      allocator.flush_range(buf.offset(), buf_cap)?;
+      allocator.flush_header_and_range(buf.offset(), buf_cap)?;
     }
     buf.detach();
     Ok(())

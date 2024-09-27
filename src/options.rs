@@ -8,6 +8,7 @@ pub struct Options {
   cap: Option<u32>,
   reserved: u32,
 
+  pub(crate) lock_meta: bool,
   pub(crate) read: bool,
   pub(crate) write: bool,
   pub(crate) create_new: bool,
@@ -50,6 +51,7 @@ impl Options {
       huge: None,
       cap: None,
       reserved: 0,
+      lock_meta: false,
       read: false,
       write: false,
       create_new: false,
@@ -100,6 +102,50 @@ impl Options {
   #[inline]
   pub const fn reserved(&self) -> u32 {
     self.reserved
+  }
+
+  /// Set if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
+  /// When using memory map backed WAL, the meta of the WAL
+  /// is in the header, meta is frequently accessed,
+  /// lock (`mlock` on the header) the meta can reduce the page fault,
+  /// but yes, this means that one WAL will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// Default is `true`.
+  ///
+  /// This configuration has no effect on windows and vec backed WAL.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::Options;
+  ///
+  /// let opts = Options::new().with_lock_meta(false);
+  /// ```
+  #[inline]
+  pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
+    self.lock_meta = lock_meta;
+    self
+  }
+
+  /// Get if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
+  /// When using memory map backed WAL, the meta of the WAL
+  /// is in the header, meta is frequently accessed,
+  /// lock (`mlock` on the header) the meta can reduce the page fault,
+  /// but yes, this means that one WAL will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::Options;
+  ///
+  /// let opts = Options::new().with_lock_meta(false);
+  /// assert_eq!(opts.lock_meta(), false);
+  /// ```
+  #[inline]
+  pub const fn lock_meta(&self) -> bool {
+    self.lock_meta
   }
 
   /// Returns the magic version.
@@ -664,7 +710,8 @@ impl ArenaOptionsExt for super::ArenaOptions {
       .with_append(opts.append())
       .with_stack(opts.stack())
       .with_populate(opts.populate())
-      .with_huge(opts.huge());
+      .with_huge(opts.huge())
+      .with_lock_meta(opts.lock_meta());
 
     if let Some(cap) = opts.cap {
       new.with_capacity(cap)
