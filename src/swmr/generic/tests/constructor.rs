@@ -230,6 +230,7 @@ fn construct_with_small_capacity_map_anon() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn construct_with_small_capacity_map_file() {
   let dir = tempdir().unwrap();
   let path = dir

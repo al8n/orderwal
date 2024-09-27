@@ -126,6 +126,50 @@ impl<C, S> Builder<C, S> {
     self.opts.reserved()
   }
 
+  /// Set if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
+  /// When using memory map backed WAL, the meta of the WAL
+  /// is in the header, meta is frequently accessed,
+  /// lock (`mlock` on the header) the meta can reduce the page fault,
+  /// but yes, this means that one WAL will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// Default is `true`.
+  ///
+  /// This configuration has no effect on windows and vec backed WAL.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::Builder;
+  ///
+  /// let opts = Builder::new().with_lock_meta(false);
+  /// ```
+  #[inline]
+  pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
+    self.opts.lock_meta = lock_meta;
+    self
+  }
+
+  /// Get if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
+  /// When using memory map backed WAL, the meta of the WAL
+  /// is in the header, meta is frequently accessed,
+  /// lock (`mlock` on the header) the meta can reduce the page fault,
+  /// but yes, this means that one WAL will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::Builder;
+  ///
+  /// let opts = Builder::new().with_lock_meta(false);
+  /// assert_eq!(opts.lock_meta(), false);
+  /// ```
+  #[inline]
+  pub const fn lock_meta(&self) -> bool {
+    self.opts.lock_meta
+  }
+
   /// Returns the magic version.
   ///
   /// The default value is `0`.
