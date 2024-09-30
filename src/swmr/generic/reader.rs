@@ -9,15 +9,23 @@ use super::{
 };
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
-pub struct GenericWalReader<K, V, S>(Arc<GenericOrderWalCore<K, V, S>>);
+pub struct GenericWalReader<K: ?Sized, V: ?Sized, S>(Arc<GenericOrderWalCore<K, V, S>>);
 
-impl<K, V, S> Clone for GenericWalReader<K, V, S> {
+impl<K, V, S> Clone for GenericWalReader<K, V, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<K, V, S> GenericWalReader<K, V, S> {
+impl<K, V, S> GenericWalReader<K, V, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   pub(super) fn new(wal: Arc<GenericOrderWalCore<K, V, S>>) -> Self {
     Self(wal)
   }
@@ -57,8 +65,9 @@ impl<K, V, S> GenericWalReader<K, V, S> {
 
 impl<K, V, S> GenericWalReader<K, V, S>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
 {
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
@@ -107,9 +116,9 @@ where
 
 impl<K, V, S> GenericWalReader<K, V, S>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type,
+  V: Type + ?Sized,
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]

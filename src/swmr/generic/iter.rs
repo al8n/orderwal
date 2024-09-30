@@ -18,11 +18,15 @@ type SetRange<'a, Q, K, V> = crossbeam_skiplist::set::Range<
 >;
 
 /// An iterator over the entries in the WAL.
-pub struct Iter<'a, K, V> {
+pub struct Iter<'a, K: ?Sized, V: ?Sized> {
   iter: crossbeam_skiplist::set::Iter<'a, Pointer<K, V>>,
 }
 
-impl<'a, K, V> Iter<'a, K, V> {
+impl<'a, K, V> Iter<'a, K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   #[inline]
   pub(super) fn new(iter: crossbeam_skiplist::set::Iter<'a, Pointer<K, V>>) -> Self {
     Self { iter }
@@ -31,8 +35,9 @@ impl<'a, K, V> Iter<'a, K, V> {
 
 impl<'a, K, V> Iterator for Iter<'a, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
 {
   type Item = GenericEntryRef<'a, K, V>;
 
@@ -49,8 +54,9 @@ where
 
 impl<K, V> DoubleEndedIterator for Iter<'_, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -61,8 +67,9 @@ where
 /// An iterator over a subset of the entries in the WAL.
 pub struct RefRange<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
 {
   iter: SetRefRange<'a, Q, K, V>,
@@ -70,8 +77,9 @@ where
 
 impl<'a, Q, K, V> RefRange<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
 {
   #[inline]
@@ -82,9 +90,10 @@ where
 
 impl<'a, Q, K, V> Iterator for RefRange<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
+  V: ?Sized,
 {
   type Item = GenericEntryRef<'a, K, V>;
 
@@ -96,8 +105,9 @@ where
 
 impl<'a, Q, K, V> DoubleEndedIterator for RefRange<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
 {
   #[inline]
@@ -109,8 +119,9 @@ where
 /// An iterator over a subset of the entries in the WAL.
 pub struct Range<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>> + Comparable<K>,
 {
   iter: SetRange<'a, Q, K, V>,
@@ -118,8 +129,9 @@ where
 
 impl<'a, Q, K, V> Range<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>> + Comparable<K>,
 {
   #[inline]
@@ -130,8 +142,9 @@ where
 
 impl<'a, Q, K, V> Iterator for Range<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>> + Comparable<K>,
 {
   type Item = GenericEntryRef<'a, K, V>;
@@ -144,8 +157,9 @@ where
 
 impl<'a, Q, K, V> DoubleEndedIterator for Range<'a, Q, K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
   Q: Ord + ?Sized + Comparable<K::Ref<'a>> + Comparable<K>,
 {
   #[inline]

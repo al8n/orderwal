@@ -4,7 +4,6 @@ use core::ops::RangeBounds;
 use super::*;
 
 pub(crate) mod sealed;
-pub(crate) mod r#type;
 
 mod batch;
 pub use batch::*;

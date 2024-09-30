@@ -194,7 +194,7 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
       let p = Person::random();
       let v = format!("My name is {}", p.name);
       wal
-        .get_or_insert_with(&p, || v.clone().into())
+        .get_or_insert_with(&p, || (&v).into())
         .unwrap_right()
         .unwrap();
       (p, v)
@@ -208,7 +208,7 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
     assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
       wal
-        .get_or_insert_with(p, || format!("Hello! {}!", p.name).into())
+        .get_or_insert_with(p, || (&format!("Hello! {}!", p.name)).into())
         .unwrap_left()
         .value(),
       pv
@@ -419,7 +419,7 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .get_or_insert_with(Generic::from_slice(pvec.as_ref()), || v.clone().into())
+          .get_or_insert_with(Generic::from_slice(pvec.as_ref()), || v.clone())
           .unwrap_right()
           .unwrap();
       }
@@ -435,8 +435,7 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
     unsafe {
       assert_eq!(
         wal
-          .get_or_insert_with(Generic::from_slice(pvec), || format!("Hello! {}!", p.name)
-            .into())
+          .get_or_insert_with(Generic::from_slice(pvec), || format!("Hello! {}!", p.name))
           .unwrap_left()
           .value(),
         pv

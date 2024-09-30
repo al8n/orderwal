@@ -3,7 +3,7 @@
 pub struct Options {
   maximum_key_size: u32,
   maximum_value_size: u32,
-  sync_on_write: bool,
+  sync: bool,
   magic_version: u16,
   cap: Option<u32>,
   reserved: u32,
@@ -46,7 +46,7 @@ impl Options {
     Self {
       maximum_key_size: u16::MAX as u32,
       maximum_value_size: u32::MAX,
-      sync_on_write: true,
+      sync: true,
       magic_version: 0,
       huge: None,
       cap: None,
@@ -229,11 +229,11 @@ impl Options {
   /// use orderwal::Options;
   ///
   /// let options = Options::new();
-  /// assert_eq!(options.sync_on_write(), true);
+  /// assert_eq!(options.sync(), true);
   /// ```
   #[inline]
-  pub const fn sync_on_write(&self) -> bool {
-    self.sync_on_write
+  pub const fn sync(&self) -> bool {
+    self.sync
   }
 
   /// Sets the capacity of the WAL.
@@ -297,12 +297,12 @@ impl Options {
   /// ```rust
   /// use orderwal::Options;
   ///
-  /// let options = Options::new().with_sync_on_write(false);
-  /// assert_eq!(options.sync_on_write(), false);
+  /// let options = Options::new().with_sync(false);
+  /// assert_eq!(options.sync(), false);
   /// ```
   #[inline]
-  pub const fn with_sync_on_write(mut self, sync: bool) -> Self {
-    self.sync_on_write = sync;
+  pub const fn with_sync(mut self, sync: bool) -> Self {
+    self.sync = sync;
     self
   }
 

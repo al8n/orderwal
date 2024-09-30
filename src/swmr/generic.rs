@@ -29,10 +29,13 @@ use crate::{
 
 pub use crate::{
   entry::{Generic, GenericEntry, GenericEntryRef},
-  wal::{r#type::*, GenericBatch},
+  wal::GenericBatch,
 };
 
-pub use dbutils::equivalent::{Comparable, Equivalent};
+pub use dbutils::{
+  equivalent::{Comparable, Equivalent},
+  traits::{KeyRef, Type, TypeRef},
+};
 
 mod reader;
 pub use reader::*;
@@ -55,23 +58,23 @@ pub use builder::*;
 ))]
 mod tests;
 
-struct PartialPointer<K> {
+struct PartialPointer<K: ?Sized> {
   key_len: usize,
   ptr: *const u8,
   _k: PhantomData<K>,
 }
 
-impl<K: Type> PartialEq for PartialPointer<K> {
+impl<K: Type + ?Sized> PartialEq for PartialPointer<K> {
   fn eq(&self, other: &Self) -> bool {
     self.as_key_slice() == other.as_key_slice()
   }
 }
 
-impl<K: Type> Eq for PartialPointer<K> {}
+impl<K: Type + ?Sized> Eq for PartialPointer<K> {}
 
 impl<K> PartialOrd for PartialPointer<K>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -81,7 +84,7 @@ where
 
 impl<K> Ord for PartialPointer<K>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
@@ -89,7 +92,10 @@ where
   }
 }
 
-impl<K> PartialPointer<K> {
+impl<K> PartialPointer<K>
+where
+  K: ?Sized,
+{
   #[inline]
   const fn new(key_len: usize, ptr: *const u8) -> Self {
     Self {
@@ -112,8 +118,9 @@ impl<K> PartialPointer<K> {
 
 impl<'a, K, V> Equivalent<GenericPointer<K, V>> for PartialPointer<K>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
 {
   fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
     self.compare(key).is_eq()
@@ -122,8 +129,9 @@ where
 
 impl<'a, K, V> Comparable<GenericPointer<K, V>> for PartialPointer<K>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
 {
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
     unsafe {
@@ -135,12 +143,20 @@ where
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Ref<'a, K, Q: ?Sized> {
+struct Ref<'a, K, Q>
+where
+  K: ?Sized,
+  Q: ?Sized,
+{
   key: &'a Q,
   _k: PhantomData<K>,
 }
 
-impl<'a, K, Q: ?Sized> Ref<'a, K, Q> {
+impl<'a, K, Q> Ref<'a, K, Q>
+where
+  K: ?Sized,
+  Q: ?Sized,
+{
   #[inline]
   const fn new(key: &'a Q) -> Self {
     Self {
@@ -152,8 +168,9 @@ impl<'a, K, Q: ?Sized> Ref<'a, K, Q> {
 
 impl<'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Ref<'a, K, Q>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
 {
   fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
@@ -163,8 +180,9 @@ where
 
 impl<'a, K, Q, V> Comparable<GenericPointer<K, V>> for Ref<'a, K, Q>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
@@ -174,12 +192,20 @@ where
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Owned<'a, K, Q: ?Sized> {
+struct Owned<'a, K, Q>
+where
+  K: ?Sized,
+  Q: ?Sized,
+{
   key: &'a Q,
   _k: PhantomData<K>,
 }
 
-impl<'a, K, Q: ?Sized> Owned<'a, K, Q> {
+impl<'a, K, Q> Owned<'a, K, Q>
+where
+  K: ?Sized,
+  Q: ?Sized,
+{
   #[inline]
   const fn new(key: &'a Q) -> Self {
     Self {
@@ -191,8 +217,9 @@ impl<'a, K, Q: ?Sized> Owned<'a, K, Q> {
 
 impl<'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Owned<'a, K, Q>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
   Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
 {
   fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
@@ -202,8 +229,9 @@ where
 
 impl<'a, K, Q, V> Comparable<GenericPointer<K, V>> for Owned<'a, K, Q>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
   Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
 {
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
@@ -213,14 +241,18 @@ where
 }
 
 #[doc(hidden)]
-pub struct GenericOrderWalCore<K, V, S> {
+pub struct GenericOrderWalCore<K: ?Sized, V: ?Sized, S> {
   arena: Arena,
   map: SkipSet<GenericPointer<K, V>>,
   opts: Options,
   cks: S,
 }
 
-impl<K, V, S> crate::wal::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S> {
+impl<K, V, S> crate::wal::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   type Allocator = Arena;
 
   type Base = SkipSet<GenericPointer<K, V>>;
@@ -238,7 +270,11 @@ impl<K, V, S> crate::wal::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S
   }
 }
 
-impl<K, V, S> GenericOrderWalCore<K, V, S> {
+impl<K, V, S> GenericOrderWalCore<K, V, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   #[inline]
   fn len(&self) -> usize {
     self.map.len()
@@ -313,7 +349,11 @@ impl<K, V, S> GenericOrderWalCore<K, V, S> {
   }
 }
 
-impl<K, V, S> Constructor<(), S> for GenericOrderWal<K, V, S> {
+impl<K, V, S> Constructor<(), S> for GenericOrderWal<K, V, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   type Allocator = Arena;
 
   type Core = GenericOrderWalCore<K, V, S>;
@@ -334,9 +374,9 @@ impl<K, V, S> Constructor<(), S> for GenericOrderWal<K, V, S> {
 
 impl<K, V, S> GenericOrderWalCore<K, V, S>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
-  V: Type,
+  V: Type + ?Sized,
 {
   #[inline]
   fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
@@ -397,15 +437,16 @@ where
 /// Both read and write operations of this WAL are zero-cost (no allocation will happen for both read and write).
 ///
 /// Users can create multiple readers from the WAL by [`GenericOrderWal::reader`], but only one writer is allowed.
-pub struct GenericOrderWal<K, V, S = Crc32> {
+pub struct GenericOrderWal<K: ?Sized, V: ?Sized, S = Crc32> {
   core: Arc<GenericOrderWalCore<K, V, S>>,
   ro: bool,
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: Type + Ord + 'static,
+  K: Type + Ord + ?Sized + 'static,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
 {
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
@@ -454,8 +495,8 @@ where
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: 'static,
-  V: 'static,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
 {
   /// Returns a read-only WAL instance.
   #[inline]
@@ -512,9 +553,9 @@ where
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type,
+  V: Type + ?Sized,
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
@@ -573,9 +614,9 @@ where
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: Type + Ord + for<'a> Comparable<K::Ref<'a>> + 'static,
+  K: Type + Ord + for<'a> Comparable<K::Ref<'a>> + ?Sized + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type + 'static,
+  V: Type + ?Sized + 'static,
   S: BuildChecksumer,
 {
   /// Gets or insert the key value pair.
@@ -594,7 +635,7 @@ where
 
     match ent.map(|e| Either::Left(GenericEntryRef::new(e))) {
       Some(e) => e,
-      None => Either::Right(self.insert_in(key.into_among(), value.into().into_among())),
+      None => Either::Right(self.insert_in(key, value.into())),
     }
   }
 
@@ -603,8 +644,11 @@ where
   pub fn get_or_insert_with<'a>(
     &mut self,
     key: impl Into<Generic<'a, K>>,
-    value: impl FnOnce() -> Generic<'a, V>,
-  ) -> Either<GenericEntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
+    value: impl FnOnce() -> V,
+  ) -> Either<GenericEntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>>
+  where
+    V: Sized,
+  {
     let key: Generic<'a, K> = key.into();
     let map = &self.core.map;
     let ent = match key.data() {
@@ -614,16 +658,19 @@ where
 
     match ent.map(|e| Either::Left(GenericEntryRef::new(e))) {
       Some(e) => e,
-      None => Either::Right(self.insert_in(key.into_among(), value().into_among())),
+      None => {
+        let v = value();
+        Either::Right(self.insert_in(key, (&v).into()))
+      }
     }
   }
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: Type + Ord + 'static,
+  K: Type + Ord + ?Sized + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type + 'static,
+  V: Type + ?Sized + 'static,
   S: BuildChecksumer,
 {
   /// Inserts a key-value pair into the write-ahead log.
@@ -689,7 +736,7 @@ where
     key: impl Into<Generic<'a, K>>,
     val: impl Into<Generic<'a, V>>,
   ) -> Result<(), Among<K::Error, V::Error, Error>> {
-    self.insert_in(key.into().into_among(), val.into().into_among())
+    self.insert_in(key.into(), val.into())
   }
 
   /// Inserts a batch of entries into the write-ahead log.
@@ -788,9 +835,9 @@ where
       buf[0] = committed_flag.bits;
       let buf_cap = buf.capacity();
 
-      if self.core.opts.sync_on_write() && allocator.is_ondisk() {
+      if self.core.opts.sync() && allocator.is_ondisk() {
         allocator
-          .flush_range(buf.offset(), buf_cap)
+          .flush_header_and_range(buf.offset(), buf_cap)
           .map_err(|e| Among::Right(e.into()))?;
       }
       buf.detach();
@@ -808,8 +855,8 @@ where
 
   fn insert_in(
     &self,
-    key: Among<K, &K, &[u8]>,
-    val: Among<V, &V, &[u8]>,
+    key: Generic<'_, K>,
+    val: Generic<'_, V>,
   ) -> Result<(), Among<K::Error, V::Error, Error>> {
     let klen = key.encoded_len();
     let vlen = val.encoded_len();
@@ -856,11 +903,11 @@ where
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.core.opts.sync_on_write() && self.core.arena.is_ondisk() {
+          if self.core.opts.sync() && self.core.arena.is_ondisk() {
             self
               .core
               .arena
-              .flush_range(buf.offset(), elen as usize)
+              .flush_header_and_range(buf.offset(), elen as usize)
               .map_err(|e| Among::Right(e.into()))?;
           }
           buf.detach();

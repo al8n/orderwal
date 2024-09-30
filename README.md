@@ -29,7 +29,7 @@ English | [简体中文][zh-cn-url]
 
 ```toml
 [dependencies]
-orderwal = "0.3"
+orderwal = "0.4"
 ```
 
 ## Example

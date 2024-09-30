@@ -476,7 +476,7 @@ fn concurrent_one_key(mut w: GenericOrderWal<u32, [u8; 4]>) {
     })
   });
 
-  w.insert(1, 1u32.to_le_bytes()).unwrap();
+  w.insert(&1, &1u32.to_le_bytes()).unwrap();
 
   for handle in handles {
     handle.join().unwrap();
@@ -539,9 +539,7 @@ fn insert_batch(
     .collect::<Vec<_>>();
 
   for (person, val) in output.iter() {
-    if person.id % 3 == 0 {
-      batch.push(GenericEntry::new(person.clone(), val.clone()));
-    } else if person.id % 3 == 1 {
+    if person.id % 2 == 0 {
       batch.push(GenericEntry::new(person, val));
     } else {
       unsafe {
@@ -554,10 +552,10 @@ fn insert_batch(
   }
 
   let rp1 = Person::random();
-  wal.insert(&rp1, "rp1".to_string()).unwrap();
+  wal.insert(&rp1, &"rp1".to_string()).unwrap();
   wal.insert_batch(&mut batch).unwrap();
   let rp2 = Person::random();
-  wal.insert(&rp2, "rp2".to_string()).unwrap();
+  wal.insert(&rp2, &"rp2".to_string()).unwrap();
 
   for (p, val) in output.iter() {
     assert_eq!(wal.get(p).unwrap().value(), val);
@@ -579,22 +577,12 @@ fn insert_batch(
 
 #[test]
 fn test_insert_batch_inmemory() {
-  insert_batch(
-    &mut GenericBuilder::new()
-      .with_capacity(MB)
-      .alloc::<Person, String>()
-      .unwrap(),
-  );
+  insert_batch(&mut GenericBuilder::new().with_capacity(MB).alloc().unwrap());
 }
 
 #[test]
 fn test_insert_batch_map_anon() {
-  insert_batch(
-    &mut GenericBuilder::new()
-      .with_capacity(MB)
-      .map_anon::<Person, String>()
-      .unwrap(),
-  );
+  insert_batch(&mut GenericBuilder::new().with_capacity(MB).map_anon().unwrap());
 }
 
 #[test]
@@ -612,7 +600,7 @@ fn test_insert_batch_map_file() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<Person, String, _>(&path)
+      .map_mut(&path)
       .unwrap()
   };
 
