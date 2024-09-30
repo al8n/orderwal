@@ -1,5 +1,5 @@
 use checksum::BuildChecksumer;
-use core::ops::RangeBounds;
+use core::ops::{Bound, RangeBounds};
 
 use super::*;
 
@@ -175,6 +175,38 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     C: Comparator;
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  // TODO: implement this method for unsync::OrderWal when BTreeMap::upper_bound is stable
+  #[inline]
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self
+      .range((Bound::Unbounded, bound))
+      .last()
+      .map(|ent| ent.0)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  // TODO: implement this method for unsync::OrderWal when BTreeMap::lower_bound is stable
+  #[inline]
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self
+      .range((bound, Bound::Unbounded))
+      .next()
+      .map(|ent| ent.0)
+  }
 }
 
 /// An abstract layer for the write-ahead log.

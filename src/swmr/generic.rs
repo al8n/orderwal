@@ -2,6 +2,7 @@ use core::{
   cmp,
   marker::PhantomData,
   ops::Bound,
+  ptr::NonNull,
   slice,
   sync::atomic::{AtomicPtr, Ordering},
 };
@@ -13,10 +14,12 @@ use std::{
 use among::Among;
 use crossbeam_skiplist::SkipSet;
 use dbutils::{
+  buffer::VacantBuffer,
   checksum::{BuildChecksumer, Checksumer, Crc32},
   leb128::encoded_u64_varint_len,
 };
 use rarena_allocator::{either::Either, sync::Arena, Allocator, Buffer};
+use ref_cast::RefCast;
 
 use crate::{
   arena_options, check, entry_size,
@@ -24,7 +27,8 @@ use crate::{
   merge_lengths,
   pointer::GenericPointer,
   wal::sealed::Constructor,
-  BatchEncodedEntryMeta, Flags, Options, CHECKSUM_SIZE, HEADER_SIZE, STATUS_SIZE,
+  BatchEncodedEntryMeta, Flags, KeyBuilder, Options, ValueBuilder, CHECKSUM_SIZE, HEADER_SIZE,
+  STATUS_SIZE,
 };
 
 pub use crate::{
@@ -58,21 +62,45 @@ pub use builder::*;
 ))]
 mod tests;
 
-struct PartialPointer<K: ?Sized> {
-  key_len: usize,
-  ptr: *const u8,
-  _k: PhantomData<K>,
+macro_rules! transmute {
+  () => {
+    #[inline]
+    fn transmute(src: &Q) -> &Self {
+      #[cfg(debug_assertions)]
+      {
+        #[allow(unused_imports)]
+        use ::ref_cast::__private::LayoutUnsized;
+        ::ref_cast::__private::assert_layout::<Self, Q>(
+          core::any::type_name::<Q>(),
+          ::ref_cast::__private::Layout::<Self>::SIZE,
+          ::ref_cast::__private::Layout::<Q>::SIZE,
+          ::ref_cast::__private::Layout::<Self>::ALIGN,
+          ::ref_cast::__private::Layout::<Q>::ALIGN,
+        );
+      }
+
+      // Safety: `PhantomData` is ZST, so the memory layout of Owned and Q are the same
+      unsafe { &*(src as *const Q as *const Self) }
+    }
+  };
 }
 
-impl<K: Type + ?Sized> PartialEq for PartialPointer<K> {
+#[derive(ref_cast::RefCast)]
+#[repr(transparent)]
+struct Slice<K: ?Sized> {
+  _k: PhantomData<K>,
+  data: [u8],
+}
+
+impl<K: Type + ?Sized> PartialEq for Slice<K> {
   fn eq(&self, other: &Self) -> bool {
-    self.as_key_slice() == other.as_key_slice()
+    self.data == other.data
   }
 }
 
-impl<K: Type + ?Sized> Eq for PartialPointer<K> {}
+impl<K: Type + ?Sized> Eq for Slice<K> {}
 
-impl<K> PartialOrd for PartialPointer<K>
+impl<K> PartialOrd for Slice<K>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -82,44 +110,44 @@ where
   }
 }
 
-impl<K> Ord for PartialPointer<K>
+impl<K> Ord for Slice<K>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
-    unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_key_slice(), other.as_key_slice()) }
+    unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(&self.data, &other.data) }
   }
 }
 
-impl<K> PartialPointer<K>
-where
-  K: ?Sized,
-{
-  #[inline]
-  const fn new(key_len: usize, ptr: *const u8) -> Self {
-    Self {
-      key_len,
-      ptr,
-      _k: PhantomData,
-    }
-  }
+// impl<K> Slice<K>
+// where
+//   K: ?Sized,
+// {
+//   #[inline]
+//   const fn new(key_len: usize, ptr: *const u8) -> Self {
+//     Self {
+//       key_len,
+//       ptr,
+//       _k: PhantomData,
+//     }
+//   }
 
-  #[inline]
-  fn as_key_slice<'a>(&self) -> &'a [u8] {
-    if self.key_len == 0 {
-      return &[];
-    }
+//   #[inline]
+//   fn as_key_slice<'a>(&self) -> &'a [u8] {
+//     if self.key_len == 0 {
+//       return &[];
+//     }
 
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
-  }
-}
+//     // SAFETY: `ptr` is a valid pointer to `len` bytes.
+//     unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
+//   }
+// }
 
-impl<'a, K, V> Equivalent<GenericPointer<K, V>> for PartialPointer<K>
+impl<K, V> Equivalent<GenericPointer<K, V>> for Slice<K>
 where
   K: Type + Ord + ?Sized,
-  K::Ref<'a>: KeyRef<'a, K>,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized,
 {
   fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
@@ -127,16 +155,16 @@ where
   }
 }
 
-impl<'a, K, V> Comparable<GenericPointer<K, V>> for PartialPointer<K>
+impl<K, V> Comparable<GenericPointer<K, V>> for Slice<K>
 where
   K: Type + Ord + ?Sized,
-  K::Ref<'a>: KeyRef<'a, K>,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized,
 {
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
     unsafe {
       let kr: K::Ref<'_> = TypeRef::from_slice(p.as_key_slice());
-      let or: K::Ref<'_> = TypeRef::from_slice(self.as_key_slice());
+      let or: K::Ref<'_> = TypeRef::from_slice(&self.data);
       KeyRef::compare(&kr, &or).reverse()
     }
   }
@@ -164,6 +192,8 @@ where
       _k: PhantomData,
     }
   }
+
+  transmute!();
 }
 
 impl<'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Ref<'a, K, Q>
@@ -192,6 +222,7 @@ where
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
 struct Owned<'a, K, Q>
 where
   K: ?Sized,
@@ -213,6 +244,8 @@ where
       _k: PhantomData,
     }
   }
+
+  transmute!();
 }
 
 impl<'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Owned<'a, K, Q>
@@ -239,7 +272,6 @@ where
     KeyRef::compare(&kr, self.key).reverse()
   }
 }
-
 #[doc(hidden)]
 pub struct GenericOrderWalCore<K: ?Sized, V: ?Sized, S> {
   arena: Arena,
@@ -396,9 +428,7 @@ where
 
   #[inline]
   unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
-    self
-      .map
-      .contains(&PartialPointer::new(key.len(), key.as_ptr()))
+    self.map.contains(Slice::ref_cast(key))
   }
 
   #[inline]
@@ -425,9 +455,66 @@ where
 
   #[inline]
   unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>> {
+    self.map.get(Slice::ref_cast(key)).map(GenericEntryRef::new)
+  }
+
+  #[inline]
+  fn upper_bound<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
     self
       .map
-      .get(&PartialPointer::new(key.len(), key.as_ptr()))
+      .upper_bound(key.map(Owned::transmute))
+      .map(GenericEntryRef::new)
+  }
+
+  #[inline]
+  fn upper_bound_by_ref<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self
+      .map
+      .upper_bound(key.map(Ref::transmute))
+      .map(GenericEntryRef::new)
+  }
+
+  #[inline]
+  unsafe fn upper_bound_by_bytes(&self, key: Bound<&[u8]>) -> Option<GenericEntryRef<'_, K, V>> {
+    self
+      .map
+      .upper_bound(key.map(Slice::ref_cast))
+      .map(GenericEntryRef::new)
+  }
+
+  #[inline]
+  fn lower_bound<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self
+      .map
+      .upper_bound(key.map(Owned::transmute))
+      .map(GenericEntryRef::new)
+  }
+
+  #[inline]
+  fn lower_bound_by_ref<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self
+      .map
+      .lower_bound(key.map(Ref::transmute))
+      .map(GenericEntryRef::new)
+  }
+
+  #[inline]
+  unsafe fn lower_bound_by_bytes(&self, key: Bound<&[u8]>) -> Option<GenericEntryRef<'_, K, V>> {
+    self
+      .map
+      .lower_bound(key.map(Slice::ref_cast))
       .map(GenericEntryRef::new)
   }
 }
@@ -610,6 +697,78 @@ where
   pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>> {
     self.core.get_by_bytes(key)
   }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self.core.upper_bound(bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn upper_bound_by_ref<'a, Q>(
+    &'a self,
+    bound: Bound<&'a Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self.core.upper_bound_by_ref(bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn upper_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntryRef<'_, K, V>> {
+    self.core.upper_bound_by_bytes(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self.core.lower_bound(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn lower_bound_by_ref<'a, Q>(
+    &'a self,
+    bound: Bound<&'a Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self.core.lower_bound_by_ref(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn lower_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntryRef<'_, K, V>> {
+    self.core.lower_bound_by_bytes(bound)
+  }
 }
 
 impl<K, V, S> GenericOrderWal<K, V, S>
@@ -624,18 +783,33 @@ where
   pub fn get_or_insert<'a>(
     &mut self,
     key: impl Into<Generic<'a, K>>,
-    value: impl Into<Generic<'a, V>>,
+    val: impl Into<Generic<'a, V>>,
   ) -> Either<GenericEntryRef<'_, K, V>, Result<(), Among<K::Error, V::Error, Error>>> {
     let key: Generic<'a, K> = key.into();
     let map = &self.core.map;
     let ent = match key.data() {
       Either::Left(k) => map.get(&Owned::new(k)),
-      Either::Right(key) => map.get(&PartialPointer::new(key.len(), key.as_ptr())),
+      Either::Right(key) => map.get(Slice::ref_cast(key)),
     };
 
     match ent.map(|e| Either::Left(GenericEntryRef::new(e))) {
       Some(e) => e,
-      None => Either::Right(self.insert_in(key, value.into())),
+      None => {
+        let klen = key.encoded_len() as u32;
+        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
+          buf.set_len(klen as usize);
+          key.encode(buf).map(|_| ())
+        });
+
+        let val: Generic<'_, V> = val.into();
+        let vlen = val.encoded_len() as u32;
+        let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
+          buf.set_len(vlen as usize);
+          val.encode(buf).map(|_| ())
+        });
+
+        Either::Right(self.insert_in(kb, vb))
+      }
     }
   }
 
@@ -653,14 +827,25 @@ where
     let map = &self.core.map;
     let ent = match key.data() {
       Either::Left(k) => map.get(&Owned::new(k)),
-      Either::Right(key) => map.get(&PartialPointer::new(key.len(), key.as_ptr())),
+      Either::Right(key) => map.get(Slice::ref_cast(key)),
     };
 
     match ent.map(|e| Either::Left(GenericEntryRef::new(e))) {
       Some(e) => e,
       None => {
-        let v = value();
-        Either::Right(self.insert_in(key, (&v).into()))
+        let klen = key.encoded_len() as u32;
+        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
+          buf.set_len(klen as usize);
+          key.encode(buf).map(|_| ())
+        });
+        let val = value();
+        let vlen = val.encoded_len() as u32;
+        let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
+          buf.set_len(vlen as usize);
+          val.encode(buf).map(|_| ())
+        });
+
+        Either::Right(self.insert_in(kb, vb))
       }
     }
   }
@@ -675,28 +860,15 @@ where
 {
   /// Inserts a key-value pair into the write-ahead log.
   ///
+  /// See also [`insert_with_key_builder`], [`insert_with_value_builder`], and [`insert_with_builders`].
+  ///
   /// ## Example
   ///
-  /// Here are three examples of how flexible the `insert` method is:
+  /// Here are two examples of how flexible the `insert` method is:
   ///
   /// The `Person` struct implementation can be found [here](https://github.com/al8n/orderwal/blob/main/src/swmr/generic/tests.rs#L24).
   ///
-  /// 1. **Inserting an owned key-value pair with structured key and value**
-  ///
-  ///     ```rust,ignore
-  ///     use orderwal::swmr::{*, generic::*};
-  ///
-  ///     let person = Person {
-  ///       id: 1,
-  ///       name: "Alice".to_string(),
-  ///     };
-  ///
-  ///     let mut wal = GenericBuilder::new().with_capacity(1024).alloc::<Person, String>().unwrap();
-  ///     let value = "Hello, Alice!".to_string();
-  ///     wal.insert(&person, value);
-  ///     ```
-  ///
-  /// 2. **Inserting a key-value pair, key is a reference, value is owned**
+  /// 1. **Inserting a key-value pair, key and value are references**
   ///    
   ///     ```rust,ignore
   ///     use orderwal::swmr::{*, generic::*};
@@ -708,10 +880,10 @@ where
   ///       name: "Alice".to_string(),
   ///     };
   ///
-  ///     wal.insert(&person, "value".to_string());
+  ///     wal.insert(&person, &"value".to_string());
   ///     ```
   ///
-  /// 3. **Inserting a key-value pair, both of them are in encoded format**
+  /// 2. **Inserting a key-value pair, both of them are in encoded format**
   ///
   ///     ```rust,ignore
   ///     use orderwal::swmr::{*, generic::*};
@@ -736,7 +908,95 @@ where
     key: impl Into<Generic<'a, K>>,
     val: impl Into<Generic<'a, V>>,
   ) -> Result<(), Among<K::Error, V::Error, Error>> {
-    self.insert_in(key.into(), val.into())
+    let key: Generic<'_, K> = key.into();
+    let klen = key.encoded_len() as u32;
+    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
+      buf.set_len(klen as usize);
+      key.encode(buf).map(|_| ())
+    });
+
+    let val: Generic<'_, V> = val.into();
+    let vlen = val.encoded_len() as u32;
+    let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
+      buf.set_len(vlen as usize);
+      val.encode(buf).map(|_| ())
+    });
+    self.insert_in(kb, vb)
+  }
+
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the key in place.
+  ///
+  /// This method is useful when playing with `?Sized` key types. See details in the example.
+  ///
+  /// ## Safety
+  /// - The bytes written to the buffer must be valid to decode by [`K::from_slice`](TypeRef::from_slice).
+  ///
+  /// ## Example
+  ///
+  /// See [`examples/generic_not_sized.rs`](https://github.com/al8n/orderwal/tree/main/examples/generic_not_sized.rs).
+  #[inline]
+  pub unsafe fn insert_with_key_builder<'a, E>(
+    &mut self,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E> + 'a>,
+    val: impl Into<Generic<'a, V>>,
+  ) -> Result<(), Among<E, V::Error, Error>> {
+    let val: Generic<'_, V> = val.into();
+    let vlen = val.encoded_len() as u32;
+    let vb = ValueBuilder::once(vlen, |buf| {
+      buf.set_len(vlen as usize);
+      val.encode(buf).map(|_| ())
+    });
+
+    self.insert_in(kb, vb)
+  }
+
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the value in place.
+  ///
+  /// This method is useful when playing with `?Sized` value types. See details in the example.
+  ///
+  /// ## Safety
+  /// - The bytes written to the buffer must be valid to decode by [`V::from_slice`](TypeRef::from_slice).
+  ///
+  /// ## Example
+  ///
+  /// See [`examples/generic_not_sized.rs`](https://github.com/al8n/orderwal/tree/main/examples/generic_not_sized.rs).
+  #[inline]
+  pub unsafe fn insert_with_value_builder<'a, E>(
+    &mut self,
+    key: impl Into<Generic<'a, K>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E> + 'a>,
+  ) -> Result<(), Among<K::Error, E, Error>> {
+    let key: Generic<'_, K> = key.into();
+    let klen = key.encoded_len() as u32;
+    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
+      buf.set_len(klen as usize);
+      key.encode(buf).map(|_| ())
+    });
+
+    self.insert_in::<K::Error, E>(kb, vb)
+  }
+
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the key and value in place.
+  ///
+  /// This method is useful when playing with `?Sized` key and value types. See details in the example.
+  ///
+  /// ## Safety
+  /// - The bytes written to the buffer must be valid to decode by [`K::from_slice`](TypeRef::from_slice)
+  ///   and [`V::from_slice`](TypeRef::from_slice) respectively.
+  ///
+  /// ## Example
+  ///
+  /// See [`examples/generic_not_sized.rs`](https://github.com/al8n/orderwal/tree/main/examples/generic_not_sized.rs).
+  #[inline]
+  pub unsafe fn insert_with_builders<'a, KE, VE>(
+    &mut self,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE> + 'a>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE> + 'a>,
+  ) -> Result<(), Among<KE, VE, Error>> {
+    self.insert_in(kb, vb)
   }
 
   /// Inserts a batch of entries into the write-ahead log.
@@ -853,13 +1113,16 @@ where
     }
   }
 
-  fn insert_in(
+  fn insert_in<KE, VE>(
     &self,
-    key: Generic<'_, K>,
-    val: Generic<'_, V>,
-  ) -> Result<(), Among<K::Error, V::Error, Error>> {
-    let klen = key.encoded_len();
-    let vlen = val.encoded_len();
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
+  ) -> Result<(), Among<KE, VE, Error>> {
+    let (klen, kb) = kb.into_components();
+    let (vlen, vb) = vb.into_components();
+
+    let klen = klen as usize;
+    let vlen = vlen as usize;
 
     self.check(klen, vlen).map_err(Among::Right)?;
 
@@ -887,12 +1150,14 @@ where
           let ko = STATUS_SIZE + written;
           buf.set_len(ko + klen + vlen);
 
-          let key_buf = slice::from_raw_parts_mut(buf.as_mut_ptr().add(ko), klen);
-          key.encode(key_buf).map_err(Among::Left)?;
+          let kptr = NonNull::new_unchecked(buf.as_mut_ptr().add(ko));
+          let mut key_buf = VacantBuffer::new(klen, kptr);
+          kb(&mut key_buf).map_err(Among::Left)?;
 
           let vo = STATUS_SIZE + written + klen;
-          let value_buf = slice::from_raw_parts_mut(buf.as_mut_ptr().add(vo), vlen);
-          val.encode(value_buf).map_err(Among::Middle)?;
+          let vptr = NonNull::new_unchecked(buf.as_mut_ptr().add(vo));
+          let mut value_buf = VacantBuffer::new(vlen, vptr);
+          vb(&mut value_buf).map_err(Among::Middle)?;
 
           let cks = {
             cks.update(&buf[1..]);

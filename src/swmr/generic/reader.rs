@@ -173,4 +173,76 @@ where
   pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>> {
     self.0.get_by_bytes(key)
   }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self.0.upper_bound(bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn upper_bound_by_ref<'a, Q>(
+    &'a self,
+    bound: Bound<&'a Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self.0.upper_bound_by_ref(bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn upper_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntryRef<'_, K, V>> {
+    self.0.upper_bound_by_bytes(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+  {
+    self.0.lower_bound(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn lower_bound_by_ref<'a, Q>(
+    &'a self,
+    bound: Bound<&'a Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  {
+    self.0.lower_bound_by_ref(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn lower_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntryRef<'_, K, V>> {
+    self.0.lower_bound_by_bytes(bound)
+  }
 }
