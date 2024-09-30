@@ -835,9 +835,9 @@ where
       buf[0] = committed_flag.bits;
       let buf_cap = buf.capacity();
 
-      if self.core.opts.sync_on_write() && allocator.is_ondisk() {
+      if self.core.opts.sync() && allocator.is_ondisk() {
         allocator
-          .flush_range(buf.offset(), buf_cap)
+          .flush_header_and_range(buf.offset(), buf_cap)
           .map_err(|e| Among::Right(e.into()))?;
       }
       buf.detach();
@@ -903,11 +903,11 @@ where
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.core.opts.sync_on_write() && self.core.arena.is_ondisk() {
+          if self.core.opts.sync() && self.core.arena.is_ondisk() {
             self
               .core
               .arena
-              .flush_range(buf.offset(), elen as usize)
+              .flush_header_and_range(buf.offset(), elen as usize)
               .map_err(|e| Among::Right(e.into()))?;
           }
           buf.detach();

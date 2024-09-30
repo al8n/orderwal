@@ -350,7 +350,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
           // commit the entry
           buf[0] |= Flags::COMMITTED.bits();
 
-          if self.options().sync_on_write() && is_ondisk {
+          if self.options().sync() && is_ondisk {
             allocator
               .flush_header_and_range(buf.offset(), elen as usize)
               .map_err(|e| Among::Right(e.into()))?;
@@ -395,7 +395,7 @@ trait SealedExt<C, S>: Sealed<C, S> {
     buf[0] = committed_flag.bits;
     let buf_cap = buf.capacity();
 
-    if self.options().sync_on_write() && allocator.is_ondisk() {
+    if self.options().sync() && allocator.is_ondisk() {
       allocator.flush_header_and_range(buf.offset(), buf_cap)?;
     }
     buf.detach();

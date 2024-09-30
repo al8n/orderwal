@@ -248,11 +248,11 @@ impl<C, S> Builder<C, S> {
   /// use orderwal::Builder;
   ///
   /// let options = Builder::new();
-  /// assert_eq!(options.sync_on_write(), true);
+  /// assert_eq!(options.sync(), true);
   /// ```
   #[inline]
-  pub const fn sync_on_write(&self) -> bool {
-    self.opts.sync_on_write()
+  pub const fn sync(&self) -> bool {
+    self.opts.sync()
   }
 
   /// Sets the capacity of the WAL.
@@ -316,12 +316,12 @@ impl<C, S> Builder<C, S> {
   /// ```rust
   /// use orderwal::Builder;
   ///
-  /// let options = Builder::new().with_sync_on_write(false);
-  /// assert_eq!(options.sync_on_write(), false);
+  /// let options = Builder::new().with_sync(false);
+  /// assert_eq!(options.sync(), false);
   /// ```
   #[inline]
-  pub const fn with_sync_on_write(mut self, sync: bool) -> Self {
-    self.opts = self.opts.with_sync_on_write(sync);
+  pub const fn with_sync(mut self, sync: bool) -> Self {
+    self.opts = self.opts.with_sync(sync);
     self
   }
 
