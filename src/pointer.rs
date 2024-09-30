@@ -1,8 +1,9 @@
 use core::{borrow::Borrow, cmp, marker::PhantomData, slice};
 
-use dbutils::Comparator;
-
-use super::wal::r#type::{KeyRef, Type};
+use dbutils::{
+  traits::{KeyRef, Type},
+  Comparator,
+};
 
 #[doc(hidden)]
 pub struct Pointer<C> {
@@ -94,7 +95,7 @@ impl<C> super::wal::sealed::Pointer for Pointer<C> {
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GenericPointer<K, V> {
+pub struct GenericPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
   ptr: *const u8,
   /// The length of the key.
@@ -104,7 +105,7 @@ pub struct GenericPointer<K, V> {
   _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-impl<K, V> crate::wal::sealed::Pointer for GenericPointer<K, V> {
+impl<K: ?Sized, V: ?Sized> crate::wal::sealed::Pointer for GenericPointer<K, V> {
   type Comparator = ();
 
   #[inline]
@@ -113,18 +114,19 @@ impl<K, V> crate::wal::sealed::Pointer for GenericPointer<K, V> {
   }
 }
 
-impl<K: Type, V> PartialEq for GenericPointer<K, V> {
+impl<K: Type + ?Sized, V: ?Sized> PartialEq for GenericPointer<K, V> {
   fn eq(&self, other: &Self) -> bool {
     self.as_key_slice() == other.as_key_slice()
   }
 }
 
-impl<K: Type, V> Eq for GenericPointer<K, V> {}
+impl<K: Type + ?Sized, V: ?Sized> Eq for GenericPointer<K, V> {}
 
 impl<K, V> PartialOrd for GenericPointer<K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
 {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
@@ -133,8 +135,9 @@ where
 
 impl<K, V> Ord for GenericPointer<K, V>
 where
-  K: Type + Ord,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
     // SAFETY: WALs guarantee that the self and other must be the same as the result returned by `<K as Type>::encode`.
@@ -142,10 +145,24 @@ where
   }
 }
 
-unsafe impl<K, V> Send for GenericPointer<K, V> {}
-unsafe impl<K, V> Sync for GenericPointer<K, V> {}
+unsafe impl<K, V> Send for GenericPointer<K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
+}
+unsafe impl<K, V> Sync for GenericPointer<K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
+}
 
-impl<K, V> GenericPointer<K, V> {
+impl<K, V> GenericPointer<K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   #[inline]
   pub(crate) const fn new(key_len: usize, value_len: usize, ptr: *const u8) -> Self {
     Self {

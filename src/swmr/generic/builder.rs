@@ -652,7 +652,11 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// let wal = GenericBuilder::new().with_capacity(1024).alloc::<String, String>().unwrap();
   /// ```
   #[inline]
-  pub fn alloc<K, V>(self) -> Result<GenericOrderWal<K, V, S>, Error> {
+  pub fn alloc<K, V>(self) -> Result<GenericOrderWal<K, V, S>, Error>
+  where
+    K: ?Sized,
+    V: ?Sized,
+  {
     let Self { opts, cks } = self;
 
     arena_options(opts.reserved())
@@ -674,7 +678,11 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// let wal = GenericBuilder::new().with_capacity(1024).map_anon::<String, String>().unwrap();
   /// ```
   #[inline]
-  pub fn map_anon<K, V>(self) -> Result<GenericOrderWal<K, V, S>, Error> {
+  pub fn map_anon<K, V>(self) -> Result<GenericOrderWal<K, V, S>, Error>
+  where
+    K: ?Sized,
+    V: ?Sized,
+  {
     let Self { opts, cks } = self;
 
     arena_options(opts.reserved())
@@ -723,9 +731,9 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   #[inline]
   pub unsafe fn map<K, V, P: AsRef<Path>>(self, path: P) -> Result<GenericWalReader<K, V, S>, Error>
   where
-    K: Type + Ord + 'static,
+    K: Type + Ord + ?Sized + 'static,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
-    V: 'static,
+    V: ?Sized + 'static,
   {
     self
       .map_with_path_builder::<K, V, _, ()>(|| dummy_path_builder(path))
@@ -771,9 +779,9 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
     path_builder: PB,
   ) -> Result<GenericWalReader<K, V, S>, Either<E, Error>>
   where
-    K: Type + Ord + 'static,
+    K: Type + Ord + ?Sized + 'static,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
-    V: 'static,
+    V: ?Sized + 'static,
     PB: FnOnce() -> Result<PathBuf, E>,
   {
     let Self { cks, opts } = self;
@@ -826,9 +834,9 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
     path: P,
   ) -> Result<GenericOrderWal<K, V, S>, Error>
   where
-    K: Type + Ord + 'static,
+    K: Type + Ord + ?Sized + 'static,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
-    V: 'static,
+    V: ?Sized + 'static,
   {
     self
       .map_mut_with_path_builder::<K, V, _, ()>(|| dummy_path_builder(path))
@@ -871,9 +879,9 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
     path_builder: PB,
   ) -> Result<GenericOrderWal<K, V, S>, Either<E, Error>>
   where
-    K: Type + Ord + 'static,
+    K: Type + Ord + ?Sized + 'static,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
-    V: 'static,
+    V: ?Sized + 'static,
     PB: FnOnce() -> Result<PathBuf, E>,
   {
     let Self { opts, cks } = self;

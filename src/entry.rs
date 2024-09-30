@@ -1,12 +1,11 @@
 use core::borrow::Borrow;
 
-use among::Among;
 use crossbeam_skiplist::set::Entry as SetEntry;
+use dbutils::traits::{Type, TypeRef};
 use rarena_allocator::either::Either;
 
 use super::{
   pointer::{GenericPointer, Pointer},
-  wal::r#type::{Type, TypeRef},
   KeyBuilder, ValueBuilder,
 };
 
@@ -263,26 +262,24 @@ impl<KB, VB, C> EntryWithBuilders<KB, VB, C> {
 
 /// A wrapper around a generic type that can be used to construct a [`GenericEntry`].
 #[repr(transparent)]
-pub struct Generic<'a, T> {
-  data: Among<T, &'a T, &'a [u8]>,
+pub struct Generic<'a, T: ?Sized> {
+  data: Either<&'a T, &'a [u8]>,
 }
 
-impl<T: Type> Generic<'_, T> {
+impl<T: Type + ?Sized> Generic<'_, T> {
   #[inline]
   pub(crate) fn encoded_len(&self) -> usize {
     match &self.data {
-      Among::Left(val) => val.encoded_len(),
-      Among::Middle(val) => val.encoded_len(),
-      Among::Right(val) => val.len(),
+      Either::Left(val) => val.encoded_len(),
+      Either::Right(val) => val.len(),
     }
   }
 
   #[inline]
   pub(crate) fn encode(&self, buf: &mut [u8]) -> Result<usize, T::Error> {
     match &self.data {
-      Among::Left(val) => val.encode(buf),
-      Among::Middle(val) => val.encode(buf),
-      Among::Right(val) => {
+      Either::Left(val) => val.encode(buf),
+      Either::Right(val) => {
         buf.copy_from_slice(val);
         Ok(buf.len())
       }
@@ -290,15 +287,11 @@ impl<T: Type> Generic<'_, T> {
   }
 }
 
-impl<'a, T> Generic<'a, T> {
+impl<'a, T: ?Sized> Generic<'a, T> {
   /// Returns the value contained in the generic.
   #[inline]
   pub const fn data(&self) -> Either<&T, &'a [u8]> {
-    match &self.data {
-      Among::Left(val) => Either::Left(val),
-      Among::Middle(val) => Either::Left(val),
-      Among::Right(val) => Either::Right(val),
-    }
+    self.data
   }
 
   /// Creates a new generic from bytes for querying or inserting into the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
@@ -308,43 +301,29 @@ impl<'a, T> Generic<'a, T> {
   #[inline]
   pub const unsafe fn from_slice(slice: &'a [u8]) -> Self {
     Self {
-      data: Among::Right(slice),
+      data: Either::Right(slice),
     }
-  }
-
-  #[inline]
-  pub(crate) fn into_among(self) -> Among<T, &'a T, &'a [u8]> {
-    self.data
   }
 }
 
-impl<'a, T> From<&'a T> for Generic<'a, T> {
+impl<'a, T: ?Sized> From<&'a T> for Generic<'a, T> {
   #[inline]
   fn from(value: &'a T) -> Self {
     Self {
-      data: Among::Middle(value),
-    }
-  }
-}
-
-impl<T> From<T> for Generic<'_, T> {
-  #[inline]
-  fn from(value: T) -> Self {
-    Self {
-      data: Among::Left(value),
+      data: Either::Left(value),
     }
   }
 }
 
 /// An entry in the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
-pub struct GenericEntry<'a, K, V> {
+pub struct GenericEntry<'a, K: ?Sized, V: ?Sized> {
   pub(crate) key: Generic<'a, K>,
   pub(crate) value: Generic<'a, V>,
   pub(crate) pointer: Option<GenericPointer<K, V>>,
   pub(crate) meta: BatchEncodedEntryMeta,
 }
 
-impl<'a, K, V> GenericEntry<'a, K, V> {
+impl<'a, K: ?Sized, V: ?Sized> GenericEntry<'a, K, V> {
   /// Creates a new entry.
   #[inline]
   pub fn new(key: impl Into<Generic<'a, K>>, value: impl Into<Generic<'a, V>>) -> Self {
@@ -377,15 +356,19 @@ impl<'a, K, V> GenericEntry<'a, K, V> {
 
 /// The reference to an entry in the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
 #[repr(transparent)]
-pub struct GenericEntryRef<'a, K, V> {
+pub struct GenericEntryRef<'a, K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   ent: SetEntry<'a, GenericPointer<K, V>>,
 }
 
 impl<'a, K, V> core::fmt::Debug for GenericEntryRef<'a, K, V>
 where
-  K: Type,
+  K: Type + ?Sized,
   K::Ref<'a>: core::fmt::Debug,
-  V: Type,
+  V: Type + ?Sized,
   V::Ref<'a>: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -396,7 +379,11 @@ where
   }
 }
 
-impl<K, V> Clone for GenericEntryRef<'_, K, V> {
+impl<K, V> Clone for GenericEntryRef<'_, K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   #[inline]
   fn clone(&self) -> Self {
     Self {
@@ -405,7 +392,11 @@ impl<K, V> Clone for GenericEntryRef<'_, K, V> {
   }
 }
 
-impl<'a, K, V> GenericEntryRef<'a, K, V> {
+impl<'a, K, V> GenericEntryRef<'a, K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   #[inline]
   pub(super) fn new(ent: SetEntry<'a, GenericPointer<K, V>>) -> Self {
     Self { ent }
@@ -414,8 +405,8 @@ impl<'a, K, V> GenericEntryRef<'a, K, V> {
 
 impl<'a, K, V> GenericEntryRef<'a, K, V>
 where
-  K: Type,
-  V: Type,
+  K: Type + ?Sized,
+  V: Type + ?Sized,
 {
   /// Returns the key of the entry.
   #[inline]
