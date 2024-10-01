@@ -18,7 +18,7 @@ use dbutils::{
   checksum::{BuildChecksumer, Checksumer, Crc32},
   leb128::encoded_u64_varint_len,
 };
-use rarena_allocator::{either::Either, sync::Arena, Allocator, Buffer};
+use rarena_allocator::{either::Either, sync::Arena, Allocator, Buffer, BytesRefMut};
 use ref_cast::RefCast;
 
 use crate::{
@@ -27,8 +27,8 @@ use crate::{
   merge_lengths,
   pointer::GenericPointer,
   wal::sealed::Constructor,
-  BatchEncodedEntryMeta, Flags, KeyBuilder, Options, ValueBuilder, CHECKSUM_SIZE, HEADER_SIZE,
-  STATUS_SIZE,
+  BatchEncodedEntryMeta, EntryWithKeyBuilder, EntryWithValueBuilder, Flags, KeyBuilder, Options,
+  ValueBuilder, CHECKSUM_SIZE, HEADER_SIZE, STATUS_SIZE,
 };
 
 pub use crate::{
@@ -851,6 +851,89 @@ where
   }
 }
 
+trait GenericEntryWithKeyBuilderLength {
+  fn value_len(&self) -> usize;
+}
+
+impl<KB, V, P> GenericEntryWithKeyBuilderLength for EntryWithKeyBuilder<KB, Generic<'_, V>, P>
+where
+  V: Type + ?Sized,
+{
+  #[inline]
+  fn value_len(&self) -> usize {
+    self.value.encoded_len()
+  }
+}
+
+trait GenericEntryWithValueBuilderLength {
+  fn key_len(&self) -> usize;
+}
+
+impl<K, VB, P> GenericEntryWithValueBuilderLength for EntryWithValueBuilder<Generic<'_, K>, VB, P>
+where
+  K: Type + ?Sized,
+{
+  #[inline]
+  fn key_len(&self) -> usize {
+    self.key.encoded_len()
+  }
+}
+
+macro_rules! process_batch {
+  (@pre $this:ident($batch:ident)) => {{
+    let batch = $batch.load(Ordering::Acquire);
+    (*batch)
+        .iter_mut()
+        .try_fold((0u32, 0u64), |(num_entries, size), ent| {
+          let klen = ent.key_len();
+          let vlen = ent.value_len();
+          crate::utils::check_batch_entry(
+            klen,
+            vlen,
+            $this.core.opts.maximum_key_size(),
+            $this.core.opts.maximum_value_size(),
+          ).map(|_| {
+            let merged_len = merge_lengths(klen as u32, vlen as u32);
+            let merged_len_size = encoded_u64_varint_len(merged_len);
+            let ent_size = klen as u64 + vlen as u64 + merged_len_size as u64;
+            ent.meta = BatchEncodedEntryMeta::new(klen, vlen, merged_len, merged_len_size);
+            (num_entries + 1, size + ent_size)
+          })
+        })
+        .and_then(|(num_entries, batch_encoded_size)| {
+          // safe to cast batch_encoded_size to u32 here, we already checked it's less than capacity (less than u32::MAX).
+          let batch_meta = merge_lengths(num_entries, batch_encoded_size as u32);
+          let batch_meta_size = encoded_u64_varint_len(batch_meta);
+          let allocator = &$this.core.arena;
+          let remaining = allocator.remaining() as u64;
+          let total_size =
+            STATUS_SIZE as u64 + batch_meta_size as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+          if total_size > remaining {
+            return Err(Error::insufficient_space(total_size, remaining as u32));
+          }
+
+          let mut buf = allocator
+            .alloc_bytes(total_size as u32)
+            .map_err(Error::from_insufficient_space)?;
+
+          let flag = Flags::BATCHING;
+
+          buf.put_u8_unchecked(flag.bits);
+          buf.put_u64_varint_unchecked(batch_meta);
+
+          Ok((1 + batch_meta_size, buf))
+        })
+  }};
+  (@post $this:ident($batch:ident, $buf:ident, $cursor:ident)) => {{
+    $this
+      .insert_batch_helper(&$this.core.arena, $buf, $cursor as usize, || {
+        let batch = $batch.load(Ordering::Acquire);
+        (*batch).iter_mut().map(|ent| ent.pointer.take().unwrap())
+      })
+      .map_err(Among::Right)
+  }}
+}
+
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
   K: Type + Ord + ?Sized + 'static,
@@ -1002,34 +1085,143 @@ where
   /// Inserts a batch of entries into the write-ahead log.
   pub fn insert_batch_with_key_builder<'a, B>(
     &'a mut self,
-    _batch: &'a mut B,
+    batch: &'a mut B,
   ) -> Result<(), Among<B::Error, V::Error, Error>>
   where
-    B: BatchWithKeyBuilder<GenericPointer<K, V>>,
+    B: BatchWithKeyBuilder<GenericPointer<K, V>, Value = Generic<'a, V>>,
   {
-    todo!()
+    let batch_ptr = AtomicPtr::new(batch);
+
+    unsafe {
+      let (mut cursor, mut buf) = process_batch!(@pre self(batch_ptr)).map_err(Among::Right)?;
+
+      {
+        let batch = batch_ptr.load(Ordering::Acquire);
+        for ent in (*batch).iter_mut() {
+          let remaining = buf.remaining();
+          if remaining < ent.meta.kvlen_size + ent.meta.klen + ent.meta.vlen {
+            return Err(Among::Right(
+              Error::larger_batch_size(buf.capacity() as u32),
+            ));
+          }
+
+          let ent_len_size = buf.put_u64_varint_unchecked(ent.meta.kvlen);
+          let ko = cursor + ent_len_size;
+          buf.set_len(ko + ent.meta.klen + ent.meta.vlen);
+          let ptr = buf.as_mut_ptr().add(ko);
+
+          let f = ent.kb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.klen,
+            NonNull::new_unchecked(ptr),
+          ))
+          .map_err(Among::Left)?;
+          let value_buf = slice::from_raw_parts_mut(ptr.add(ent.meta.klen), ent.meta.vlen);
+          ent.value.encode(value_buf).map_err(Among::Middle)?;
+
+          cursor += ent_len_size + ent.meta.klen + ent.meta.vlen;
+          ent.pointer = Some(GenericPointer::new(ent.meta.klen, ent.meta.vlen, ptr));
+        }
+      }
+
+      process_batch!(@post self(batch_ptr, buf, cursor))
+    }
   }
 
   /// Inserts a batch of entries into the write-ahead log.
   pub fn insert_batch_with_value_builder<'a, B>(
     &'a mut self,
-    _batch: &'a mut B,
+    batch: &'a mut B,
   ) -> Result<(), Among<K::Error, B::Error, Error>>
   where
-    B: BatchWithValueBuilder<GenericPointer<K, V>>,
+    B: BatchWithValueBuilder<GenericPointer<K, V>, Key = Generic<'a, K>>,
   {
-    todo!()
+    let batch_ptr = AtomicPtr::new(batch);
+
+    unsafe {
+      let (mut cursor, mut buf) = process_batch!(@pre self(batch_ptr)).map_err(Among::Right)?;
+
+      {
+        let batch = batch_ptr.load(Ordering::Acquire);
+        for ent in (*batch).iter_mut() {
+          let remaining = buf.remaining();
+          if remaining < ent.meta.kvlen_size + ent.meta.klen + ent.meta.vlen {
+            return Err(Among::Right(
+              Error::larger_batch_size(buf.capacity() as u32),
+            ));
+          }
+
+          let ent_len_size = buf.put_u64_varint_unchecked(ent.meta.kvlen);
+          let ko = cursor + ent_len_size;
+          buf.set_len(ko + ent.meta.klen + ent.meta.vlen);
+          let ptr = buf.as_mut_ptr().add(ko);
+
+          let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
+          ent.key.encode(key_buf).map_err(Among::Left)?;
+          let f = ent.vb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.vlen,
+            NonNull::new_unchecked(ptr.add(ent.meta.klen)),
+          ))
+          .map_err(Among::Middle)?;
+
+          cursor += ent_len_size + ent.meta.klen + ent.meta.vlen;
+          ent.pointer = Some(GenericPointer::new(ent.meta.klen, ent.meta.vlen, ptr));
+        }
+      }
+
+      process_batch!(@post self(batch_ptr, buf, cursor))
+    }
   }
 
   /// Inserts a batch of entries into the write-ahead log.
   pub fn insert_batch_with_builders<'a, B>(
     &'a mut self,
-    _batch: &'a mut B,
+    batch: &'a mut B,
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<GenericPointer<K, V>>,
   {
-    todo!()
+    let batch_ptr = AtomicPtr::new(batch);
+
+    unsafe {
+      let (mut cursor, mut buf) = process_batch!(@pre self(batch_ptr)).map_err(Among::Right)?;
+
+      {
+        let batch = batch_ptr.load(Ordering::Acquire);
+        for ent in (*batch).iter_mut() {
+          let remaining = buf.remaining();
+          if remaining < ent.meta.kvlen_size + ent.meta.klen + ent.meta.vlen {
+            return Err(Among::Right(
+              Error::larger_batch_size(buf.capacity() as u32),
+            ));
+          }
+
+          let ent_len_size = buf.put_u64_varint_unchecked(ent.meta.kvlen);
+          let ko = cursor + ent_len_size;
+          buf.set_len(ko + ent.meta.klen + ent.meta.vlen);
+          let ptr = buf.as_mut_ptr().add(ko);
+
+          let f = ent.kb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.klen,
+            NonNull::new_unchecked(ptr),
+          ))
+          .map_err(Among::Left)?;
+          let f = ent.vb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.vlen,
+            NonNull::new_unchecked(ptr.add(ent.meta.klen)),
+          ))
+          .map_err(Among::Middle)?;
+
+          cursor += ent_len_size + ent.meta.klen + ent.meta.vlen;
+          ent.pointer = Some(GenericPointer::new(ent.meta.klen, ent.meta.vlen, ptr));
+        }
+      }
+
+      process_batch!(@post self(batch_ptr, buf, cursor))
+    }
   }
 
   /// Inserts a batch of entries into the write-ahead log.
@@ -1037,68 +1229,23 @@ where
     &'a mut self,
     batch: &'b mut B,
   ) -> Result<(), Among<K::Error, V::Error, Error>> {
-    // TODO: is there another way to avoid the borrow checker?
     let batch_ptr = AtomicPtr::new(batch);
 
-    let batch = batch_ptr.load(Ordering::Acquire);
-    let (num_entries, batch_encoded_size) = unsafe {
-      (*batch)
-        .iter_mut()
-        .try_fold((0u32, 0u64), |(num_entries, size), ent| {
-          let klen = ent.key.encoded_len();
-          let vlen = ent.value.encoded_len();
-          crate::utils::check_batch_entry(
-            klen,
-            vlen,
-            self.core.opts.maximum_key_size(),
-            self.core.opts.maximum_value_size(),
-          )?;
-          let merged_len = merge_lengths(klen as u32, vlen as u32);
-          let merged_len_size = encoded_u64_varint_len(merged_len);
-
-          let ent_size = klen as u64 + vlen as u64 + merged_len_size as u64;
-          ent.meta = BatchEncodedEntryMeta::new(klen, vlen, merged_len, merged_len_size);
-          Ok((num_entries + 1, size + ent_size))
-        })
-        .map_err(Among::Right)?
-    };
-
-    // safe to cast batch_encoded_size to u32 here, we already checked it's less than capacity (less than u32::MAX).
-    let batch_meta = merge_lengths(num_entries, batch_encoded_size as u32);
-    let batch_meta_size = encoded_u64_varint_len(batch_meta);
-    let allocator = self.allocator();
-    let remaining = allocator.remaining() as u64;
-    let total_size =
-      STATUS_SIZE as u64 + batch_meta_size as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
-    if total_size > remaining {
-      return Err(Among::Right(Error::insufficient_space(
-        total_size,
-        remaining as u32,
-      )));
-    }
-
-    let mut buf = allocator
-      .alloc_bytes(total_size as u32)
-      .map_err(|e| Among::Right(Error::from_insufficient_space(e)))?;
-
     unsafe {
-      let committed_flag = Flags::BATCHING | Flags::COMMITTED;
-      let mut cks = self.core.cks.build_checksumer();
-      let flag = Flags::BATCHING;
-      buf.put_u8_unchecked(flag.bits);
-      buf.put_u64_varint_unchecked(batch_meta);
-      let mut cursor = STATUS_SIZE + batch_meta_size;
+      let (mut cursor, mut buf) = process_batch!(@pre self(batch_ptr)).map_err(Among::Right)?;
 
       {
         let batch = batch_ptr.load(Ordering::Acquire);
         for ent in (*batch).iter_mut() {
           let remaining = buf.remaining();
           if remaining < ent.meta.kvlen_size + ent.meta.klen + ent.meta.vlen {
-            return Err(Among::Right(Error::larger_batch_size(total_size as u32)));
+            return Err(Among::Right(
+              Error::larger_batch_size(buf.capacity() as u32),
+            ));
           }
 
           let ent_len_size = buf.put_u64_varint_unchecked(ent.meta.kvlen);
-          let ko = cursor as usize + ent_len_size;
+          let ko = cursor + ent_len_size;
           buf.set_len(ko + ent.meta.klen + ent.meta.vlen);
           let ptr = buf.as_mut_ptr().add(ko);
 
@@ -1112,38 +1259,50 @@ where
         }
       }
 
-      if (cursor + CHECKSUM_SIZE) as u64 != total_size {
-        return Err(Among::Right(Error::batch_size_mismatch(
-          total_size as u32 - CHECKSUM_SIZE as u32,
-          cursor as u32,
-        )));
-      }
-
-      cks.update(&[committed_flag.bits]);
-      cks.update(&buf[1..]);
-      let checksum = cks.digest();
-      buf.put_u64_le_unchecked(checksum);
-
-      // commit the entry
-      buf[0] = committed_flag.bits;
-      let buf_cap = buf.capacity();
-
-      if self.core.opts.sync() && allocator.is_ondisk() {
-        allocator
-          .flush_header_and_range(buf.offset(), buf_cap)
-          .map_err(|e| Among::Right(e.into()))?;
-      }
-      buf.detach();
-
-      {
-        let batch = batch_ptr.load(Ordering::Acquire);
-        (*batch).iter_mut().for_each(|ent| {
-          self.core.map.insert(ent.pointer.take().unwrap());
-        });
-      }
-
-      Ok(())
+      process_batch!(@post self(batch_ptr, buf, cursor))
     }
+  }
+
+  unsafe fn insert_batch_helper<I>(
+    &self,
+    allocator: &Arena,
+    mut buf: BytesRefMut<'_, Arena>,
+    cursor: usize,
+    on_success: impl FnOnce() -> I,
+  ) -> Result<(), Error>
+  where
+    I: Iterator<Item = GenericPointer<K, V>>,
+    S: BuildChecksumer,
+  {
+    let total_size = buf.capacity();
+    if cursor + CHECKSUM_SIZE != total_size {
+      return Err(Error::batch_size_mismatch(
+        total_size as u32 - CHECKSUM_SIZE as u32,
+        cursor as u32,
+      ));
+    }
+
+    let mut cks = self.core.cks.build_checksumer();
+    let committed_flag = Flags::BATCHING | Flags::COMMITTED;
+    cks.update(&[committed_flag.bits]);
+    cks.update(&buf[1..]);
+    let checksum = cks.digest();
+    buf.put_u64_le_unchecked(checksum);
+
+    // commit the entry
+    buf[0] = committed_flag.bits;
+    let buf_cap = buf.capacity();
+
+    if self.core.opts.sync() && allocator.is_ondisk() {
+      allocator.flush_header_and_range(buf.offset(), buf_cap)?;
+    }
+    buf.detach();
+
+    on_success().for_each(|p| {
+      self.core.map.insert(p);
+    });
+
+    Ok(())
   }
 
   fn insert_in<KE, VE>(

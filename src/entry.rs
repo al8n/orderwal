@@ -111,7 +111,7 @@ where
 {
   /// Returns the length of the value.
   #[inline]
-  pub fn value_len(&self) -> usize {
+  pub(crate) fn value_len(&self) -> usize {
     self.value.borrow().len()
   }
 }
@@ -167,7 +167,7 @@ where
 {
   /// Returns the length of the key.
   #[inline]
-  pub fn key_len(&self) -> usize {
+  pub(crate) fn key_len(&self) -> usize {
     self.key.borrow().len()
   }
 }
@@ -281,6 +281,30 @@ impl<'a, K: ?Sized, V: ?Sized> GenericEntry<'a, K, V> {
       value: value.into(),
       pointer: None,
       meta: BatchEncodedEntryMeta::zero(),
+    }
+  }
+
+  /// Returns the length of the key.
+  #[inline]
+  pub fn key_len(&self) -> usize
+  where
+    K: Type,
+  {
+    match self.key.data() {
+      Either::Left(val) => val.encoded_len(),
+      Either::Right(val) => val.len(),
+    }
+  }
+
+  /// Returns the length of the value.
+  #[inline]
+  pub fn value_len(&self) -> usize
+  where
+    V: Type,
+  {
+    match self.value.data() {
+      Either::Left(val) => val.encoded_len(),
+      Either::Right(val) => val.len(),
     }
   }
 
