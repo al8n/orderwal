@@ -33,7 +33,7 @@ use crate::{
 
 pub use crate::{
   entry::{Generic, GenericEntry, GenericEntryRef},
-  wal::GenericBatch,
+  wal::{BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, GenericBatch},
 };
 
 pub use dbutils::{
@@ -997,6 +997,39 @@ where
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE> + 'a>,
   ) -> Result<(), Among<KE, VE, Error>> {
     self.insert_in(kb, vb)
+  }
+
+  /// Inserts a batch of entries into the write-ahead log.
+  pub fn insert_batch_with_key_builder<'a, B>(
+    &'a mut self,
+    _batch: &'a mut B,
+  ) -> Result<(), Among<B::Error, V::Error, Error>>
+  where
+    B: BatchWithKeyBuilder<GenericPointer<K, V>>,
+  {
+    todo!()
+  }
+
+  /// Inserts a batch of entries into the write-ahead log.
+  pub fn insert_batch_with_value_builder<'a, B>(
+    &'a mut self,
+    _batch: &'a mut B,
+  ) -> Result<(), Among<K::Error, B::Error, Error>>
+  where
+    B: BatchWithValueBuilder<GenericPointer<K, V>>,
+  {
+    todo!()
+  }
+
+  /// Inserts a batch of entries into the write-ahead log.
+  pub fn insert_batch_with_builders<'a, B>(
+    &'a mut self,
+    _batch: &'a mut B,
+  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
+  where
+    B: BatchWithBuilders<GenericPointer<K, V>>,
+  {
+    todo!()
   }
 
   /// Inserts a batch of entries into the write-ahead log.

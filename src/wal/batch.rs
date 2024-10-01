@@ -47,7 +47,7 @@ where
 /// A batch of keys and values that can be inserted into the [`Wal`](super::Wal).
 /// Comparing to [`Batch`], this trait is used to build
 /// the key in place.
-pub trait BatchWithKeyBuilder {
+pub trait BatchWithKeyBuilder<P: 'static> {
   /// The key builder type.
   type KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
 
@@ -55,15 +55,10 @@ pub trait BatchWithKeyBuilder {
   type Error;
 
   /// The value type.
-  type Value: Borrow<[u8]>;
-
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
+  type Value;
 
   /// The iterator type.
-  type IterMut<'a>: Iterator<
-    Item = &'a mut EntryWithKeyBuilder<Self::KeyBuilder, Self::Value, Self::Comparator>,
-  >
+  type IterMut<'a>: Iterator<Item = &'a mut EntryWithKeyBuilder<Self::KeyBuilder, Self::Value, P>>
   where
     Self: 'a;
 
@@ -71,17 +66,15 @@ pub trait BatchWithKeyBuilder {
   fn iter_mut(&mut self) -> Self::IterMut<'_>;
 }
 
-impl<KB, E, V, C, T> BatchWithKeyBuilder for T
+impl<KB, E, V, P, T> BatchWithKeyBuilder<P> for T
 where
   KB: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
-  V: Borrow<[u8]>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithKeyBuilder<KB, V, C>>,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithKeyBuilder<KB, V, P>>,
+  P: 'static,
 {
   type KeyBuilder = KB;
   type Error = E;
   type Value = V;
-  type Comparator = C;
 
   type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
 
@@ -93,7 +86,7 @@ where
 /// A batch of keys and values that can be inserted into the [`Wal`](super::Wal).
 /// Comparing to [`Batch`], this trait is used to build
 /// the value in place.
-pub trait BatchWithValueBuilder {
+pub trait BatchWithValueBuilder<P: 'static> {
   /// The value builder type.
   type ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::Error>;
 
@@ -101,15 +94,10 @@ pub trait BatchWithValueBuilder {
   type Error;
 
   /// The key type.
-  type Key: Borrow<[u8]>;
-
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
+  type Key;
 
   /// The iterator type.
-  type IterMut<'a>: Iterator<
-    Item = &'a mut EntryWithValueBuilder<Self::Key, Self::ValueBuilder, Self::Comparator>,
-  >
+  type IterMut<'a>: Iterator<Item = &'a mut EntryWithValueBuilder<Self::Key, Self::ValueBuilder, P>>
   where
     Self: 'a;
 
@@ -117,17 +105,15 @@ pub trait BatchWithValueBuilder {
   fn iter_mut(&mut self) -> Self::IterMut<'_>;
 }
 
-impl<K, VB, E, C, T> BatchWithValueBuilder for T
+impl<K, VB, E, P, T> BatchWithValueBuilder<P> for T
 where
   VB: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
-  K: Borrow<[u8]>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithValueBuilder<K, VB, C>>,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithValueBuilder<K, VB, P>>,
+  P: 'static,
 {
   type Key = K;
   type Error = E;
   type ValueBuilder = VB;
-  type Comparator = C;
 
   type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
 
@@ -139,7 +125,7 @@ where
 /// A batch of keys and values that can be inserted into the [`Wal`](super::Wal).
 /// Comparing to [`Batch`], this trait is used to build
 /// the key and value in place.
-pub trait BatchWithBuilders {
+pub trait BatchWithBuilders<P: 'static> {
   /// The value builder type.
   type ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), Self::ValueError>;
 
@@ -152,12 +138,9 @@ pub trait BatchWithBuilders {
   /// The error for the value builder.
   type KeyError;
 
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
-
   /// The iterator type.
   type IterMut<'a>: Iterator<
-    Item = &'a mut EntryWithBuilders<Self::KeyBuilder, Self::ValueBuilder, Self::Comparator>,
+    Item = &'a mut EntryWithBuilders<Self::KeyBuilder, Self::ValueBuilder, P>,
   >
   where
     Self: 'a;
@@ -166,18 +149,17 @@ pub trait BatchWithBuilders {
   fn iter_mut(&mut self) -> Self::IterMut<'_>;
 }
 
-impl<KB, KE, VB, VE, C, T> BatchWithBuilders for T
+impl<KB, KE, VB, VE, P, T> BatchWithBuilders<P> for T
 where
   VB: Fn(&mut VacantBuffer<'_>) -> Result<(), VE>,
   KB: Fn(&mut VacantBuffer<'_>) -> Result<(), KE>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithBuilders<KB, VB, C>>,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut EntryWithBuilders<KB, VB, P>>,
+  P: 'static,
 {
   type KeyBuilder = KB;
   type KeyError = KE;
   type ValueBuilder = VB;
   type ValueError = VE;
-  type Comparator = C;
 
   type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
 
