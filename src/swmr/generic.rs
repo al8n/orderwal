@@ -860,7 +860,7 @@ where
 {
   /// Inserts a key-value pair into the write-ahead log.
   ///
-  /// See also [`insert_with_key_builder`], [`insert_with_value_builder`], and [`insert_with_builders`].
+  /// See also [`insert_with_key_builder`](GenericOrderWal::insert_with_key_builder), [`insert_with_value_builder`](GenericOrderWal::insert_with_value_builder), and [`insert_with_builders`](GenericOrderWal::insert_with_builders).
   ///
   /// ## Example
   ///
