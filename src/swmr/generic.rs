@@ -1111,21 +1111,23 @@ where
     B: BatchWithKeyBuilder<GenericPointer<K, V>, Value = Generic<'a, V>>,
   {
     unsafe {
-      process_batch!(self(
-        batch,
-        |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
-          let f = ent.kb.builder();
-          f(&mut VacantBuffer::new(
-            ent.meta.vlen,
-            NonNull::new_unchecked(ptr),
-          ))
-          .map_err(Among::Left)
-        },
-        |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
-          let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
-          ent.value.encode(value_buf).map_err(Among::Middle)
-        }
-      ))
+      process_batch! {
+        self(
+          batch,
+          |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
+            let f = ent.kb.builder();
+            f(&mut VacantBuffer::new(
+              ent.meta.vlen,
+              NonNull::new_unchecked(ptr),
+            ))
+            .map_err(Among::Left)
+          },
+          |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
+            let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
+            ent.value.encode(value_buf).map_err(Among::Middle)
+          }
+        )
+      }
     }
   }
 
@@ -1138,21 +1140,23 @@ where
     B: BatchWithValueBuilder<GenericPointer<K, V>, Key = Generic<'a, K>>,
   {
     unsafe {
-      process_batch!(self(
-        batch,
-        |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
-          let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
-          ent.key.encode(key_buf).map_err(Among::Left)
-        },
-        |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
-          let f = ent.vb.builder();
-          f(&mut VacantBuffer::new(
-            ent.meta.vlen,
-            NonNull::new_unchecked(ptr),
-          ))
-          .map_err(Among::Middle)
-        }
-      ))
+      process_batch! {
+        self(
+          batch,
+          |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
+            let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
+            ent.key.encode(key_buf).map_err(Among::Left)
+          },
+          |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
+            let f = ent.vb.builder();
+            f(&mut VacantBuffer::new(
+              ent.meta.vlen,
+              NonNull::new_unchecked(ptr),
+            ))
+            .map_err(Among::Middle)
+          }
+        )
+      }
     }
   }
 
@@ -1165,25 +1169,27 @@ where
     B: BatchWithBuilders<GenericPointer<K, V>>,
   {
     unsafe {
-      process_batch!(self(
-        batch,
-        |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
-          let f = ent.kb.builder();
-          f(&mut VacantBuffer::new(
-            ent.meta.klen,
-            NonNull::new_unchecked(ptr),
-          ))
-          .map_err(Among::Left)
-        },
-        |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
-          let f = ent.vb.builder();
-          f(&mut VacantBuffer::new(
-            ent.meta.vlen,
-            NonNull::new_unchecked(ptr),
-          ))
-          .map_err(Among::Middle)
-        }
-      ))
+      process_batch! {
+        self(
+          batch,
+          |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
+            let f = ent.kb.builder();
+            f(&mut VacantBuffer::new(
+              ent.meta.klen,
+              NonNull::new_unchecked(ptr),
+            ))
+            .map_err(Among::Left)
+          },
+          |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
+            let f = ent.vb.builder();
+            f(&mut VacantBuffer::new(
+              ent.meta.vlen,
+              NonNull::new_unchecked(ptr),
+            ))
+            .map_err(Among::Middle)
+          }
+        )
+      }
     }
   }
 
@@ -1193,17 +1199,19 @@ where
     batch: &'b mut B,
   ) -> Result<(), Among<K::Error, V::Error, Error>> {
     unsafe {
-      process_batch!(self(
-        batch,
-        |ptr, ent: &GenericEntry<'_, K, V>| {
-          let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
-          ent.key.encode(key_buf).map_err(Among::Left)
-        },
-        |ptr, ent: &GenericEntry<'_, K, V>| {
-          let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
-          ent.value.encode(value_buf).map_err(Among::Middle)
-        }
-      ))
+      process_batch! {
+        self(
+          batch,
+          |ptr, ent: &GenericEntry<'_, K, V>| {
+            let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
+            ent.key.encode(key_buf).map_err(Among::Left)
+          },
+          |ptr, ent: &GenericEntry<'_, K, V>| {
+            let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
+            ent.value.encode(value_buf).map_err(Among::Middle)
+          }
+        )
+      }
     }
   }
 
