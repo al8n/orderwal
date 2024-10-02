@@ -2,12 +2,12 @@ use core::ops::Bound;
 
 use crossbeam_skiplist::Comparable;
 
-use super::{GenericEntryRef, GenericPointer as Pointer, KeyRef, Owned, Type};
+use super::{GenericEntryRef, GenericPointer as Pointer, KeyRef, Query, Type};
 
 type SetRange<'a, Q, K, V> = crossbeam_skiplist::set::Range<
   'a,
-  Owned<'a, K, Q>,
-  (Bound<Owned<'a, K, Q>>, Bound<Owned<'a, K, Q>>),
+  Query<'a, K, Q>,
+  (Bound<Query<'a, K, Q>>, Bound<Query<'a, K, Q>>),
   Pointer<K, V>,
 >;
 

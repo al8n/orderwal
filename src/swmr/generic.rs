@@ -125,7 +125,7 @@ where
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-struct Owned<'a, K, Q>
+struct Query<'a, K, Q>
 where
   K: ?Sized,
   Q: ?Sized,
@@ -134,7 +134,7 @@ where
   _k: PhantomData<K>,
 }
 
-impl<'a, K, Q> Owned<'a, K, Q>
+impl<'a, K, Q> Query<'a, K, Q>
 where
   K: ?Sized,
   Q: ?Sized,
@@ -162,12 +162,12 @@ where
       );
     }
 
-    // Safety: `PhantomData` is ZST, so the memory layout of Owned and Q are the same
+    // Safety: `PhantomData` is ZST, so the memory layout of Query and Q are the same
     unsafe { &*(src as *const Q as *const Self) }
   }
 }
 
-impl<K, Q, V> Equivalent<GenericPointer<K, V>> for Owned<'_, K, Q>
+impl<K, Q, V> Equivalent<GenericPointer<K, V>> for Query<'_, K, Q>
 where
   K: Type + Ord + ?Sized,
   V: ?Sized,
@@ -180,7 +180,7 @@ where
   }
 }
 
-impl<K, Q, V> Comparable<GenericPointer<K, V>> for Owned<'_, K, Q>
+impl<K, Q, V> Comparable<GenericPointer<K, V>> for Query<'_, K, Q>
 where
   K: Type + Ord + ?Sized,
   V: ?Sized,
@@ -278,7 +278,7 @@ where
     Range::new(
       self
         .map
-        .range((start_bound.map(Owned::new), end_bound.map(Owned::new))),
+        .range((start_bound.map(Query::new), end_bound.map(Query::new))),
     )
   }
 }
@@ -317,7 +317,7 @@ where
   where
     Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
-    self.map.contains::<Owned<'_, K, Q>>(&Owned::new(key))
+    self.map.contains::<Query<'_, K, Q>>(&Query::new(key))
   }
 
   #[inline]
@@ -332,7 +332,7 @@ where
   {
     self
       .map
-      .get::<Owned<'_, K, Q>>(&Owned::new(key))
+      .get::<Query<'_, K, Q>>(&Query::new(key))
       .map(GenericEntryRef::new)
   }
 
@@ -348,7 +348,7 @@ where
   {
     self
       .map
-      .upper_bound(key.map(Owned::transmute))
+      .upper_bound(key.map(Query::transmute))
       .map(GenericEntryRef::new)
   }
 
@@ -367,7 +367,7 @@ where
   {
     self
       .map
-      .upper_bound(key.map(Owned::transmute))
+      .upper_bound(key.map(Query::transmute))
       .map(GenericEntryRef::new)
   }
 
@@ -591,7 +591,7 @@ where
     let key: Generic<'a, K> = key.into();
     let map = &self.core.map;
     let ent = match key.data() {
-      Either::Left(k) => map.get(&Owned::new(k)),
+      Either::Left(k) => map.get(&Query::new(k)),
       Either::Right(key) => map.get(Slice::ref_cast(key)),
     };
 
@@ -629,7 +629,7 @@ where
     let key: Generic<'a, K> = key.into();
     let map = &self.core.map;
     let ent = match key.data() {
-      Either::Left(k) => map.get(&Owned::new(k)),
+      Either::Left(k) => map.get(&Query::new(k)),
       Either::Right(key) => map.get(Slice::ref_cast(key)),
     };
 
