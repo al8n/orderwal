@@ -167,11 +167,11 @@ where
   }
 }
 
-impl<K, Q, V> Equivalent<GenericPointer<K, V>> for Query<'_, K, Q>
+impl<'a, 'b: 'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Query<'a, K, Q>
 where
   K: Type + Ord + ?Sized,
   V: ?Sized,
-  Q: ?Sized + Ord + for<'b> Equivalent<K::Ref<'b>>,
+  Q: ?Sized + Ord + Equivalent<K::Ref<'b>>,
 {
   #[inline]
   fn equivalent(&self, p: &GenericPointer<K, V>) -> bool {
@@ -180,11 +180,11 @@ where
   }
 }
 
-impl<K, Q, V> Comparable<GenericPointer<K, V>> for Query<'_, K, Q>
+impl<'a, 'b: 'a, K, Q, V> Comparable<GenericPointer<K, V>> for Query<'a, K, Q>
 where
   K: Type + Ord + ?Sized,
   V: ?Sized,
-  Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+  Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
 {
   #[inline]
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
@@ -326,9 +326,9 @@ where
   }
 
   #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<GenericEntryRef<'_, K, V>>
+  fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self
       .map
@@ -511,9 +511,9 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<Q>(&self, key: &Q) -> Option<GenericEntryRef<'_, K, V>>
+  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.core.get(key)
   }

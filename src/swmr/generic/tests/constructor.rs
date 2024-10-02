@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 #[allow(clippy::needless_borrows_for_generic_args)]
-fn owned_comparable() {
+fn query_comparable() {
   let p1 = Person {
     id: 3127022870678870148,
     name: "enthusiastic-magic".into(),
@@ -22,11 +22,11 @@ fn owned_comparable() {
   map.insert(ptr1);
   map.insert(ptr2);
 
-  assert!(map.contains(&Owned::new(&p1)));
-  assert!(map.get(&Owned::new(&p1)).is_some());
+  assert!(map.contains(&Query::new(&p1)));
+  assert!(map.get(&Query::new(&p1)).is_some());
 
-  assert!(map.contains(&Owned::new(&p2)));
-  assert!(map.get(&Owned::new(&p2)).is_some());
+  assert!(map.contains(&Query::new(&p2)));
+  assert!(map.get(&Query::new(&p2)).is_some());
 
   let mut wal = GenericBuilder::new()
     .with_capacity(MB)
@@ -40,68 +40,6 @@ fn owned_comparable() {
 
   assert!(wal.contains_key(&p2));
   assert_eq!(wal.get(&p2).unwrap().value(), "My name is Bob!");
-}
-
-#[test]
-fn ref_comparable() {
-  let p1 = PersonRef {
-    id: 3127022870678870148,
-    name: "enthusiastic-magic",
-  };
-  let p2 = PersonRef {
-    id: 9872687799307360216,
-    name: "damaged-friend",
-  };
-
-  let p1bytes = p1.encode_into_vec().unwrap();
-  let p2bytes = p2.encode_into_vec().unwrap();
-
-  let ptr1 = GenericPointer::<Person, String>::new(p1bytes.len(), 0, p1bytes.as_ptr());
-  let ptr2 = GenericPointer::<Person, String>::new(p2bytes.len(), 0, p2bytes.as_ptr());
-
-  let map = SkipSet::new();
-  map.insert(ptr1);
-  map.insert(ptr2);
-
-  assert!(map.contains(&Owned::new(&p1)));
-  assert!(map.get(&Owned::new(&p1)).is_some());
-
-  assert!(map.contains(&Owned::new(&p2)));
-  assert!(map.get(&Owned::new(&p2)).is_some());
-
-  let mut wal = GenericBuilder::new()
-    .with_capacity(MB)
-    .alloc::<Person, String>()
-    .unwrap();
-
-  unsafe {
-    wal
-      .insert(
-        Generic::from_slice(p1bytes.as_ref()),
-        &"My name is Alice!".to_string(),
-      )
-      .unwrap();
-    wal
-      .insert(
-        Generic::from_slice(p2bytes.as_ref()),
-        &"My name is Bob!".to_string(),
-      )
-      .unwrap();
-  }
-
-  assert!(wal.contains_key(&p1));
-  assert_eq!(wal.get(&p1).unwrap().value(), "My name is Alice!");
-
-  assert!(wal.contains_key(&p2));
-  assert_eq!(wal.get(&p2).unwrap().value(), "My name is Bob!");
-
-  unsafe {
-    assert!(wal.contains_key_by_bytes(&p1bytes));
-    assert_eq!(wal.get(&p1).unwrap().value(), "My name is Alice!");
-
-    assert!(wal.contains_key_by_bytes(&p2bytes));
-    assert_eq!(wal.get(&p2).unwrap().value(), "My name is Bob!");
-  }
 }
 
 #[test]

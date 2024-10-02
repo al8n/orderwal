@@ -125,9 +125,9 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<Q>(&self, key: &Q) -> Option<GenericEntryRef<'_, K, V>>
+  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.0.get(key)
   }
