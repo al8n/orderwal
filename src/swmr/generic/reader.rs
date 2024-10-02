@@ -118,7 +118,7 @@ impl<K, V, S> GenericWalReader<K, V, S>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type + ?Sized,
+  V: ?Sized,
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]

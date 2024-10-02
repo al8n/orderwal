@@ -408,7 +408,7 @@ impl<K, V, S> GenericOrderWalCore<K, V, S>
 where
   K: Type + Ord + ?Sized,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
-  V: Type + ?Sized,
+  V: ?Sized,
 {
   #[inline]
   fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
@@ -642,7 +642,7 @@ impl<K, V, S> GenericOrderWal<K, V, S>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type + ?Sized,
+  V: ?Sized,
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]

@@ -1,7 +1,10 @@
 use core::borrow::Borrow;
 
 use crossbeam_skiplist::set::Entry as SetEntry;
-use dbutils::traits::{Type, TypeRef};
+use dbutils::{
+  equivalent::{Comparable, Equivalent},
+  traits::{Type, TypeRef},
+};
 use rarena_allocator::either::Either;
 
 use super::{
@@ -213,6 +216,98 @@ impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
 #[repr(transparent)]
 pub struct Generic<'a, T: ?Sized> {
   data: Either<&'a T, &'a [u8]>,
+}
+
+impl<T> PartialEq<T> for Generic<'_, T>
+where
+  T: ?Sized + PartialEq + Type + for<'a> Equivalent<T::Ref<'a>>,
+{
+  #[inline]
+  fn eq(&self, other: &T) -> bool {
+    match &self.data {
+      Either::Left(val) => (*val).eq(other),
+      Either::Right(val) => {
+        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
+        other.equivalent(&ref_)
+      }
+    }
+  }
+}
+
+impl<T> PartialEq for Generic<'_, T>
+where
+  T: ?Sized + PartialEq + Type + for<'a> Equivalent<T::Ref<'a>>,
+{
+  #[inline]
+  fn eq(&self, other: &Self) -> bool {
+    match (&self.data, &other.data) {
+      (Either::Left(val), Either::Left(other_val)) => val.eq(other_val),
+      (Either::Right(val), Either::Right(other_val)) => val.eq(other_val),
+      (Either::Left(val), Either::Right(other_val)) => {
+        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(other_val) };
+        val.equivalent(&ref_)
+      }
+      (Either::Right(val), Either::Left(other_val)) => {
+        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
+        other_val.equivalent(&ref_)
+      }
+    }
+  }
+}
+
+impl<T> Eq for Generic<'_, T> where T: ?Sized + Eq + Type + for<'a> Equivalent<T::Ref<'a>> {}
+
+impl<T> PartialOrd for Generic<'_, T>
+where
+  T: ?Sized + Ord + Type + for<'a> Comparable<T::Ref<'a>>,
+  for<'a> T::Ref<'a>: Comparable<T> + Ord,
+{
+  #[inline]
+  fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl<T> PartialOrd<T> for Generic<'_, T>
+where
+  T: ?Sized + PartialOrd + Type + for<'a> Comparable<T::Ref<'a>>,
+{
+  #[inline]
+  fn partial_cmp(&self, other: &T) -> Option<core::cmp::Ordering> {
+    match &self.data {
+      Either::Left(val) => (*val).partial_cmp(other),
+      Either::Right(val) => {
+        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
+        Some(other.compare(&ref_).reverse())
+      }
+    }
+  }
+}
+
+impl<T> Ord for Generic<'_, T>
+where
+  T: ?Sized + Ord + Type + for<'a> Comparable<T::Ref<'a>>,
+  for<'a> T::Ref<'a>: Comparable<T> + Ord,
+{
+  #[inline]
+  fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+    match (&self.data, &other.data) {
+      (Either::Left(val), Either::Left(other_val)) => (*val).cmp(other_val),
+      (Either::Right(val), Either::Right(other_val)) => {
+        let this = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
+        let other = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(other_val) };
+        this.cmp(&other)
+      }
+      (Either::Left(val), Either::Right(other_val)) => {
+        let other = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(other_val) };
+        other.compare(*val).reverse()
+      }
+      (Either::Right(val), Either::Left(other_val)) => {
+        let this = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
+        this.compare(*other_val)
+      }
+    }
+  }
 }
 
 impl<T: Type + ?Sized> Generic<'_, T> {
@@ -429,20 +524,26 @@ where
 
 impl<'a, K, V> GenericEntryRef<'a, K, V>
 where
-  K: Type + ?Sized,
+  K: ?Sized,
   V: Type + ?Sized,
+{
+  /// Returns the value of the entry.
+  #[inline]
+  pub fn value(&self) -> V::Ref<'a> {
+    let p = self.ent.value();
+    unsafe { TypeRef::from_slice(p.as_value_slice()) }
+  }
+}
+
+impl<'a, K, V> GenericEntryRef<'a, K, V>
+where
+  K: Type + ?Sized,
+  V: ?Sized,
 {
   /// Returns the key of the entry.
   #[inline]
   pub fn key(&self) -> K::Ref<'a> {
     let p = self.ent.value();
     unsafe { TypeRef::from_slice(p.as_key_slice()) }
-  }
-
-  /// Returns the value of the entry.
-  #[inline]
-  pub fn value(&self) -> V::Ref<'a> {
-    let p = self.ent.value();
-    unsafe { TypeRef::from_slice(p.as_value_slice()) }
   }
 }
