@@ -218,9 +218,9 @@ pub struct Generic<'a, T: ?Sized> {
   data: Either<&'a T, &'a [u8]>,
 }
 
-impl<T> PartialEq<T> for Generic<'_, T>
+impl<'a, T: 'a> PartialEq<T> for Generic<'a, T>
 where
-  T: ?Sized + PartialEq + Type + for<'a> Equivalent<T::Ref<'a>>,
+  T: ?Sized + PartialEq + Type + for<'b> Equivalent<T::Ref<'b>>,
 {
   #[inline]
   fn eq(&self, other: &T) -> bool {
@@ -234,9 +234,9 @@ where
   }
 }
 
-impl<T> PartialEq for Generic<'_, T>
+impl<'a, T: 'a> PartialEq for Generic<'a, T>
 where
-  T: ?Sized + PartialEq + Type + for<'a> Equivalent<T::Ref<'a>>,
+  T: ?Sized + PartialEq + Type + for<'b> Equivalent<T::Ref<'b>>,
 {
   #[inline]
   fn eq(&self, other: &Self) -> bool {
@@ -255,12 +255,12 @@ where
   }
 }
 
-impl<T> Eq for Generic<'_, T> where T: ?Sized + Eq + Type + for<'a> Equivalent<T::Ref<'a>> {}
+impl<'a, T: 'a> Eq for Generic<'a, T> where T: ?Sized + Eq + Type + for<'b> Equivalent<T::Ref<'b>> {}
 
-impl<T> PartialOrd for Generic<'_, T>
+impl<'a, T: 'a> PartialOrd for Generic<'a, T>
 where
-  T: ?Sized + Ord + Type + for<'a> Comparable<T::Ref<'a>>,
-  for<'a> T::Ref<'a>: Comparable<T> + Ord,
+  T: ?Sized + Ord + Type + for<'b> Comparable<T::Ref<'b>>,
+  for<'b> T::Ref<'b>: Comparable<T> + Ord,
 {
   #[inline]
   fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
@@ -268,9 +268,9 @@ where
   }
 }
 
-impl<T> PartialOrd<T> for Generic<'_, T>
+impl<'a, T: 'a> PartialOrd<T> for Generic<'a, T>
 where
-  T: ?Sized + PartialOrd + Type + for<'a> Comparable<T::Ref<'a>>,
+  T: ?Sized + PartialOrd + Type + for<'b> Comparable<T::Ref<'b>>,
 {
   #[inline]
   fn partial_cmp(&self, other: &T) -> Option<core::cmp::Ordering> {
@@ -284,10 +284,10 @@ where
   }
 }
 
-impl<T> Ord for Generic<'_, T>
+impl<'a, T: 'a> Ord for Generic<'a, T>
 where
-  T: ?Sized + Ord + Type + for<'a> Comparable<T::Ref<'a>>,
-  for<'a> T::Ref<'a>: Comparable<T> + Ord,
+  T: ?Sized + Ord + Type + for<'b> Comparable<T::Ref<'b>>,
+  for<'b> T::Ref<'b>: Comparable<T> + Ord,
 {
   #[inline]
   fn cmp(&self, other: &Self) -> core::cmp::Ordering {
@@ -310,17 +310,19 @@ where
   }
 }
 
-impl<T: Type + ?Sized> Generic<'_, T> {
+impl<'a, T: 'a + Type + ?Sized> Generic<'a, T> {
+  /// Returns the encoded length.
   #[inline]
-  pub(crate) fn encoded_len(&self) -> usize {
+  pub fn encoded_len(&self) -> usize {
     match &self.data {
       Either::Left(val) => val.encoded_len(),
       Either::Right(val) => val.len(),
     }
   }
 
+  /// Encodes the generic into the buffer.
   #[inline]
-  pub(crate) fn encode(&self, buf: &mut [u8]) -> Result<usize, T::Error> {
+  pub fn encode(&self, buf: &mut [u8]) -> Result<usize, T::Error> {
     match &self.data {
       Either::Left(val) => val.encode(buf),
       Either::Right(val) => {
@@ -331,7 +333,7 @@ impl<T: Type + ?Sized> Generic<'_, T> {
   }
 }
 
-impl<'a, T: ?Sized> Generic<'a, T> {
+impl<'a, T: 'a + ?Sized> Generic<'a, T> {
   /// Returns the value contained in the generic.
   #[inline]
   pub const fn data(&self) -> Either<&T, &'a [u8]> {
@@ -350,7 +352,7 @@ impl<'a, T: ?Sized> Generic<'a, T> {
   }
 }
 
-impl<'a, T: ?Sized> From<&'a T> for Generic<'a, T> {
+impl<'a, T: 'a + ?Sized> From<&'a T> for Generic<'a, T> {
   #[inline]
   fn from(value: &'a T) -> Self {
     Self {

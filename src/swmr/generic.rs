@@ -582,8 +582,8 @@ where
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
+  K: ?Sized,
+  V: ?Sized,
 {
   /// Returns a read-only WAL instance.
   #[inline]
@@ -956,9 +956,9 @@ macro_rules! process_batch {
 
 impl<K, V, S> GenericOrderWal<K, V, S>
 where
-  K: Type + Ord + ?Sized + 'static,
+  K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type + ?Sized + 'static,
+  V: Type + ?Sized,
   S: BuildChecksumer,
 {
   /// Inserts a key-value pair into the write-ahead log.
@@ -1010,7 +1010,10 @@ where
     &mut self,
     key: impl Into<Generic<'a, K>>,
     val: impl Into<Generic<'a, V>>,
-  ) -> Result<(), Among<K::Error, V::Error, Error>> {
+  ) -> Result<(), Among<K::Error, V::Error, Error>>
+  where
+    GenericPointer<K, V>: 'static,
+  {
     let key: Generic<'_, K> = key.into();
     let klen = key.encoded_len() as u32;
     let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
@@ -1043,7 +1046,10 @@ where
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E> + 'a>,
     val: impl Into<Generic<'a, V>>,
-  ) -> Result<(), Among<E, V::Error, Error>> {
+  ) -> Result<(), Among<E, V::Error, Error>>
+  where
+    GenericPointer<K, V>: 'static,
+  {
     let val: Generic<'_, V> = val.into();
     let vlen = val.encoded_len() as u32;
     let vb = ValueBuilder::once(vlen, |buf| {
@@ -1070,7 +1076,10 @@ where
     &mut self,
     key: impl Into<Generic<'a, K>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E> + 'a>,
-  ) -> Result<(), Among<K::Error, E, Error>> {
+  ) -> Result<(), Among<K::Error, E, Error>>
+  where
+    GenericPointer<K, V>: 'static,
+  {
     let key: Generic<'_, K> = key.into();
     let klen = key.encoded_len() as u32;
     let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
@@ -1098,7 +1107,10 @@ where
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE> + 'a>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE> + 'a>,
-  ) -> Result<(), Among<KE, VE, Error>> {
+  ) -> Result<(), Among<KE, VE, Error>>
+  where
+    GenericPointer<K, V>: 'static,
+  {
     self.insert_in(kb, vb)
   }
 
@@ -1109,6 +1121,7 @@ where
   ) -> Result<(), Among<B::Error, V::Error, Error>>
   where
     B: BatchWithKeyBuilder<GenericPointer<K, V>, Value = Generic<'a, V>>,
+    GenericPointer<K, V>: 'static,
   {
     unsafe {
       process_batch! {
@@ -1138,6 +1151,7 @@ where
   ) -> Result<(), Among<K::Error, B::Error, Error>>
   where
     B: BatchWithValueBuilder<GenericPointer<K, V>, Key = Generic<'a, K>>,
+    GenericPointer<K, V>: 'static,
   {
     unsafe {
       process_batch! {
@@ -1167,6 +1181,7 @@ where
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<GenericPointer<K, V>>,
+    GenericPointer<K, V>: 'static,
   {
     unsafe {
       process_batch! {
@@ -1197,7 +1212,10 @@ where
   pub fn insert_batch<'a, 'b: 'a, B: GenericBatch<'b, Key = K, Value = V>>(
     &'a mut self,
     batch: &'b mut B,
-  ) -> Result<(), Among<K::Error, V::Error, Error>> {
+  ) -> Result<(), Among<K::Error, V::Error, Error>>
+  where
+    GenericPointer<K, V>: 'static,
+  {
     unsafe {
       process_batch! {
         self(
@@ -1215,14 +1233,15 @@ where
     }
   }
 
-  unsafe fn insert_batch_helper<I>(
-    &self,
-    allocator: &Arena,
-    mut buf: BytesRefMut<'_, Arena>,
+  unsafe fn insert_batch_helper<'a, I>(
+    &'a self,
+    allocator: &'a Arena,
+    mut buf: BytesRefMut<'a, Arena>,
     cursor: usize,
     on_success: impl FnOnce() -> I,
   ) -> Result<(), Error>
   where
+    GenericPointer<K, V>: 'static,
     I: Iterator<Item = GenericPointer<K, V>>,
     S: BuildChecksumer,
   {
@@ -1261,7 +1280,10 @@ where
     &self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>> {
+  ) -> Result<(), Among<KE, VE, Error>>
+  where
+    GenericPointer<K, V>: 'static,
+  {
     let (klen, kb) = kb.into_components();
     let (vlen, vb) = vb.into_components();
 
