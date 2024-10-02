@@ -95,12 +95,6 @@ fn ref_comparable() {
   assert!(wal.contains_key(&p2));
   assert_eq!(wal.get(&p2).unwrap().value(), "My name is Bob!");
 
-  assert!(wal.contains_key_by_ref(&p1));
-  assert_eq!(wal.get(&p1).unwrap().value(), "My name is Alice!");
-
-  assert!(wal.contains_key_by_ref(&p2));
-  assert_eq!(wal.get(&p2).unwrap().value(), "My name is Bob!");
-
   unsafe {
     assert!(wal.contains_key_by_bytes(&p1bytes));
     assert_eq!(wal.get(&p1).unwrap().value(), "My name is Alice!");

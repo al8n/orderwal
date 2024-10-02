@@ -63,7 +63,6 @@ fn insert(wal: &mut GenericOrderWal<Person, String>) -> Vec<Person> {
 
   for p in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
       wal.get(p).unwrap().value(),
       format!("My name is {}", p.name)
@@ -116,7 +115,6 @@ fn insert_map_file() {
 
   for p in people {
     assert!(wal.contains_key(&p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
       wal.get(&p).unwrap().value(),
       format!("My name is {}", p.name)
@@ -260,9 +258,8 @@ fn insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>) -> Vec
 
   for p in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
-      wal.get_by_ref(p).unwrap().value(),
+      wal.get(p).unwrap().value(),
       format!("My name is {}", p.name)
     );
   }
@@ -311,9 +308,8 @@ fn insert_key_with_value_bytes_map_file() {
 
   for p in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
-      wal.get_by_ref(p).unwrap().value(),
+      wal.get(p).unwrap().value(),
       format!("My name is {}", p.name)
     );
   }

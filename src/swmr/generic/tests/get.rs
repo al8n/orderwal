@@ -134,7 +134,6 @@ fn get_or_insert(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
 
     assert_eq!(
       wal
@@ -147,7 +146,6 @@ fn get_or_insert(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, _) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
   }
 }
 
@@ -205,7 +203,6 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     assert_eq!(
       wal
         .get_or_insert_with(p, || (&format!("Hello! {}!", p.name)).into())
@@ -217,7 +214,6 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, _) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
   }
 }
 
@@ -279,7 +275,6 @@ fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>)
 
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
 
     assert_eq!(
       wal
@@ -292,7 +287,6 @@ fn get_or_insert_key_with_value_bytes(wal: &mut GenericOrderWal<Person, String>)
 
   for (p, _) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
   }
 }
 
@@ -354,7 +348,6 @@ fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     unsafe {
       assert_eq!(
         wal
@@ -368,7 +361,6 @@ fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, _) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
   }
 }
 
@@ -431,7 +423,6 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, pvec, pv) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     unsafe {
       assert_eq!(
         wal
@@ -445,7 +436,6 @@ fn get_by_bytes_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, _, _) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
   }
 }
 
@@ -511,7 +501,6 @@ fn get_by_bytes_or_insert_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, pvec, pv) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
     unsafe {
       assert_eq!(
         wal
@@ -528,7 +517,6 @@ fn get_by_bytes_or_insert_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, _, _) in &people {
     assert!(wal.contains_key(p));
-    assert!(wal.contains_key_by_ref(&p.as_ref()));
   }
 }
 

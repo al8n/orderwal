@@ -62,29 +62,6 @@ pub use builder::*;
 ))]
 mod tests;
 
-macro_rules! transmute {
-  () => {
-    #[inline]
-    fn transmute(src: &Q) -> &Self {
-      #[cfg(debug_assertions)]
-      {
-        #[allow(unused_imports)]
-        use ::ref_cast::__private::LayoutUnsized;
-        ::ref_cast::__private::assert_layout::<Self, Q>(
-          core::any::type_name::<Q>(),
-          ::ref_cast::__private::Layout::<Self>::SIZE,
-          ::ref_cast::__private::Layout::<Q>::SIZE,
-          ::ref_cast::__private::Layout::<Self>::ALIGN,
-          ::ref_cast::__private::Layout::<Q>::ALIGN,
-        );
-      }
-
-      // Safety: `PhantomData` is ZST, so the memory layout of Owned and Q are the same
-      unsafe { &*(src as *const Q as *const Self) }
-    }
-  };
-}
-
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
 struct Slice<K: ?Sized> {
@@ -120,30 +97,6 @@ where
   }
 }
 
-// impl<K> Slice<K>
-// where
-//   K: ?Sized,
-// {
-//   #[inline]
-//   const fn new(key_len: usize, ptr: *const u8) -> Self {
-//     Self {
-//       key_len,
-//       ptr,
-//       _k: PhantomData,
-//     }
-//   }
-
-//   #[inline]
-//   fn as_key_slice<'a>(&self) -> &'a [u8] {
-//     if self.key_len == 0 {
-//       return &[];
-//     }
-
-//     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-//     unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
-//   }
-// }
-
 impl<K, V> Equivalent<GenericPointer<K, V>> for Slice<K>
 where
   K: Type + Ord + ?Sized,
@@ -171,57 +124,6 @@ where
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Ref<'a, K, Q>
-where
-  K: ?Sized,
-  Q: ?Sized,
-{
-  key: &'a Q,
-  _k: PhantomData<K>,
-}
-
-impl<'a, K, Q> Ref<'a, K, Q>
-where
-  K: ?Sized,
-  Q: ?Sized,
-{
-  #[inline]
-  const fn new(key: &'a Q) -> Self {
-    Self {
-      key,
-      _k: PhantomData,
-    }
-  }
-
-  transmute!();
-}
-
-impl<'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Ref<'a, K, Q>
-where
-  K: Type + Ord + ?Sized,
-  K::Ref<'a>: KeyRef<'a, K>,
-  V: ?Sized,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-{
-  fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
-    self.compare(key).is_eq()
-  }
-}
-
-impl<'a, K, Q, V> Comparable<GenericPointer<K, V>> for Ref<'a, K, Q>
-where
-  K: Type + Ord + ?Sized,
-  K::Ref<'a>: KeyRef<'a, K>,
-  V: ?Sized,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-{
-  fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
-    let kr = unsafe { TypeRef::from_slice(p.as_key_slice()) };
-    KeyRef::compare(&kr, self.key).reverse()
-  }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 struct Owned<'a, K, Q>
 where
@@ -245,31 +147,49 @@ where
     }
   }
 
-  transmute!();
-}
+  #[inline]
+  fn transmute(src: &Q) -> &Self {
+    #[cfg(debug_assertions)]
+    {
+      #[allow(unused_imports)]
+      use ::ref_cast::__private::LayoutUnsized;
+      ::ref_cast::__private::assert_layout::<Self, Q>(
+        core::any::type_name::<Q>(),
+        ::ref_cast::__private::Layout::<Self>::SIZE,
+        ::ref_cast::__private::Layout::<Q>::SIZE,
+        ::ref_cast::__private::Layout::<Self>::ALIGN,
+        ::ref_cast::__private::Layout::<Q>::ALIGN,
+      );
+    }
 
-impl<'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Owned<'a, K, Q>
-where
-  K: Type + Ord + ?Sized,
-  K::Ref<'a>: KeyRef<'a, K>,
-  V: ?Sized,
-  Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
-{
-  fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
-    self.compare(key).is_eq()
+    // Safety: `PhantomData` is ZST, so the memory layout of Owned and Q are the same
+    unsafe { &*(src as *const Q as *const Self) }
   }
 }
 
-impl<'a, K, Q, V> Comparable<GenericPointer<K, V>> for Owned<'a, K, Q>
+impl<K, Q, V> Equivalent<GenericPointer<K, V>> for Owned<'_, K, Q>
 where
   K: Type + Ord + ?Sized,
-  K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized,
-  Q: ?Sized + Ord + Comparable<K> + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Ord + for<'b> Equivalent<K::Ref<'b>>,
 {
+  #[inline]
+  fn equivalent(&self, p: &GenericPointer<K, V>) -> bool {
+    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
+    Equivalent::equivalent(self.key, &kr)
+  }
+}
+
+impl<K, Q, V> Comparable<GenericPointer<K, V>> for Owned<'_, K, Q>
+where
+  K: Type + Ord + ?Sized,
+  V: ?Sized,
+  Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+{
+  #[inline]
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
     let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
-    KeyRef::compare(&kr, self.key).reverse()
+    Comparable::compare(self.key, &kr).reverse()
   }
 }
 #[doc(hidden)]
@@ -345,24 +265,6 @@ where
   }
 
   #[inline]
-  fn range_by_ref<'a, Q>(
-    &'a self,
-    start_bound: Bound<&'a Q>,
-    end_bound: Bound<&'a Q>,
-  ) -> RefRange<'a, Q, K, V>
-  where
-    K: Type + Ord,
-    for<'b> K::Ref<'b>: KeyRef<'b, K>,
-    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
-  {
-    RefRange::new(
-      self
-        .map
-        .range((start_bound.map(Ref::new), end_bound.map(Ref::new))),
-    )
-  }
-
-  #[inline]
   fn range<'a, Q>(
     &'a self,
     start_bound: Bound<&'a Q>,
@@ -371,7 +273,7 @@ where
   where
     K: Type + Ord,
     for<'b> K::Ref<'b>: KeyRef<'b, K>,
-    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+    Q: Ord + ?Sized + for<'b> Comparable<K::Ref<'b>>,
   {
     Range::new(
       self
@@ -411,19 +313,11 @@ where
   V: ?Sized,
 {
   #[inline]
-  fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
+  fn contains_key<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.map.contains::<Owned<'_, K, Q>>(&Owned::new(key))
-  }
-
-  #[inline]
-  fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.map.contains::<Ref<'_, K, Q>>(&Ref::new(key))
   }
 
   #[inline]
@@ -432,24 +326,13 @@ where
   }
 
   #[inline]
-  fn get<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
+  fn get<Q>(&self, key: &Q) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self
       .map
       .get::<Owned<'_, K, Q>>(&Owned::new(key))
-      .map(GenericEntryRef::new)
-  }
-
-  #[inline]
-  fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self
-      .map
-      .get::<Ref<'_, K, Q>>(&Ref::new(key))
       .map(GenericEntryRef::new)
   }
 
@@ -459,24 +342,13 @@ where
   }
 
   #[inline]
-  fn upper_bound<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  fn upper_bound<Q>(&self, key: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self
       .map
       .upper_bound(key.map(Owned::transmute))
-      .map(GenericEntryRef::new)
-  }
-
-  #[inline]
-  fn upper_bound_by_ref<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self
-      .map
-      .upper_bound(key.map(Ref::transmute))
       .map(GenericEntryRef::new)
   }
 
@@ -489,24 +361,13 @@ where
   }
 
   #[inline]
-  fn lower_bound<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  fn lower_bound<Q>(&self, key: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self
       .map
       .upper_bound(key.map(Owned::transmute))
-      .map(GenericEntryRef::new)
-  }
-
-  #[inline]
-  fn lower_bound_by_ref<'a, Q>(&'a self, key: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self
-      .map
-      .lower_bound(key.map(Ref::transmute))
       .map(GenericEntryRef::new)
   }
 
@@ -552,20 +413,6 @@ where
   pub fn iter(&self) -> Iter<'_, K, V> {
     self.core.iter()
   }
-
-  /// Returns an iterator over a subset of the entries in the WAL.
-  #[inline]
-  pub fn range_by_ref<'a, Q>(
-    &'a self,
-    start_bound: Bound<&'a Q>,
-    end_bound: Bound<&'a Q>,
-  ) -> RefRange<'a, Q, K, V>
-  where
-    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
-  {
-    self.core.range_by_ref(start_bound, end_bound)
-  }
-
   /// Returns an iterator over a subset of the entries in the WAL.
   #[inline]
   pub fn range<'a, Q>(
@@ -574,7 +421,7 @@ where
     end_bound: Bound<&'a Q>,
   ) -> Range<'a, Q, K, V>
   where
-    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+    Q: Ord + ?Sized + for<'b> Comparable<K::Ref<'b>>,
   {
     self.core.range(start_bound, end_bound)
   }
@@ -646,9 +493,9 @@ where
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
+  pub fn contains_key<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.core.contains_key(key)
   }
@@ -662,31 +509,13 @@ where
     self.core.contains_key_by_bytes(key)
   }
 
-  /// Returns `true` if the key exists in the WAL.
-  #[inline]
-  pub fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.core.contains_key_by_ref(key)
-  }
-
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn get<Q>(&self, key: &Q) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.core.get(key)
-  }
-
-  /// Gets the value associated with the key.
-  #[inline]
-  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.core.get_by_ref(key)
   }
 
   /// Gets the value associated with the key.
@@ -701,24 +530,11 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.core.upper_bound(bound)
-  }
-
-  /// Returns a value associated to the highest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  #[inline]
-  pub fn upper_bound_by_ref<'a, Q>(
-    &'a self,
-    bound: Bound<&'a Q>,
-  ) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.core.upper_bound_by_ref(bound)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -737,24 +553,11 @@ where
   /// Returns a value associated to the lowest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.core.lower_bound(bound)
-  }
-
-  /// Returns a value associated to the lowest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  #[inline]
-  pub fn lower_bound_by_ref<'a, Q>(
-    &'a self,
-    bound: Bound<&'a Q>,
-  ) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.core.lower_bound_by_ref(bound)
   }
 
   /// Returns a value associated to the lowest element whose key is below the given bound.

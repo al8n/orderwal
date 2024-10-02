@@ -4,9 +4,7 @@ use std::sync::Arc;
 use dbutils::equivalent::Comparable;
 use rarena_allocator::Allocator;
 
-use super::{
-  GenericEntryRef, GenericOrderWalCore, Iter, KeyRef, Range, RefRange, Type, HEADER_SIZE,
-};
+use super::{GenericEntryRef, GenericOrderWalCore, Iter, KeyRef, Range, Type, HEADER_SIZE};
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
 pub struct GenericWalReader<K: ?Sized, V: ?Sized, S>(Arc<GenericOrderWalCore<K, V, S>>);
@@ -89,26 +87,13 @@ where
 
   /// Returns an iterator over a subset of the entries in the WAL.
   #[inline]
-  pub fn range_by_ref<'a, Q>(
-    &'a self,
-    start_bound: Bound<&'a Q>,
-    end_bound: Bound<&'a Q>,
-  ) -> RefRange<'a, Q, K, V>
-  where
-    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
-  {
-    self.0.range_by_ref(start_bound, end_bound)
-  }
-
-  /// Returns an iterator over a subset of the entries in the WAL.
-  #[inline]
   pub fn range<'a, Q>(
     &'a self,
     start_bound: Bound<&'a Q>,
     end_bound: Bound<&'a Q>,
   ) -> Range<'a, Q, K, V>
   where
-    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+    Q: Ord + ?Sized + for<'b> Comparable<K::Ref<'b>>,
   {
     self.0.range(start_bound, end_bound)
   }
@@ -122,20 +107,11 @@ where
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
+  pub fn contains_key<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.0.contains_key(key)
-  }
-
-  /// Returns `true` if the key exists in the WAL.
-  #[inline]
-  pub fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.0.contains_key_by_ref(key)
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -149,20 +125,11 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn get<Q>(&self, key: &Q) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.0.get(key)
-  }
-
-  /// Gets the value associated with the key.
-  #[inline]
-  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.0.get_by_ref(key)
   }
 
   /// Gets the value associated with the key.
@@ -177,24 +144,11 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.0.upper_bound(bound)
-  }
-
-  /// Returns a value associated to the highest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  #[inline]
-  pub fn upper_bound_by_ref<'a, Q>(
-    &'a self,
-    bound: Bound<&'a Q>,
-  ) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.0.upper_bound_by_ref(bound)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -213,24 +167,11 @@ where
   /// Returns a value associated to the lowest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
+    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
   {
     self.0.lower_bound(bound)
-  }
-
-  /// Returns a value associated to the lowest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  #[inline]
-  pub fn lower_bound_by_ref<'a, Q>(
-    &'a self,
-    bound: Bound<&'a Q>,
-  ) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  {
-    self.0.lower_bound_by_ref(bound)
   }
 
   /// Returns a value associated to the lowest element whose key is below the given bound.
