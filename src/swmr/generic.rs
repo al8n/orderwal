@@ -146,25 +146,6 @@ where
       _k: PhantomData,
     }
   }
-
-  #[inline]
-  fn transmute(src: &Q) -> &Self {
-    #[cfg(debug_assertions)]
-    {
-      #[allow(unused_imports)]
-      use ::ref_cast::__private::LayoutUnsized;
-      ::ref_cast::__private::assert_layout::<Self, Q>(
-        core::any::type_name::<Q>(),
-        ::ref_cast::__private::Layout::<Self>::SIZE,
-        ::ref_cast::__private::Layout::<Q>::SIZE,
-        ::ref_cast::__private::Layout::<Self>::ALIGN,
-        ::ref_cast::__private::Layout::<Q>::ALIGN,
-      );
-    }
-
-    // Safety: `PhantomData` is ZST, so the memory layout of Query and Q are the same
-    unsafe { &*(src as *const Q as *const Self) }
-  }
 }
 
 impl<'a, 'b: 'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Query<'a, K, Q>
@@ -348,7 +329,7 @@ where
   {
     self
       .map
-      .upper_bound(key.map(Query::transmute))
+      .upper_bound(key.map(Query::new).as_ref())
       .map(GenericEntryRef::new)
   }
 
@@ -367,7 +348,7 @@ where
   {
     self
       .map
-      .upper_bound(key.map(Query::transmute))
+      .upper_bound(key.map(Query::new).as_ref())
       .map(GenericEntryRef::new)
   }
 
