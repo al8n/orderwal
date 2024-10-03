@@ -228,6 +228,7 @@ macro_rules! common_unittests {
         };
 
         $crate::tests::insert_batch_with_key_builder(&mut map);
+        map.flush().unwrap();
 
         let map = unsafe { $crate::Builder::new().map::<$wal, _>(&path).unwrap() };
 
@@ -264,6 +265,7 @@ macro_rules! common_unittests {
         };
 
         $crate::tests::insert_batch_with_value_builder(&mut map);
+        map.flush_async().unwrap();
 
         let map = unsafe { $crate::Builder::new().map::<$wal, _>(&path).unwrap() };
 
