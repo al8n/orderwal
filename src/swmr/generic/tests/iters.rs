@@ -74,6 +74,172 @@ fn iter_map_file() {
   }
 }
 
+fn bounds(wal: &mut GenericOrderWal<u32, u32>) {
+  for i in 0..100u32 {
+    wal.insert(&i, &i).unwrap();
+  }
+
+  let upper50 = wal.upper_bound(Bound::Included(&50u32)).unwrap();
+  assert_eq!(upper50.value(), 50u32);
+  let upper51 = wal.upper_bound(Bound::Excluded(&51u32)).unwrap();
+  assert_eq!(upper51.value(), 50u32);
+
+  let upper50 = unsafe {
+    wal
+      .upper_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(upper50.value(), 50u32);
+  let upper51 = unsafe {
+    wal
+      .upper_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(upper51.value(), 50u32);
+
+  let upper101 = wal.upper_bound(Bound::Included(&101u32)).unwrap();
+  assert_eq!(upper101.value(), 99u32);
+  let upper101 = unsafe {
+    wal
+      .upper_bound_by_bytes(Bound::Included(101u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(upper101.value(), 99u32);
+
+  let upper_unbounded = wal.upper_bound::<u32>(Bound::Unbounded).unwrap();
+  assert_eq!(upper_unbounded.value(), 99u32);
+  let upper_unbounded = unsafe { wal.upper_bound_by_bytes(Bound::Unbounded).unwrap() };
+  assert_eq!(upper_unbounded.value(), 99u32);
+
+  let lower50 = wal.lower_bound(Bound::Included(&50u32)).unwrap();
+  assert_eq!(lower50.value(), 50u32);
+  let lower50 = unsafe {
+    wal
+      .lower_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(lower50.value(), 50u32);
+
+  let lower51 = wal.lower_bound(Bound::Excluded(&51u32)).unwrap();
+  assert_eq!(lower51.value(), 52u32);
+  let lower51 = unsafe {
+    wal
+      .lower_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(lower51.value(), 52u32);
+
+  let lower0 = wal.lower_bound(Bound::Excluded(&0u32)).unwrap();
+  assert_eq!(lower0.value(), 1u32);
+  let lower0 = unsafe {
+    wal
+      .lower_bound_by_bytes(Bound::Excluded(0u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(lower0.value(), 1u32);
+
+  let lower_unbounded = wal.lower_bound::<u32>(Bound::Unbounded).unwrap();
+  assert_eq!(lower_unbounded.value(), 0u32);
+  let lower_unbounded = unsafe { wal.lower_bound_by_bytes(Bound::Unbounded).unwrap() };
+  assert_eq!(lower_unbounded.value(), 0u32);
+
+  let wal = wal.reader();
+  let upper50 = wal.upper_bound(Bound::Included(&50u32)).unwrap();
+  assert_eq!(upper50.value(), 50u32);
+  let upper50 = unsafe {
+    wal
+      .upper_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(upper50.value(), 50u32);
+
+  let upper51 = wal.upper_bound(Bound::Excluded(&51u32)).unwrap();
+  assert_eq!(upper51.value(), 50u32);
+  let upper51 = unsafe {
+    wal
+      .upper_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(upper51.value(), 50u32);
+
+  let upper101 = wal.upper_bound(Bound::Included(&101u32)).unwrap();
+  assert_eq!(upper101.value(), 99u32);
+  let upper101 = unsafe {
+    wal
+      .upper_bound_by_bytes(Bound::Included(101u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(upper101.value(), 99u32);
+
+  let upper_unbounded = wal.upper_bound::<u32>(Bound::Unbounded).unwrap();
+  assert_eq!(upper_unbounded.value(), 99u32);
+  let upper_unbounded = unsafe { wal.upper_bound_by_bytes(Bound::Unbounded).unwrap() };
+  assert_eq!(upper_unbounded.value(), 99u32);
+
+  let lower50 = wal.lower_bound(Bound::Included(&50u32)).unwrap();
+  assert_eq!(lower50.value(), 50u32);
+  let lower50 = unsafe {
+    wal
+      .lower_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(lower50.value(), 50u32);
+
+  let lower51 = wal.lower_bound(Bound::Excluded(&51u32)).unwrap();
+  assert_eq!(lower51.value(), 52u32);
+  let lower51 = unsafe {
+    wal
+      .lower_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(lower51.value(), 52u32);
+
+  let lower0 = wal.lower_bound(Bound::Excluded(&0u32)).unwrap();
+  assert_eq!(lower0.value(), 1u32);
+  let lower0 = unsafe {
+    wal
+      .lower_bound_by_bytes(Bound::Excluded(0u32.to_le_bytes().as_ref()))
+      .unwrap()
+  };
+  assert_eq!(lower0.value(), 1u32);
+
+  let lower_unbounded = wal.lower_bound::<u32>(Bound::Unbounded).unwrap();
+  assert_eq!(lower_unbounded.value(), 0u32);
+  let lower_unbounded = unsafe { wal.lower_bound_by_bytes(Bound::Unbounded).unwrap() };
+  assert_eq!(lower_unbounded.value(), 0u32);
+}
+
+#[test]
+fn bounds_inmemory() {
+  let mut wal = GenericBuilder::new().with_capacity(MB).alloc().unwrap();
+  bounds(&mut wal);
+}
+
+#[test]
+fn bounds_map_anon() {
+  let mut wal = GenericBuilder::new().with_capacity(MB).map_anon().unwrap();
+  bounds(&mut wal);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn bounds_file() {
+  let dir = tempdir().unwrap();
+  let path = dir.path().join("generic_wal_bounds_map_file");
+
+  let mut wal = unsafe {
+    GenericBuilder::new()
+      .with_capacity(MB)
+      .with_create_new(true)
+      .with_read(true)
+      .with_write(true)
+      .map_mut::<u32, u32, _>(&path)
+      .unwrap()
+  };
+
+  bounds(&mut wal);
+}
+
 fn range(wal: &mut GenericOrderWal<Person, String>) {
   let mut mid = Person::random();
   let people = (0..100)

@@ -167,7 +167,7 @@ where
     self.0.upper_bound_by_bytes(bound)
   }
 
-  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
   pub fn lower_bound<'a, 'b: 'a, Q>(
@@ -180,7 +180,7 @@ where
     self.0.lower_bound(bound)
   }
 
-  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
   /// ## Safety

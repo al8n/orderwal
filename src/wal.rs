@@ -192,7 +192,7 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
       .map(|ent| ent.0)
   }
 
-  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   // TODO: implement this method for unsync::OrderWal when BTreeMap::lower_bound is stable
   #[inline]

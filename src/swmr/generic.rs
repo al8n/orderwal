@@ -348,7 +348,7 @@ where
   {
     self
       .map
-      .upper_bound(key.map(Query::new).as_ref())
+      .lower_bound(key.map(Query::new).as_ref())
       .map(GenericEntryRef::new)
   }
 
@@ -534,7 +534,7 @@ where
     self.core.upper_bound_by_bytes(bound)
   }
 
-  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
   pub fn lower_bound<'a, 'b: 'a, Q>(
@@ -547,7 +547,7 @@ where
     self.core.lower_bound(bound)
   }
 
-  /// Returns a value associated to the lowest element whose key is below the given bound.
+  /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
   /// ## Safety
@@ -914,23 +914,21 @@ where
     GenericPointer<K, V>: 'static,
   {
     unsafe {
-      process_batch! {
-        self(
-          batch,
-          |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
-            let f = ent.kb.builder();
-            f(&mut VacantBuffer::new(
-              ent.meta.vlen,
-              NonNull::new_unchecked(ptr),
-            ))
-            .map_err(Among::Left)
-          },
-          |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
-            let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
-            ent.value.encode(value_buf).map_err(Among::Middle)
-          }
-        )
-      }
+      process_batch!(self(
+        batch,
+        |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
+          let f = ent.kb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.klen,
+            NonNull::new_unchecked(ptr),
+          ))
+          .map_err(Among::Left)
+        },
+        |ptr, ent: &EntryWithKeyBuilder<B::KeyBuilder, Generic<'_, V>, _>| {
+          let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
+          ent.value.encode(value_buf).map_err(Among::Middle)
+        }
+      ))
     }
   }
 
@@ -944,23 +942,21 @@ where
     GenericPointer<K, V>: 'static,
   {
     unsafe {
-      process_batch! {
-        self(
-          batch,
-          |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
-            let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
-            ent.key.encode(key_buf).map_err(Among::Left)
-          },
-          |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
-            let f = ent.vb.builder();
-            f(&mut VacantBuffer::new(
-              ent.meta.vlen,
-              NonNull::new_unchecked(ptr),
-            ))
-            .map_err(Among::Middle)
-          }
-        )
-      }
+      process_batch!(self(
+        batch,
+        |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
+          let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
+          ent.key.encode(key_buf).map_err(Among::Left)
+        },
+        |ptr, ent: &EntryWithValueBuilder<Generic<'_, K>, B::ValueBuilder, _>| {
+          let f = ent.vb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.vlen,
+            NonNull::new_unchecked(ptr),
+          ))
+          .map_err(Among::Middle)
+        }
+      ))
     }
   }
 
@@ -974,27 +970,25 @@ where
     GenericPointer<K, V>: 'static,
   {
     unsafe {
-      process_batch! {
-        self(
-          batch,
-          |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
-            let f = ent.kb.builder();
-            f(&mut VacantBuffer::new(
-              ent.meta.klen,
-              NonNull::new_unchecked(ptr),
-            ))
-            .map_err(Among::Left)
-          },
-          |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
-            let f = ent.vb.builder();
-            f(&mut VacantBuffer::new(
-              ent.meta.vlen,
-              NonNull::new_unchecked(ptr),
-            ))
-            .map_err(Among::Middle)
-          }
-        )
-      }
+      process_batch!(self(
+        batch,
+        |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
+          let f = ent.kb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.klen,
+            NonNull::new_unchecked(ptr),
+          ))
+          .map_err(Among::Left)
+        },
+        |ptr, ent: &EntryWithBuilders<B::KeyBuilder, B::ValueBuilder, _>| {
+          let f = ent.vb.builder();
+          f(&mut VacantBuffer::new(
+            ent.meta.vlen,
+            NonNull::new_unchecked(ptr),
+          ))
+          .map_err(Among::Middle)
+        }
+      ))
     }
   }
 
@@ -1007,19 +1001,17 @@ where
     GenericPointer<K, V>: 'static,
   {
     unsafe {
-      process_batch! {
-        self(
-          batch,
-          |ptr, ent: &GenericEntry<'_, K, V>| {
-            let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
-            ent.key.encode(key_buf).map_err(Among::Left)
-          },
-          |ptr, ent: &GenericEntry<'_, K, V>| {
-            let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
-            ent.value.encode(value_buf).map_err(Among::Middle)
-          }
-        )
-      }
+      process_batch!(self(
+        batch,
+        |ptr, ent: &GenericEntry<'_, K, V>| {
+          let key_buf = slice::from_raw_parts_mut(ptr, ent.meta.klen);
+          ent.key.encode(key_buf).map_err(Among::Left)
+        },
+        |ptr, ent: &GenericEntry<'_, K, V>| {
+          let value_buf = slice::from_raw_parts_mut(ptr, ent.meta.vlen);
+          ent.value.encode(value_buf).map_err(Among::Middle)
+        }
+      ))
     }
   }
 
