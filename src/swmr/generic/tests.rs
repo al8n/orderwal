@@ -113,7 +113,7 @@ impl Comparable<PersonRef<'_>> for Person {
   }
 }
 
-impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
+impl KeyRef<'_, Person> for PersonRef<'_> {
   fn compare<Q>(&self, a: &Q) -> cmp::Ordering
   where
     Q: ?Sized + Ord + Comparable<Self>,

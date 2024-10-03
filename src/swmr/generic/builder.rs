@@ -729,7 +729,10 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   /// let reader = unsafe { GenericBuilder::new().map::<String, String, _>(path).unwrap() };
   /// ```
   #[inline]
-  pub unsafe fn map<K, V, P: AsRef<Path>>(self, path: P) -> Result<GenericWalReader<K, V, S>, Error>
+  pub unsafe fn map<K, V, P: AsRef<Path>>(
+    self,
+    path: P,
+  ) -> Result<GenericOrderWalReader<K, V, S>, Error>
   where
     K: Type + Ord + ?Sized + 'static,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -777,7 +780,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
   pub unsafe fn map_with_path_builder<K, V, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<GenericWalReader<K, V, S>, Either<E, Error>>
+  ) -> Result<GenericOrderWalReader<K, V, S>, Either<E, Error>>
   where
     K: Type + Ord + ?Sized + 'static,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -793,7 +796,7 @@ impl<S: BuildChecksumer> GenericBuilder<S> {
       .map_err(|e| e.map_right(Into::into))
       .and_then(|arena| {
         GenericOrderWal::replay(arena, opts, true, (), cks)
-          .map(|core| GenericWalReader::new(Arc::new(core)))
+          .map(|core| GenericOrderWalReader::new(Arc::new(core)))
           .map_err(Either::Right)
       })
   }

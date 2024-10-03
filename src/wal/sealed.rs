@@ -5,7 +5,7 @@ use rarena_allocator::{ArenaPosition, BytesRefMut};
 
 use super::*;
 
-pub trait Pointer {
+pub trait Pointer: Sized {
   type Comparator;
 
   fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: Self::Comparator) -> Self;
@@ -120,11 +120,13 @@ pub trait Sealed<C, S>: Constructor<C, S> {
   where
     C: Comparator;
 
-  fn insert_batch_with_key_builder_in<B: BatchWithKeyBuilder<Comparator = C>>(
+  fn insert_batch_with_key_builder_in<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
+    B: BatchWithKeyBuilder<crate::pointer::Pointer<C>>,
+    B::Value: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -163,11 +165,13 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     }
   }
 
-  fn insert_batch_with_value_builder_in<B: BatchWithValueBuilder<Comparator = C>>(
+  fn insert_batch_with_value_builder_in<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
+    B: BatchWithValueBuilder<crate::pointer::Pointer<C>>,
+    B::Key: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -207,11 +211,12 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     }
   }
 
-  fn insert_batch_with_builders_in<B: BatchWithBuilders<Comparator = C>>(
+  fn insert_batch_with_builders_in<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
+    B: BatchWithBuilders<crate::pointer::Pointer<C>>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {

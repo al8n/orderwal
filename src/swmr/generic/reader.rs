@@ -4,14 +4,12 @@ use std::sync::Arc;
 use dbutils::equivalent::Comparable;
 use rarena_allocator::Allocator;
 
-use super::{
-  GenericEntryRef, GenericOrderWalCore, Iter, KeyRef, Range, RefRange, Type, HEADER_SIZE,
-};
+use super::{GenericEntryRef, GenericOrderWalCore, Iter, KeyRef, Range, Type, HEADER_SIZE};
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
-pub struct GenericWalReader<K: ?Sized, V: ?Sized, S>(Arc<GenericOrderWalCore<K, V, S>>);
+pub struct GenericOrderWalReader<K: ?Sized, V: ?Sized, S>(Arc<GenericOrderWalCore<K, V, S>>);
 
-impl<K, V, S> Clone for GenericWalReader<K, V, S>
+impl<K, V, S> Clone for GenericOrderWalReader<K, V, S>
 where
   K: ?Sized,
   V: ?Sized,
@@ -21,7 +19,7 @@ where
   }
 }
 
-impl<K, V, S> GenericWalReader<K, V, S>
+impl<K, V, S> GenericOrderWalReader<K, V, S>
 where
   K: ?Sized,
   V: ?Sized,
@@ -63,7 +61,7 @@ where
   }
 }
 
-impl<K, V, S> GenericWalReader<K, V, S>
+impl<K, V, S> GenericOrderWalReader<K, V, S>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -71,13 +69,19 @@ where
 {
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  pub fn first(&self) -> Option<GenericEntryRef<'_, K, V>> {
+  pub fn first(&self) -> Option<GenericEntryRef<'_, K, V>>
+  where
+    V: Type,
+  {
     self.0.first()
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  pub fn last(&self) -> Option<GenericEntryRef<'_, K, V>> {
+  pub fn last(&self) -> Option<GenericEntryRef<'_, K, V>>
+  where
+    V: Type,
+  {
     self.0.last()
   }
 
@@ -89,53 +93,31 @@ where
 
   /// Returns an iterator over a subset of the entries in the WAL.
   #[inline]
-  pub fn range_by_ref<'a, Q>(
-    &'a self,
-    start_bound: Bound<&'a Q>,
-    end_bound: Bound<&'a Q>,
-  ) -> RefRange<'a, Q, K, V>
-  where
-    Q: Ord + ?Sized + Comparable<K::Ref<'a>>,
-  {
-    self.0.range_by_ref(start_bound, end_bound)
-  }
-
-  /// Returns an iterator over a subset of the entries in the WAL.
-  #[inline]
   pub fn range<'a, Q>(
     &'a self,
     start_bound: Bound<&'a Q>,
     end_bound: Bound<&'a Q>,
   ) -> Range<'a, Q, K, V>
   where
-    Q: Ord + ?Sized + Comparable<K> + Comparable<K::Ref<'a>>,
+    Q: Ord + ?Sized + for<'b> Comparable<K::Ref<'b>>,
   {
     self.0.range(start_bound, end_bound)
   }
 }
 
-impl<K, V, S> GenericWalReader<K, V, S>
+impl<K, V, S> GenericOrderWalReader<K, V, S>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  V: Type + ?Sized,
+  V: ?Sized,
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<'a, Q>(&'a self, key: &'a Q) -> bool
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
-  {
-    self.0.contains_key(key)
-  }
-
-  /// Returns `true` if the key exists in the WAL.
-  #[inline]
-  pub fn contains_key_by_ref<'a, Q>(&'a self, key: &'a Q) -> bool
+  pub fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
-    self.0.contains_key_by_ref(key)
+    self.0.contains_key(key)
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -149,20 +131,12 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
-  where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>> + Comparable<K>,
-  {
-    self.0.get(key)
-  }
-
-  /// Gets the value associated with the key.
-  #[inline]
-  pub fn get_by_ref<'a, Q>(&'a self, key: &'a Q) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn get<'a, Q>(&'a self, key: &Q) -> Option<GenericEntryRef<'a, K, V>>
   where
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    V: Type,
   {
-    self.0.get_by_ref(key)
+    self.0.get(key)
   }
 
   /// Gets the value associated with the key.
@@ -170,7 +144,64 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>> {
+  pub unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>>
+  where
+    V: Type,
+  {
     self.0.get_by_bytes(key)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn upper_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    V: Type,
+  {
+    self.0.upper_bound(bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn upper_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntryRef<'_, K, V>>
+  where
+    V: Type,
+  {
+    self.0.upper_bound_by_bytes(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<GenericEntryRef<'a, K, V>>
+  where
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    V: Type,
+  {
+    self.0.lower_bound(bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  pub unsafe fn lower_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntryRef<'_, K, V>>
+  where
+    V: Type,
+  {
+    self.0.lower_bound_by_bytes(bound)
   }
 }

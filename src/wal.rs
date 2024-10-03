@@ -1,7 +1,7 @@
 use checksum::BuildChecksumer;
-use core::ops::RangeBounds;
+use core::ops::{Bound, RangeBounds};
 
-use super::*;
+use super::{pointer::Pointer, *};
 
 pub(crate) mod sealed;
 
@@ -175,6 +175,38 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     C: Comparator;
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  // TODO: implement this method for unsync::OrderWal when BTreeMap::upper_bound is stable
+  #[inline]
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self
+      .range((Bound::Unbounded, bound))
+      .last()
+      .map(|ent| ent.0)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  // TODO: implement this method for unsync::OrderWal when BTreeMap::lower_bound is stable
+  #[inline]
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self
+      .range((bound, Bound::Unbounded))
+      .next()
+      .map(|ent| ent.0)
+  }
 }
 
 /// An abstract layer for the write-ahead log.
@@ -353,11 +385,13 @@ pub trait Wal<C, S>:
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
-  fn insert_batch_with_key_builder<B: BatchWithKeyBuilder<Comparator = C>>(
+  fn insert_batch_with_key_builder<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
+    B: BatchWithKeyBuilder<Pointer<C>>,
+    B::Value: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -371,11 +405,13 @@ pub trait Wal<C, S>:
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
-  fn insert_batch_with_value_builder<B: BatchWithValueBuilder<Comparator = C>>(
+  fn insert_batch_with_value_builder<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
+    B: BatchWithValueBuilder<Pointer<C>>,
+    B::Key: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -389,11 +425,12 @@ pub trait Wal<C, S>:
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
-  fn insert_batch_with_builders<B: BatchWithBuilders<Comparator = C>>(
+  fn insert_batch_with_builders<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
+    B: BatchWithBuilders<Pointer<C>>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {

@@ -154,12 +154,23 @@ fn main() {
     let people = people.clone();
     spawn(move || loop {
       let (person, hello) = &people[i];
-      if let Some(p) = reader.get(&people[i].0) {
+      let person_ref = PersonRef {
+        id: person.id,
+        name: &person.name,
+      };
+      if let Some(p) = reader.get(person) {
         assert_eq!(p.key().id, person.id);
         assert_eq!(p.key().name, person.name);
         assert_eq!(p.value(), hello);
         break;
       }
+
+      if let Some(p) = reader.get(&person_ref) {
+        assert_eq!(p.key().id, person.id);
+        assert_eq!(p.key().name, person.name);
+        assert_eq!(p.value(), hello);
+        break;
+      };
     })
   });
 

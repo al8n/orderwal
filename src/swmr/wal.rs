@@ -16,7 +16,7 @@ pub use crate::{
 };
 pub use dbutils::CheapClone;
 
-use core::{borrow::Borrow, marker::PhantomData};
+use core::{borrow::Borrow, marker::PhantomData, ops::Bound};
 use rarena_allocator::sync::Arena;
 use std::sync::Arc;
 
@@ -333,6 +333,34 @@ where
     C: Comparator,
   {
     self.core.map.get(key).map(|ent| ent.as_value_slice())
+  }
+
+  #[inline]
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self
+      .core
+      .map
+      .upper_bound(bound)
+      .map(|ent| ent.as_value_slice())
+  }
+
+  #[inline]
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self
+      .core
+      .map
+      .lower_bound(bound)
+      .map(|ent| ent.as_value_slice())
   }
 }
 
