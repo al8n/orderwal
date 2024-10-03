@@ -189,7 +189,7 @@ where
   #[inline]
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
     let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
-    Comparable::compare(self.key, &kr).reverse()
+    Comparable::compare(self.key, &kr)
   }
 }
 #[doc(hidden)]
@@ -313,9 +313,9 @@ where
   V: ?Sized,
 {
   #[inline]
-  fn contains_key<Q>(&self, key: &Q) -> bool
+  fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.map.contains::<Query<'_, K, Q>>(&Query::new(key))
   }
@@ -342,9 +342,9 @@ where
   }
 
   #[inline]
-  fn upper_bound<Q>(&self, key: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
+  fn upper_bound<'a, 'b: 'a, Q>(&'a self, key: Bound<&'b Q>) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self
       .map
@@ -361,9 +361,9 @@ where
   }
 
   #[inline]
-  fn lower_bound<Q>(&self, key: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
+  fn lower_bound<'a, 'b: 'a, Q>(&'a self, key: Bound<&'b Q>) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self
       .map
@@ -493,9 +493,9 @@ where
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<Q>(&self, key: &Q) -> bool
+  pub fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.core.contains_key(key)
   }
@@ -530,9 +530,12 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
+  pub fn upper_bound<'a, 'b: 'a, Q>(
+    &'a self,
+    bound: Bound<&'b Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.core.upper_bound(bound)
   }
@@ -553,9 +556,12 @@ where
   /// Returns a value associated to the lowest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
+  pub fn lower_bound<'a, 'b: 'a, Q>(
+    &'a self,
+    bound: Bound<&'b Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.core.lower_bound(bound)
   }

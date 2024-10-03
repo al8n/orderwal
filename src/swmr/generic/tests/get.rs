@@ -214,6 +214,7 @@ fn get_or_insert_with(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, _) in &people {
     assert!(wal.contains_key(p));
+    assert!(wal.contains_key(&p.as_ref()));
   }
 }
 
@@ -348,6 +349,7 @@ fn get_or_insert_value_bytes(wal: &mut GenericOrderWal<Person, String>) {
 
   for (p, pv) in &people {
     assert!(wal.contains_key(p));
+    assert!(wal.contains_key(&p.as_ref()));
     unsafe {
       assert_eq!(
         wal

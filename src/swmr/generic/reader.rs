@@ -144,9 +144,12 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
+  pub fn upper_bound<'a, 'b: 'a, Q>(
+    &'a self,
+    bound: Bound<&'b Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.0.upper_bound(bound)
   }
@@ -167,9 +170,12 @@ where
   /// Returns a value associated to the lowest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  pub fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<GenericEntryRef<'_, K, V>>
+  pub fn lower_bound<'a, 'b: 'a, Q>(
+    &'a self,
+    bound: Bound<&'b Q>,
+  ) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + for<'b> Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
   {
     self.0.lower_bound(bound)
   }
