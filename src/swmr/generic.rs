@@ -156,7 +156,7 @@ where
 {
   #[inline]
   fn equivalent(&self, p: &GenericPointer<K, V>) -> bool {
-    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
+    let kr = unsafe { <K::Ref<'b> as TypeRef<'b>>::from_slice(p.as_key_slice()) };
     Equivalent::equivalent(self.key, &kr)
   }
 }
@@ -169,7 +169,7 @@ where
 {
   #[inline]
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
-    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
+    let kr = unsafe { <K::Ref<'b> as TypeRef<'b>>::from_slice(p.as_key_slice()) };
     Comparable::compare(self.key, &kr)
   }
 }
@@ -294,9 +294,9 @@ where
   V: ?Sized,
 {
   #[inline]
-  fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
     self.map.contains::<Query<'_, K, Q>>(&Query::new(key))
   }
@@ -307,9 +307,9 @@ where
   }
 
   #[inline]
-  fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<GenericEntryRef<'a, K, V>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
     self
       .map
@@ -474,9 +474,9 @@ where
 {
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  pub fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
+  pub fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
     self.core.contains_key(key)
   }
@@ -492,9 +492,9 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<GenericEntryRef<'a, K, V>>
+  pub fn get<'a, Q>(&'a self, key: &Q) -> Option<GenericEntryRef<'a, K, V>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   {
     self.core.get(key)
   }
