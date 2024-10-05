@@ -271,7 +271,7 @@ pub trait Wal<C, S>:
       .get_or_insert_with_value_builder::<()>(
         key,
         ValueBuilder::once(value.len() as u32, |buf| {
-          buf.put_slice(value).unwrap();
+          buf.put_slice_unchecked(value);
           Ok(())
         }),
       )
@@ -349,7 +349,7 @@ pub trait Wal<C, S>:
     self
       .insert_with_in::<(), E>(
         KeyBuilder::once(key.len() as u32, |buf| {
-          buf.put_slice(key).unwrap();
+          buf.put_slice_unchecked(key);
           Ok(())
         }),
         vb,
@@ -475,11 +475,11 @@ pub trait Wal<C, S>:
     self
       .insert_with_in::<(), ()>(
         KeyBuilder::once(key.len() as u32, |buf: &mut VacantBuffer<'_>| {
-          buf.put_slice(key).unwrap();
+          buf.put_slice_unchecked(key);
           Ok(())
         }),
         ValueBuilder::once(value.len() as u32, |buf: &mut VacantBuffer<'_>| {
-          buf.put_slice(value).unwrap();
+          buf.put_slice_unchecked(value);
           Ok(())
         }),
       )

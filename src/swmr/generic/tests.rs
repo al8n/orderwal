@@ -137,7 +137,7 @@ impl KeyRef<'_, Person> for PersonRef<'_> {
 
 impl Type for Person {
   type Ref<'a> = PersonRef<'a>;
-  type Error = dbutils::leb128::EncodeVarintError;
+  type Error = dbutils::error::InsufficientBuffer;
 
   fn encoded_len(&self) -> usize {
     encoded_u64_varint_len(self.id) + self.name.len()
@@ -146,6 +146,16 @@ impl Type for Person {
   fn encode(&self, buf: &mut [u8]) -> Result<usize, Self::Error> {
     let id_size = encode_u64_varint(self.id, buf)?;
     buf[id_size..].copy_from_slice(self.name.as_bytes());
+    Ok(id_size + self.name.len())
+  }
+
+  #[inline]
+  fn encode_to_buffer(
+    &self,
+    buf: &mut dbutils::buffer::VacantBuffer<'_>,
+  ) -> Result<usize, Self::Error> {
+    let id_size = buf.put_u64_varint(self.id)?;
+    buf.put_slice_unchecked(self.name.as_bytes());
     Ok(id_size + self.name.len())
   }
 }
@@ -161,7 +171,7 @@ impl<'a> TypeRef<'a> for PersonRef<'a> {
 impl PersonRef<'_> {
   #[cfg(test)]
   #[allow(dead_code)]
-  fn encode_into_vec(&self) -> Result<Vec<u8>, dbutils::leb128::EncodeVarintError> {
+  fn encode_into_vec(&self) -> Result<Vec<u8>, dbutils::error::InsufficientBuffer> {
     let mut buf = vec![0; encoded_u64_varint_len(self.id) + self.name.len()];
     let id_size = encode_u64_varint(self.id, &mut buf)?;
     buf[id_size..].copy_from_slice(self.name.as_bytes());

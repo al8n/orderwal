@@ -75,7 +75,7 @@ macro_rules! preprocess_batch {
           let flag = Flags::BATCHING;
 
           unsafe {
-            buf.put_u8_unchecked(flag.bits);
+            buf.put_u8_unchecked(flag.bits());
             buf.put_u64_varint_unchecked(batch_meta);
           }
 
@@ -391,13 +391,13 @@ trait SealedExt<C, S>: Sealed<C, S> {
 
     let mut cks = self.hasher().build_checksumer();
     let committed_flag = Flags::BATCHING | Flags::COMMITTED;
-    cks.update(&[committed_flag.bits]);
+    cks.update(&[committed_flag.bits()]);
     cks.update(&buf[1..]);
     let checksum = cks.digest();
     buf.put_u64_le_unchecked(checksum);
 
     // commit the entry
-    buf[0] = committed_flag.bits;
+    buf[0] = committed_flag.bits();
     let buf_cap = buf.capacity();
 
     if self.options().sync() && allocator.is_ondisk() {
@@ -473,7 +473,7 @@ pub trait Constructor<C, S>: Sized {
         }
 
         let header = arena.get_u8(cursor).unwrap();
-        let flag = Flags::from_bits_unchecked(header);
+        let flag = Flags::from_bits_retain(header);
 
         if !flag.contains(Flags::BATCHING) {
           let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {

@@ -37,7 +37,10 @@ where
   type Value = V;
   type Comparator = C;
 
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+  type IterMut<'a>
+    = <&'a mut T as IntoIterator>::IntoIter
+  where
+    Self: 'a;
 
   fn iter_mut(&mut self) -> Self::IterMut<'_> {
     IntoIterator::into_iter(self)
@@ -76,7 +79,10 @@ where
   type Error = E;
   type Value = V;
 
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+  type IterMut<'a>
+    = <&'a mut T as IntoIterator>::IntoIter
+  where
+    Self: 'a;
 
   fn iter_mut(&mut self) -> Self::IterMut<'_> {
     IntoIterator::into_iter(self)
@@ -115,7 +121,10 @@ where
   type Error = E;
   type ValueBuilder = VB;
 
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+  type IterMut<'a>
+    = <&'a mut T as IntoIterator>::IntoIter
+  where
+    Self: 'a;
 
   fn iter_mut(&mut self) -> Self::IterMut<'_> {
     IntoIterator::into_iter(self)
@@ -161,7 +170,10 @@ where
   type ValueBuilder = VB;
   type ValueError = VE;
 
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter where Self: 'a;
+  type IterMut<'a>
+    = <&'a mut T as IntoIterator>::IntoIter
+  where
+    Self: 'a;
 
   fn iter_mut(&mut self) -> Self::IterMut<'_> {
     IntoIterator::into_iter(self)
@@ -195,7 +207,8 @@ where
   type Key = K;
   type Value = V;
 
-  type IterMut<'a> = <&'a mut T as IntoIterator>::IntoIter
+  type IterMut<'a>
+    = <&'a mut T as IntoIterator>::IntoIter
   where
     Self: 'e,
     'e: 'a;

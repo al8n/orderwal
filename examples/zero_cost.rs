@@ -101,15 +101,23 @@ impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
 
 impl Type for Person {
   type Ref<'a> = PersonRef<'a>;
-  type Error = dbutils::leb128::EncodeVarintError;
+  type Error = dbutils::error::InsufficientBuffer;
 
   fn encoded_len(&self) -> usize {
     encoded_u64_varint_len(self.id) + self.name.len()
   }
 
+  #[inline]
   fn encode(&self, buf: &mut [u8]) -> Result<usize, Self::Error> {
     let id_size = encode_u64_varint(self.id, buf)?;
     buf[id_size..].copy_from_slice(self.name.as_bytes());
+    Ok(id_size + self.name.len())
+  }
+
+  #[inline]
+  fn encode_to_buffer(&self, buf: &mut orderwal::VacantBuffer<'_>) -> Result<usize, Self::Error> {
+    let id_size = buf.put_u64_varint(self.id)?;
+    buf.put_slice_unchecked(self.name.as_bytes());
     Ok(id_size + self.name.len())
   }
 }

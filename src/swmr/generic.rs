@@ -612,17 +612,12 @@ where
       Some(e) => e,
       None => {
         let klen = key.encoded_len() as u32;
-        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-          buf.set_len(klen as usize);
-          key.encode(buf).map(|_| ())
-        });
+        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
 
         let val: Generic<'_, V> = val.into();
         let vlen = val.encoded_len() as u32;
-        let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
-          buf.set_len(vlen as usize);
-          val.encode(buf).map(|_| ())
-        });
+        let vb: ValueBuilder<_> =
+          ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
 
         Either::Right(self.insert_in(kb, vb))
       }
@@ -650,16 +645,11 @@ where
       Some(e) => e,
       None => {
         let klen = key.encoded_len() as u32;
-        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-          buf.set_len(klen as usize);
-          key.encode(buf).map(|_| ())
-        });
+        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
         let val = value();
         let vlen = val.encoded_len() as u32;
-        let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
-          buf.set_len(vlen as usize);
-          val.encode(buf).map(|_| ())
-        });
+        let vb: ValueBuilder<_> =
+          ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
 
         Either::Right(self.insert_in(kb, vb))
       }
@@ -736,7 +726,7 @@ macro_rules! process_batch {
 
           let flag = Flags::BATCHING;
 
-          buf.put_u8_unchecked(flag.bits);
+          buf.put_u8_unchecked(flag.bits());
           buf.put_u64_varint_unchecked(batch_meta);
 
           let mut cursor = 1 + batch_meta_size;
@@ -832,17 +822,11 @@ where
   {
     let key: Generic<'_, K> = key.into();
     let klen = key.encoded_len() as u32;
-    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-      buf.set_len(klen as usize);
-      key.encode(buf).map(|_| ())
-    });
+    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
 
     let val: Generic<'_, V> = val.into();
     let vlen = val.encoded_len() as u32;
-    let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
-      buf.set_len(vlen as usize);
-      val.encode(buf).map(|_| ())
-    });
+    let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
     self.insert_in(kb, vb)
   }
 
@@ -868,10 +852,7 @@ where
   {
     let val: Generic<'_, V> = val.into();
     let vlen = val.encoded_len() as u32;
-    let vb = ValueBuilder::once(vlen, |buf| {
-      buf.set_len(vlen as usize);
-      val.encode(buf).map(|_| ())
-    });
+    let vb = ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
 
     self.insert_in(kb, vb)
   }
@@ -898,10 +879,7 @@ where
   {
     let key: Generic<'_, K> = key.into();
     let klen = key.encoded_len() as u32;
-    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-      buf.set_len(klen as usize);
-      key.encode(buf).map(|_| ())
-    });
+    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
 
     self.insert_in::<K::Error, E>(kb, vb)
   }
@@ -1063,13 +1041,13 @@ where
 
     let mut cks = self.core.cks.build_checksumer();
     let committed_flag = Flags::BATCHING | Flags::COMMITTED;
-    cks.update(&[committed_flag.bits]);
+    cks.update(&[committed_flag.bits()]);
     cks.update(&buf[1..]);
     let checksum = cks.digest();
     buf.put_u64_le_unchecked(checksum);
 
     // commit the entry
-    buf[0] = committed_flag.bits;
+    buf[0] = committed_flag.bits();
     let buf_cap = buf.capacity();
 
     if self.core.opts.sync() && allocator.is_ondisk() {
