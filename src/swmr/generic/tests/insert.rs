@@ -129,8 +129,7 @@ fn insert_with_key_builder(wal: &mut GenericOrderWal<Person, String>) -> Vec<Per
       wal
         .insert_with_key_builder(
           KeyBuilder::new(p.encoded_len() as u32, |buf: &mut VacantBuffer<'_>| {
-            buf.set_len(p.encoded_len());
-            p.encode(buf).map(|_| ())
+            p.encode_to_buffer(buf).map(|_| ())
           }),
           &format!("My name is {}", p.name),
         )

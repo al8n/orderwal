@@ -2,6 +2,7 @@ use core::borrow::Borrow;
 
 use crossbeam_skiplist::set::Entry as SetEntry;
 use dbutils::{
+  buffer::VacantBuffer,
   equivalent::{Comparable, Equivalent},
   traits::{KeyRef, Type, TypeRef},
 };
@@ -321,12 +322,30 @@ impl<'a, T: 'a + Type + ?Sized> Generic<'a, T> {
   }
 
   /// Encodes the generic into the buffer.
+  ///
+  /// ## Panics
+  /// - if the buffer is not large enough.
   #[inline]
   pub fn encode(&self, buf: &mut [u8]) -> Result<usize, T::Error> {
     match &self.data {
       Either::Left(val) => val.encode(buf),
       Either::Right(val) => {
         buf.copy_from_slice(val);
+        Ok(buf.len())
+      }
+    }
+  }
+
+  /// Encodes the generic into the given buffer.
+  ///
+  /// ## Panics
+  /// - if the buffer is not large enough.
+  #[inline]
+  pub fn encode_to_buffer(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, T::Error> {
+    match &self.data {
+      Either::Left(val) => val.encode_to_buffer(buf),
+      Either::Right(val) => {
+        buf.put_slice_unchecked(val);
         Ok(buf.len())
       }
     }

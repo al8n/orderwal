@@ -563,7 +563,6 @@ impl Options {
   /// assert_eq!(opts.read(), true);
   /// ```
   #[inline]
-
   pub const fn read(&self) -> bool {
     self.read
   }
@@ -579,7 +578,6 @@ impl Options {
   /// assert_eq!(opts.write(), true);
   /// ```
   #[inline]
-
   pub const fn write(&self) -> bool {
     self.write
   }
@@ -595,7 +593,6 @@ impl Options {
   /// assert_eq!(opts.append(), true);
   /// ```
   #[inline]
-
   pub const fn append(&self) -> bool {
     self.append
   }
@@ -611,7 +608,6 @@ impl Options {
   /// assert_eq!(opts.truncate(), true);
   /// ```
   #[inline]
-
   pub const fn truncate(&self) -> bool {
     self.truncate
   }
@@ -627,7 +623,6 @@ impl Options {
   /// assert_eq!(opts.create(), true);
   /// ```
   #[inline]
-
   pub const fn create(&self) -> bool {
     self.create
   }
@@ -643,7 +638,6 @@ impl Options {
   /// assert_eq!(opts.create_new(), true);
   /// ```
   #[inline]
-
   pub const fn create_new(&self) -> bool {
     self.create_new
   }

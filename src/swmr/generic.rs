@@ -612,17 +612,12 @@ where
       Some(e) => e,
       None => {
         let klen = key.encoded_len() as u32;
-        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-          buf.set_len(klen as usize);
-          key.encode(buf).map(|_| ())
-        });
+        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
 
         let val: Generic<'_, V> = val.into();
         let vlen = val.encoded_len() as u32;
-        let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
-          buf.set_len(vlen as usize);
-          val.encode(buf).map(|_| ())
-        });
+        let vb: ValueBuilder<_> =
+          ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
 
         Either::Right(self.insert_in(kb, vb))
       }
@@ -650,16 +645,11 @@ where
       Some(e) => e,
       None => {
         let klen = key.encoded_len() as u32;
-        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-          buf.set_len(klen as usize);
-          key.encode(buf).map(|_| ())
-        });
+        let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
         let val = value();
         let vlen = val.encoded_len() as u32;
-        let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
-          buf.set_len(vlen as usize);
-          val.encode(buf).map(|_| ())
-        });
+        let vb: ValueBuilder<_> =
+          ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
 
         Either::Right(self.insert_in(kb, vb))
       }
@@ -832,17 +822,11 @@ where
   {
     let key: Generic<'_, K> = key.into();
     let klen = key.encoded_len() as u32;
-    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-      buf.set_len(klen as usize);
-      key.encode(buf).map(|_| ())
-    });
+    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
 
     let val: Generic<'_, V> = val.into();
     let vlen = val.encoded_len() as u32;
-    let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| {
-      buf.set_len(vlen as usize);
-      val.encode(buf).map(|_| ())
-    });
+    let vb: ValueBuilder<_> = ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
     self.insert_in(kb, vb)
   }
 
@@ -868,10 +852,7 @@ where
   {
     let val: Generic<'_, V> = val.into();
     let vlen = val.encoded_len() as u32;
-    let vb = ValueBuilder::once(vlen, |buf| {
-      buf.set_len(vlen as usize);
-      val.encode(buf).map(|_| ())
-    });
+    let vb = ValueBuilder::once(vlen, |buf| val.encode_to_buffer(buf).map(|_| ()));
 
     self.insert_in(kb, vb)
   }
@@ -898,10 +879,7 @@ where
   {
     let key: Generic<'_, K> = key.into();
     let klen = key.encoded_len() as u32;
-    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| {
-      buf.set_len(klen as usize);
-      key.encode(buf).map(|_| ())
-    });
+    let kb: KeyBuilder<_> = KeyBuilder::once(klen, |buf| key.encode_to_buffer(buf).map(|_| ()));
 
     self.insert_in::<K::Error, E>(kb, vb)
   }

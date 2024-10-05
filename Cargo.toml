@@ -28,7 +28,7 @@ tracing = ["dep:tracing", "dbutils/tracing"]
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "1", default-features = false }
-dbutils = { version = "0.4", default-features = false, features = ["crc32fast"] }
+dbutils = { version = "0.6", default-features = false, features = ["crc32fast"] }
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false, features = ["memmap"] }
 crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132" }

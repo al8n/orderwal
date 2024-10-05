@@ -147,8 +147,13 @@ impl<C, S> ImmutableWal<C, S> for OrderWal<C, S>
 where
   C: Comparator + 'static,
 {
-  type Iter<'a> = Iter<'a, C> where Self: 'a, C: Comparator;
-  type Range<'a, Q, R> = Range<'a, C>
+  type Iter<'a>
+    = Iter<'a, C>
+  where
+    Self: 'a,
+    C: Comparator;
+  type Range<'a, Q, R>
+    = Range<'a, C>
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
@@ -156,25 +161,35 @@ where
     Self: 'a,
     C: Comparator;
 
-  type Keys<'a> = Keys<'a, C> where Self: 'a, C: Comparator;
+  type Keys<'a>
+    = Keys<'a, C>
+  where
+    Self: 'a,
+    C: Comparator;
 
-  type RangeKeys<'a, Q, R> = RangeKeys<'a, C>
-      where
-        R: RangeBounds<Q>,
-        [u8]: Borrow<Q>,
-        Q: Ord + ?Sized,
-        Self: 'a,
-        C: Comparator;
+  type RangeKeys<'a, Q, R>
+    = RangeKeys<'a, C>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
 
-  type Values<'a> = Values<'a, C> where Self: 'a, C: Comparator;
+  type Values<'a>
+    = Values<'a, C>
+  where
+    Self: 'a,
+    C: Comparator;
 
-  type RangeValues<'a, Q, R> = RangeValues<'a, C>
-      where
-        R: RangeBounds<Q>,
-        [u8]: Borrow<Q>,
-        Q: Ord + ?Sized,
-        Self: 'a,
-        C: Comparator;
+  type RangeValues<'a, Q, R>
+    = RangeValues<'a, C>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
 
   #[inline]
   fn options(&self) -> &Options {
