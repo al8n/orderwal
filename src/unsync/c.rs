@@ -3,8 +3,7 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::Comparator;
-use rarena_allocator::sync::Arena;
+use rarena_allocator::{unsync::Arena, Allocator};
 use std::collections::{btree_set, BTreeSet};
 
 use crate::{
@@ -18,17 +17,18 @@ pub struct OrderWalCore<P, C, S> {
   pub(super) max_version: u64,
   pub(super) min_version: u64,
   pub(super) opts: Options,
+  pub(super) ro: bool,
   pub(super) cmp: C,
   pub(super) cks: S,
 }
 
-impl<P> sealed::Base for BTreeSet<P>
-where
-  P: sealed::Pointer + Ord,
-{
+impl<P> sealed::Base for BTreeSet<P> {
   type Pointer = P;
 
-  fn insert(&mut self, ele: Self::Pointer) {
+  fn insert(&mut self, ele: Self::Pointer)
+  where
+    Self::Pointer: Ord,
+  {
     BTreeSet::insert(self, ele);
   }
 
@@ -64,6 +64,7 @@ where
     R: RangeBounds<Q>,
     Self::Pointer: Borrow<Q>,
     Q: Ord + ?Sized,
+    Self::Pointer: Ord,
   {
     self.range(range)
   }
@@ -73,6 +74,7 @@ where
   where
     Self::Pointer: Borrow<Q>,
     Q: ?Sized + Ord,
+    Self::Pointer: Ord,
   {
     self.get(key)
   }
@@ -82,26 +84,29 @@ where
   where
     Self::Pointer: Borrow<Q>,
     Q: ?Sized + Ord,
+    Self::Pointer: Ord,
   {
     self.contains(key)
   }
 
   #[inline]
-  fn first(&self) -> Option<Self::Item<'_>> {
+  fn first(&self) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Ord,
+  {
     self.first()
   }
 
   #[inline]
-  fn last(&self) -> Option<Self::Item<'_>> {
+  fn last(&self) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Ord,
+  {
     self.last()
   }
 }
 
-impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S>
-where
-  C: Comparator,
-  P: sealed::Pointer<Comparator = C> + Ord,
-{
+impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S> {
   type Allocator = Arena;
   type Base = BTreeSet<P>;
 
@@ -121,6 +126,7 @@ where
     minimum_version: u64,
   ) -> Self {
     Self {
+      ro: arena.read_only(),
       arena,
       map: set,
       cmp,
@@ -129,6 +135,11 @@ where
       min_version: minimum_version,
       cks: checksumer,
     }
+  }
+
+  #[inline]
+  fn read_only(&self) -> bool {
+    self.ro
   }
 
   #[inline]
@@ -180,7 +191,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + sealed::Pointer,
+    P: Borrow<Q> + sealed::Pointer + Ord,
     Q: ?Sized + Ord,
   {
     self
@@ -200,12 +211,18 @@ where
   }
 
   #[inline]
-  fn insert_pointer(&mut self, ptr: P) {
+  fn insert_pointer(&mut self, ptr: P)
+  where
+    P: Ord,
+  {
     self.map.insert(ptr);
   }
 
   #[inline]
-  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = P>) {
+  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = P>)
+  where
+    P: Ord,
+  {
     self.map.extend(ptrs);
   }
 }

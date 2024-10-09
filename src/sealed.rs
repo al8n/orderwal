@@ -43,7 +43,7 @@ impl<P> AsPointer<P> for &P {
 }
 
 pub trait Base: Default {
-  type Pointer: Pointer;
+  type Pointer;
   type Item<'a>: AsPointer<Self::Pointer> + 'a
   where
     Self::Pointer: 'a,
@@ -64,18 +64,22 @@ pub trait Base: Default {
   where
     Self::Pointer: Ord + 'static;
 
-  fn first(&self) -> Option<Self::Item<'_>>;
+  fn first(&self) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Ord;
 
-  fn last(&self) -> Option<Self::Item<'_>>;
+  fn last(&self) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Ord;
 
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Borrow<Q>,
+    Self::Pointer: Borrow<Q> + Ord,
     Q: Ord + ?Sized;
 
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Self::Pointer: Borrow<Q>,
+    Self::Pointer: Borrow<Q> + Ord,
     Q: Ord + ?Sized;
 
   fn iter(&self) -> Self::Iterator<'_>;
@@ -83,7 +87,7 @@ pub trait Base: Default {
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q>,
+    Self::Pointer: Borrow<Q> + Ord,
     Q: Ord + ?Sized;
 }
 
@@ -276,7 +280,7 @@ pub trait WalCore<P, C, S> {
   ) -> Range<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer,
+    P: Borrow<Q> + Pointer + Ord,
     Q: Ord + ?Sized,
   {
     Range::new(version, self.base().range(range))
@@ -296,7 +300,7 @@ pub trait WalCore<P, C, S> {
   ) -> RangeKeys<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer,
+    P: Borrow<Q> + Pointer + Ord,
     Q: Ord + ?Sized,
   {
     RangeKeys::new(version, self.base().range(range))
@@ -315,7 +319,7 @@ pub trait WalCore<P, C, S> {
   ) -> RangeValues<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer,
+    P: Borrow<Q> + Pointer + Ord,
     Q: Ord + ?Sized,
   {
     RangeValues::new(version, self.base().range(range))
@@ -325,7 +329,7 @@ pub trait WalCore<P, C, S> {
   #[inline]
   fn first(&self, version: Option<u64>) -> Option<(&[u8], &[u8])>
   where
-    P: Pointer,
+    P: Pointer + Ord,
   {
     match version {
       Some(version) => {
@@ -352,7 +356,7 @@ pub trait WalCore<P, C, S> {
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   fn last(&self, version: Option<u64>) -> Option<(&[u8], &[u8])>
   where
-    P: Pointer,
+    P: Pointer + Ord,
   {
     match version {
       Some(version) => {
@@ -379,10 +383,9 @@ pub trait WalCore<P, C, S> {
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, version: Option<u64>, key: &Q) -> bool
   where
-    [u8]: Borrow<P>,
-    P: Borrow<Q> + Pointer,
+    [u8]: Borrow<Q>,
+    P: Borrow<Q> + Borrow<[u8]> + Pointer + Ord,
     Q: ?Sized + Ord,
-    C: Comparator,
   {
     match version {
       Some(version) => {
@@ -392,7 +395,7 @@ pub trait WalCore<P, C, S> {
 
         self.base().iter().any(|p| {
           let p = p.as_pointer();
-          p.version() <= version && p.as_key_slice().borrow().borrow() == key
+          p.version() <= version && p.as_key_slice().borrow() == key
         })
       }
       None => self.base().contains(key),
@@ -404,7 +407,7 @@ pub trait WalCore<P, C, S> {
   fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
-    P: Borrow<Q> + Borrow<[u8]> + Pointer,
+    P: Borrow<Q> + Borrow<[u8]> + Pointer + Ord,
     Q: ?Sized + Ord,
   {
     if let Some(version) = version {
@@ -430,12 +433,12 @@ pub trait WalCore<P, C, S> {
 
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + Pointer,
+    P: Borrow<Q> + Pointer + Ord,
     Q: ?Sized + Ord;
 
   fn lower_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + Pointer,
+    P: Borrow<Q> + Pointer + Ord,
     Q: ?Sized + Ord;
 
   /// Get or insert a new entry into the WAL.
@@ -448,7 +451,7 @@ pub trait WalCore<P, C, S> {
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Borrow<[u8]>,
+    P: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
     self
       .get_or_insert_with_value_builder::<()>(
@@ -471,7 +474,7 @@ pub trait WalCore<P, C, S> {
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Borrow<[u8]>,
+    P: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
     let base = self.base();
     match version {
@@ -515,7 +518,7 @@ pub trait WalCore<P, C, S> {
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     self
       .insert_with_in::<E, ()>(
@@ -539,7 +542,7 @@ pub trait WalCore<P, C, S> {
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     self
       .insert_with_in::<(), E>(
@@ -563,7 +566,7 @@ pub trait WalCore<P, C, S> {
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     self
       .insert_with_in(version, kb, vb)
@@ -574,7 +577,7 @@ pub trait WalCore<P, C, S> {
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     self
       .insert_with_in::<(), ()>(
@@ -601,7 +604,7 @@ pub trait WalCore<P, C, S> {
     B::Value: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     if self.read_only() {
       return Err(Either::Right(Error::read_only()));
@@ -621,7 +624,7 @@ pub trait WalCore<P, C, S> {
     B::Key: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     if self.read_only() {
       return Err(Either::Right(Error::read_only()));
@@ -640,7 +643,7 @@ pub trait WalCore<P, C, S> {
     B: BatchWithBuilders<P>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -658,7 +661,7 @@ pub trait WalCore<P, C, S> {
     B::Value: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C>,
+    P: Pointer<Comparator = C> + Ord,
   {
     if self.read_only() {
       return Err(Error::read_only());
@@ -694,11 +697,13 @@ pub trait WalCore<P, C, S> {
 
   fn comparator(&self) -> &C;
 
-  fn insert_pointer(&mut self, ptr: P);
+  fn insert_pointer(&mut self, ptr: P)
+  where
+    P: Ord;
 
   fn insert_pointers(&mut self, ptrs: impl Iterator<Item = P>)
   where
-    C: Comparator;
+    P: Ord;
 
   fn insert_batch_with_key_builder_in<B>(
     &mut self,
@@ -1046,368 +1051,23 @@ pub trait WalCore<P, C, S> {
   }
 }
 
-pub trait Sealed<C, S>: Constructor<C, S> {
-  #[inline]
-  fn check(
-    &self,
-    klen: usize,
-    vlen: usize,
-    max_key_size: u32,
-    max_value_size: u32,
-    ro: bool,
-  ) -> Result<(), Error> {
-    crate::check(klen, vlen, max_key_size, max_value_size, ro)
-  }
-
-  #[inline]
-  fn check_batch_entry(&self, klen: usize, vlen: usize) -> Result<(), Error> {
-    let opts = self.options();
-    let max_key_size = opts.maximum_key_size();
-    let max_value_size = opts.maximum_value_size();
-
-    crate::utils::check_batch_entry(klen, vlen, max_key_size, max_value_size)
-  }
-
-  fn hasher(&self) -> &S;
-
-  fn options(&self) -> &Options;
-
-  fn comparator(&self) -> &C;
-
-  fn insert_pointer(&self, ptr: Self::Pointer);
-
-  fn insert_pointers(&self, ptrs: impl Iterator<Item = Self::Pointer>);
-
-  fn insert_batch_with_key_builder_in<P, B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<B::Error, Error>>
-  where
-    B: BatchWithKeyBuilder<P>,
-    B::Value: Borrow<[u8]>,
-    P: Pointer<Comparator = C>,
-    C: Comparator + CheapClone,
-    S: BuildChecksumer,
-  {
-    let (mut cursor, allocator, mut buf) = preprocess_batch!(self(batch)).map_err(Either::Right)?;
-
-    unsafe {
-      let cmp = self.comparator();
-
-      for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
-        let vlen = ent.value_len();
-        let merged_kv_len = ent.meta.kvlen;
-        let merged_kv_len_size = ent.meta.kvlen_size;
-        let remaining = buf.remaining();
-        if remaining < merged_kv_len_size + klen + vlen {
-          return Err(Either::Right(Error::larger_batch_size(
-            buf.capacity() as u32
-          )));
-        }
-
-        let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
-        ptr = if let Some(version) = ent.version {
-          buf.put_u64_le_unchecked(version);
-          ptr.add(VERSION_SIZE)
-        } else {
-          ptr
-        };
-
-        buf.set_len(cursor + ent_len_size + klen);
-        let f = ent.key_builder().builder();
-        f(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr))).map_err(Either::Left)?;
-
-        cursor += ent_len_size + klen;
-        cursor += vlen;
-        buf.put_slice_unchecked(ent.value().borrow());
-        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
-      }
-
-      self
-        .insert_batch_helper(allocator, buf, cursor)
-        .map_err(Either::Right)
-    }
-  }
-
-  fn insert_batch_with_value_builder_in<P, B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<B::Error, Error>>
-  where
-    B: BatchWithValueBuilder<P>,
-    B::Key: Borrow<[u8]>,
-    P: Pointer<Comparator = C>,
-    C: Comparator + CheapClone,
-    S: BuildChecksumer,
-  {
-    let (mut cursor, allocator, mut buf) = preprocess_batch!(self(batch)).map_err(Either::Right)?;
-
-    unsafe {
-      let cmp = self.comparator();
-
-      for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
-        let vlen = ent.value_len();
-        let merged_kv_len = ent.meta.kvlen;
-        let merged_kv_len_size = ent.meta.kvlen_size;
-        let remaining = buf.remaining();
-        if remaining < merged_kv_len_size + klen + vlen {
-          return Err(Either::Right(Error::larger_batch_size(
-            buf.capacity() as u32
-          )));
-        }
-
-        let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
-        ptr = if let Some(version) = ent.version {
-          buf.put_u64_le_unchecked(version);
-          ptr.add(VERSION_SIZE)
-        } else {
-          ptr
-        };
-        cursor += klen + ent_len_size;
-
-        buf.put_slice_unchecked(ent.key().borrow());
-        buf.set_len(cursor + vlen);
-        let f = ent.vb.builder();
-        let mut vacant_buffer = VacantBuffer::new(klen, NonNull::new_unchecked(ptr.add(klen)));
-        f(&mut vacant_buffer).map_err(Either::Left)?;
-
-        cursor += vlen;
-        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
-      }
-
-      self
-        .insert_batch_helper(allocator, buf, cursor)
-        .map_err(Either::Right)
-    }
-  }
-
-  fn insert_batch_with_builders_in<P, B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
-  where
-    B: BatchWithBuilders<P>,
-    P: Pointer<Comparator = C>,
-    C: Comparator + CheapClone,
-    S: BuildChecksumer,
-  {
-    let (mut cursor, allocator, mut buf) = preprocess_batch!(self(batch)).map_err(Among::Right)?;
-
-    unsafe {
-      let cmp = self.comparator();
-
-      for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
-        let vlen = ent.value_len();
-        let merged_kv_len = ent.meta.kvlen;
-        let merged_kv_len_size = ent.meta.kvlen_size;
-
-        let remaining = buf.remaining();
-        if remaining < merged_kv_len_size + klen + vlen {
-          return Err(Among::Right(
-            Error::larger_batch_size(buf.capacity() as u32),
-          ));
-        }
-
-        let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
-        ptr = if let Some(version) = ent.version {
-          buf.put_u64_le_unchecked(version);
-          ptr.add(VERSION_SIZE)
-        } else {
-          ptr
-        };
-        buf.set_len(cursor + ent_len_size + klen);
-
-        let f = ent.key_builder().builder();
-        f(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr))).map_err(Among::Left)?;
-        cursor += ent_len_size + klen;
-        buf.set_len(cursor + vlen);
-        let f = ent.value_builder().builder();
-        f(&mut VacantBuffer::new(
-          klen,
-          NonNull::new_unchecked(ptr.add(klen)),
-        ))
-        .map_err(Among::Middle)?;
-        cursor += vlen;
-        ent.pointer = Some(<P as Pointer>::new(klen, vlen, ptr, cmp.cheap_clone()));
-      }
-
-      self
-        .insert_batch_helper(allocator, buf, cursor)
-        .map_err(Among::Right)
-    }
-  }
-
-  fn insert_batch_in<P, B>(&mut self, batch: &mut B) -> Result<(), Error>
-  where
-    B: Batch<Pointer = P>,
-    B::Key: Borrow<[u8]>,
-    B::Value: Borrow<[u8]>,
-    P: Pointer<Comparator = C>,
-    C: Comparator + CheapClone,
-    S: BuildChecksumer,
-  {
-    let (mut cursor, allocator, mut buf) = preprocess_batch!(self(batch))?;
-
-    unsafe {
-      let cmp = self.comparator();
-
-      for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
-        let vlen = ent.value_len();
-        let merged_kv_len = ent.meta.kvlen;
-        let merged_kv_len_size = ent.meta.kvlen_size;
-
-        let remaining = buf.remaining();
-        if remaining < merged_kv_len_size + klen + vlen {
-          return Err(Error::larger_batch_size(buf.capacity() as u32));
-        }
-
-        let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
-        ptr = if let Some(version) = ent.version {
-          buf.put_u64_le_unchecked(version);
-          ptr.add(VERSION_SIZE)
-        } else {
-          ptr
-        };
-        cursor += ent_len_size + klen;
-        buf.put_slice_unchecked(ent.key().borrow());
-        cursor += vlen;
-        buf.put_slice_unchecked(ent.value().borrow());
-        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
-      }
-
-      self.insert_batch_helper(allocator, buf, cursor)
-    }
-  }
-
-  fn insert_with_in<KE, VE>(
-    &mut self,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<Self::Pointer, Among<KE, VE, Error>>
-  where
-    C: Comparator + CheapClone,
-    S: BuildChecksumer,
-  {
-    let (klen, kf) = kb.into_components();
-    let (vlen, vf) = vb.into_components();
-    let (len_size, kvlen, elen) = entry_size(klen, vlen);
-    let klen = klen as usize;
-    let vlen = vlen as usize;
-    let allocator = self.allocator();
-    let is_ondisk = allocator.is_ondisk();
-    let buf = allocator.alloc_bytes(elen);
-    let mut cks = self.hasher().build_checksumer();
-
-    match buf {
-      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
-      Ok(mut buf) => {
-        unsafe {
-          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
-          let flag = Flags::COMMITTED.bits();
-
-          cks.update(&[flag]);
-
-          buf.put_u8_unchecked(Flags::empty().bits());
-          let written = buf.put_u64_varint_unchecked(kvlen);
-          debug_assert_eq!(
-            written, len_size,
-            "the precalculated size should be equal to the written size"
-          );
-
-          let ko = STATUS_SIZE + written;
-          buf.set_len(ko + klen + vlen);
-
-          kf(&mut VacantBuffer::new(
-            klen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(ko)),
-          ))
-          .map_err(Among::Left)?;
-
-          let vo = ko + klen;
-          vf(&mut VacantBuffer::new(
-            vlen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
-          ))
-          .map_err(Among::Middle)?;
-
-          let cks = {
-            cks.update(&buf[1..]);
-            cks.digest()
-          };
-          buf.put_u64_le_unchecked(cks);
-
-          // commit the entry
-          buf[0] |= Flags::COMMITTED.bits();
-
-          if self.options().sync() && is_ondisk {
-            allocator
-              .flush_header_and_range(buf.offset(), elen as usize)
-              .map_err(|e| Among::Right(e.into()))?;
-          }
-
-          buf.detach();
-          let cmp = self.comparator().cheap_clone();
-          let ptr = buf.as_ptr().add(ko);
-          Ok(Pointer::new(klen, vlen, ptr, cmp))
-        }
-      }
-    }
-  }
-}
-
-trait SealedExt<C, S>: Sealed<C, S> {
-  unsafe fn insert_batch_helper(
-    &self,
-    allocator: &Self::Allocator,
-    mut buf: BytesRefMut<'_, Self::Allocator>,
-    cursor: usize,
-  ) -> Result<(), Error>
-  where
-    S: BuildChecksumer,
-  {
-    let total_size = buf.capacity();
-    if cursor + CHECKSUM_SIZE != total_size {
-      return Err(Error::batch_size_mismatch(
-        total_size as u32 - CHECKSUM_SIZE as u32,
-        cursor as u32,
-      ));
-    }
-
-    let mut cks = self.hasher().build_checksumer();
-    let committed_flag = Flags::BATCHING | Flags::COMMITTED;
-    cks.update(&[committed_flag.bits()]);
-    cks.update(&buf[1..]);
-    let checksum = cks.digest();
-    buf.put_u64_le_unchecked(checksum);
-
-    // commit the entry
-    buf[0] = committed_flag.bits();
-    let buf_cap = buf.capacity();
-
-    if self.options().sync() && allocator.is_ondisk() {
-      allocator.flush_header_and_range(buf.offset(), buf_cap)?;
-    }
-    buf.detach();
-    Ok(())
-  }
-}
-
-impl<C, S, T> SealedExt<C, S> for T where T: Sealed<C, S> {}
-
 pub trait Constructor<C, S>: Sized {
-  type Allocator: Allocator;
-  type Core: WalCore<Self::Pointer, C, S, Allocator = Self::Allocator>;
+  type Allocator: Allocator + 'static;
+  type Core: WalCore<Self::Pointer, C, S, Allocator = Self::Allocator> + 'static;
   type Pointer: Pointer<Comparator = C>;
 
-  fn allocator(&self) -> &Self::Allocator;
+  #[inline]
+  fn allocator<'a>(&'a self) -> &'a Self::Allocator
+  where
+    Self::Allocator: 'a,
+    Self::Core: 'a,
+  {
+    self.as_core().allocator()
+  }
+
+  fn as_core(&self) -> &Self::Core;
+
+  fn as_core_mut(&mut self) -> &mut Self::Core;
 
   fn new_in(arena: Self::Allocator, opts: Options, cmp: C, cks: S) -> Result<Self::Core, Error> {
     unsafe {
