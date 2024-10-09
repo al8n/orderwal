@@ -280,7 +280,7 @@ pub trait WalCore<P, C, S> {
   ) -> Range<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer + Ord,
+    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
     Q: Ord + ?Sized,
   {
     Range::new(version, self.base().range(range))
@@ -300,7 +300,7 @@ pub trait WalCore<P, C, S> {
   ) -> RangeKeys<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer + Ord,
+    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
     Q: Ord + ?Sized,
   {
     RangeKeys::new(version, self.base().range(range))
@@ -319,7 +319,7 @@ pub trait WalCore<P, C, S> {
   ) -> RangeValues<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer + Ord,
+    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
     Q: Ord + ?Sized,
   {
     RangeValues::new(version, self.base().range(range))
@@ -384,7 +384,7 @@ pub trait WalCore<P, C, S> {
   fn contains_key<Q>(&self, version: Option<u64>, key: &Q) -> bool
   where
     [u8]: Borrow<Q>,
-    P: Borrow<Q> + Borrow<[u8]> + Pointer + Ord,
+    P: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
     Q: ?Sized + Ord,
   {
     match version {
@@ -407,7 +407,7 @@ pub trait WalCore<P, C, S> {
   fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
-    P: Borrow<Q> + Borrow<[u8]> + Pointer + Ord,
+    P: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
     Q: ?Sized + Ord,
   {
     if let Some(version) = version {
@@ -433,12 +433,12 @@ pub trait WalCore<P, C, S> {
 
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + Pointer + Ord,
+    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
     Q: ?Sized + Ord;
 
   fn lower_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + Pointer + Ord,
+    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
     Q: ?Sized + Ord;
 
   /// Get or insert a new entry into the WAL.
@@ -449,7 +449,7 @@ pub trait WalCore<P, C, S> {
     value: &[u8],
   ) -> Result<Option<&[u8]>, Error>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
@@ -472,7 +472,7 @@ pub trait WalCore<P, C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
@@ -516,7 +516,7 @@ pub trait WalCore<P, C, S> {
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -540,7 +540,7 @@ pub trait WalCore<P, C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -564,7 +564,7 @@ pub trait WalCore<P, C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -575,7 +575,7 @@ pub trait WalCore<P, C, S> {
 
   fn insert(&mut self, version: Option<u64>, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -602,7 +602,7 @@ pub trait WalCore<P, C, S> {
   where
     B: BatchWithKeyBuilder<P>,
     B::Value: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -622,7 +622,7 @@ pub trait WalCore<P, C, S> {
   where
     B: BatchWithValueBuilder<P>,
     B::Key: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -641,7 +641,7 @@ pub trait WalCore<P, C, S> {
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<P>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -659,7 +659,7 @@ pub trait WalCore<P, C, S> {
     B: Batch<Pointer = P>,
     B::Key: Borrow<[u8]>,
     B::Value: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
@@ -712,7 +712,7 @@ pub trait WalCore<P, C, S> {
   where
     B: BatchWithKeyBuilder<P>,
     B::Value: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C>,
   {
@@ -770,7 +770,7 @@ pub trait WalCore<P, C, S> {
     B: BatchWithValueBuilder<P>,
     B::Key: Borrow<[u8]>,
     P: Pointer<Comparator = C>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C>,
   {
@@ -823,7 +823,7 @@ pub trait WalCore<P, C, S> {
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<P>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C>,
   {
@@ -886,7 +886,7 @@ pub trait WalCore<P, C, S> {
     B::Key: Borrow<[u8]>,
     B::Value: Borrow<[u8]>,
     P: Pointer<Comparator = C>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
   {
     let (mut cursor, allocator, mut buf) = preprocess_batch!(self(batch))?;
@@ -928,7 +928,7 @@ pub trait WalCore<P, C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<P, Among<KE, VE, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C>,
   {
@@ -1054,7 +1054,7 @@ pub trait WalCore<P, C, S> {
 pub trait Constructor<C, S>: Sized {
   type Allocator: Allocator + 'static;
   type Core: WalCore<Self::Pointer, C, S, Allocator = Self::Allocator> + 'static;
-  type Pointer: Pointer<Comparator = C>;
+  type Pointer;
 
   #[inline]
   fn allocator<'a>(&'a self) -> &'a Self::Allocator
@@ -1102,7 +1102,7 @@ pub trait Constructor<C, S>: Sized {
   where
     C: CheapClone,
     S: BuildChecksumer,
-    Self::Pointer: Pointer + Ord + 'static,
+    Self::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];

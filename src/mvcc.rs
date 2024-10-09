@@ -1,533 +1,460 @@
-// use core::{
-//   ops::{Bound, RangeBounds},
-//   ptr::NonNull,
-// };
+use core::{
+  borrow::Borrow,
+  ops::{Bound, RangeBounds},
+};
 
-// use pointer::MvccPointer;
+use among::Among;
+use dbutils::{buffer::VacantBuffer, CheapClone};
+use rarena_allocator::either::Either;
 
-// use super::{
-//   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
-//   checksum::BuildChecksumer,
-//   *,
-// };
+use crate::{pointer::WithVersion, sealed::Pointer};
 
-// /// An abstract layer for the immutable write-ahead log.
-// pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
-//   /// The iterator type.
-//   type Iter<'a>: Iterator<Item = (&'a [u8], &'a [u8])> + DoubleEndedIterator
-//   where
-//     Self: 'a,
-//     C: Comparator;
+use super::{
+  batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
+  checksum::BuildChecksumer,
+  error::Error,
+  iter::*,
+  sealed::{Base, Constructor, WalCore},
+  KeyBuilder, Options, ValueBuilder,
+};
 
-//   /// The iterator type over a subset of entries in the WAL.
-//   type Range<'a, Q, R>: Iterator<Item = (&'a [u8], &'a [u8])> + DoubleEndedIterator
-//   where
-//     R: RangeBounds<Q>,
-//     [u8]: Borrow<Q>,
-//     Q: Ord + ?Sized,
-//     Self: 'a,
-//     C: Comparator;
+/// An abstract layer for the immutable write-ahead log.
+pub trait ImmutableWal<C, S>: Constructor<C, S> {
+  /// Returns the reserved space in the WAL.
+  ///
+  /// ## Safety
+  /// - The writer must ensure that the returned slice is not modified.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  unsafe fn reserved_slice(&self) -> &[u8] {
+    self.as_core().reserved_slice()
+  }
 
-//   /// The keys iterator type.
-//   type Keys<'a>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
-//   where
-//     Self: 'a,
-//     C: Comparator;
+  /// Returns the path of the WAL if it is backed by a file.
+  #[inline]
+  fn path(&self) -> Option<&std::path::Path> {
+    // self.allocator().path().map(|p| p.as_path())
+    todo!()
+  }
 
-//   /// The iterator type over a subset of keys in the WAL.
-//   type RangeKeys<'a, Q, R>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
-//   where
-//     R: RangeBounds<Q>,
-//     [u8]: Borrow<Q>,
-//     Q: Ord + ?Sized,
-//     Self: 'a,
-//     C: Comparator;
+  /// Returns the number of entries in the WAL.
+  #[inline]
+  fn len(&self) -> usize {
+    self.as_core().len()
+  }
 
-//   /// The values iterator type.
-//   type Values<'a>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
-//   where
-//     Self: 'a,
-//     C: Comparator;
+  /// Returns `true` if the WAL is empty.
+  #[inline]
+  fn is_empty(&self) -> bool {
+    self.as_core().is_empty()
+  }
 
-//   /// The iterator type over a subset of values in the WAL.
-//   type RangeValues<'a, Q, R>: Iterator<Item = &'a [u8]> + DoubleEndedIterator
-//   where
-//     R: RangeBounds<Q>,
-//     [u8]: Borrow<Q>,
-//     Q: Ord + ?Sized,
-//     Self: 'a,
-//     C: Comparator;
+  /// Returns the maximum key size allowed in the WAL.
+  #[inline]
+  fn maximum_key_size(&self) -> u32 {
+    self.as_core().maximum_key_size()
+  }
 
-//   /// Returns the reserved space in the WAL.
-//   ///
-//   /// ## Safety
-//   /// - The writer must ensure that the returned slice is not modified.
-//   /// - This method is not thread-safe, so be careful when using it.
-//   unsafe fn reserved_slice<'a>(&'a self) -> &'a [u8]
-//   where
-//     Self::Allocator: 'a,
-//   {
-//     let reserved = self.options().reserved();
-//     if reserved == 0 {
-//       return &[];
-//     }
+  /// Returns the maximum value size allowed in the WAL.
+  #[inline]
+  fn maximum_value_size(&self) -> u32 {
+    self.as_core().maximum_value_size()
+  }
 
-//     let allocator = self.allocator();
-//     let reserved_slice = allocator.reserved_slice();
-//     &reserved_slice[HEADER_SIZE..]
-//   }
+  /// Returns the remaining capacity of the WAL.
+  #[inline]
+  fn remaining(&self) -> u32 {
+    self.as_core().remaining()
+  }
 
-//   /// Returns the path of the WAL if it is backed by a file.
-//   fn path(&self) -> Option<&std::path::Path>;
+  /// Returns the capacity of the WAL.
+  #[inline]
+  fn capacity(&self) -> u32 {
+    self.as_core().capacity()
+  }
 
-//   /// Returns the number of entries in the WAL.
-//   fn len(&self) -> usize;
+  /// Returns the options used to create this WAL instance.
+  #[inline]
+  fn options(&self) -> &Options {
+    self.as_core().options()
+  }
 
-//   /// Returns `true` if the WAL is empty.
-//   #[inline]
-//   fn is_empty(&self) -> bool {
-//     self.len() == 0
-//   }
+  /// Returns `true` if the WAL contains the specified key.
+  #[inline]
+  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().contains_key(Some(version), key)
+  }
 
-//   /// Returns the maximum key size allowed in the WAL.
-//   #[inline]
-//   fn maximum_key_size(&self) -> u32 {
-//     self.options().maximum_key_size()
-//   }
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  fn iter(
+    &self,
+    version: u64,
+  ) -> Iter<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    Self::Pointer,
+  > {
+    self.as_core().iter(Some(version))
+  }
 
-//   /// Returns the maximum value size allowed in the WAL.
-//   #[inline]
-//   fn maximum_value_size(&self) -> u32 {
-//     self.options().maximum_value_size()
-//   }
+  /// Returns an iterator over a subset of entries in the WAL.
+  #[inline]
+  fn range<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> Range<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    Self::Pointer,
+  >
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().range(Some(version), range)
+  }
 
-//   /// Returns the remaining capacity of the WAL.
-//   #[inline]
-//   fn remaining(&self) -> u32 {
-//     self.allocator().remaining() as u32
-//   }
+  /// Returns an iterator over the keys in the WAL.
+  #[inline]
+  fn keys(
+    &self,
+    version: u64,
+  ) -> Keys<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    Self::Pointer,
+  > {
+    self.as_core().keys(Some(version))
+  }
 
-//   /// Returns the capacity of the WAL.
-//   #[inline]
-//   fn capacity(&self) -> u32 {
-//     self.options().capacity()
-//   }
+  /// Returns an iterator over a subset of keys in the WAL.
+  #[inline]
+  fn range_keys<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> RangeKeys<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    Self::Pointer,
+  >
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().range_keys(Some(version), range)
+  }
 
-//   /// Returns the options used to create this WAL instance.
-//   fn options(&self) -> &Options;
+  /// Returns an iterator over the values in the WAL.
+  #[inline]
+  fn values(
+    &self,
+    version: u64,
+  ) -> Values<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    Self::Pointer,
+  > {
+    self.as_core().values(Some(version))
+  }
 
-//   /// Returns `true` if the WAL contains the specified key.
-//   fn contains_key<Q>(&self, key: &Q) -> bool
-//   where
-//     [u8]: Borrow<Q>,
-//     Q: ?Sized + Ord,
-//     C: Comparator;
+  /// Returns an iterator over a subset of values in the WAL.
+  #[inline]
+  fn range_values<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> RangeValues<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    Self::Pointer,
+  >
+  where
+    R: RangeBounds<Q>,
+    Self::Pointer: Borrow<Q> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized,
+  {
+    self.as_core().range_values(Some(version), range)
+  }
 
-//   /// Returns an iterator over the entries (version is less or equal to the specified version) the WAL.
-//   fn iter(&self, version: u64) -> Self::Iter<'_>
-//   where
-//     C: Comparator;
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  #[inline]
+  fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
+  where
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().first(Some(version))
+  }
 
-//   /// Returns an iterator over a subset of entries (version is less or equal to the specified version) in the WAL.
-//   fn range<Q, R>(&self, version: u64, range: R) -> Self::Range<'_, Q, R>
-//   where
-//     R: RangeBounds<Q>,
-//     [u8]: Borrow<Q>,
-//     Q: Ord + ?Sized,
-//     C: Comparator;
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  #[inline]
+  fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
+  where
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    WalCore::last(self.as_core(), Some(version))
+  }
 
-//   /// Returns an iterator over the keys (version is less or equal to the specified version) in the WAL.
-//   fn keys(&self, version: u64) -> Self::Keys<'_>
-//   where
-//     C: Comparator;
+  /// Returns the value associated with the key.
+  #[inline]
+  fn get<Q>(&self, version: u64, key: &Q) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().get(Some(version), key)
+  }
 
-//   /// Returns an iterator over a subset of keys (version is less or equal to the specified version) in the WAL.
-//   fn range_keys<Q, R>(&self, version: u64, range: R) -> Self::RangeKeys<'_, Q, R>
-//   where
-//     R: RangeBounds<Q>,
-//     [u8]: Borrow<Q>,
-//     Q: Ord + ?Sized,
-//     C: Comparator;
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `Some(version)` is returned.
+  #[inline]
+  fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().upper_bound(Some(version), bound)
+  }
 
-//   /// Returns an iterator over the values (version is less or equal to the specified version) in the WAL.
-//   fn values(&self, version: u64) -> Self::Values<'_>
-//   where
-//     C: Comparator;
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `Some(version)` is returned.
+  #[inline]
+  fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+  {
+    self.as_core().lower_bound(Some(version), bound)
+  }
+}
 
-//   /// Returns an iterator over a subset of values (version is less or equal to the specified version) in the WAL.
-//   fn range_values<Q, R>(&self, version: u64, range: R) -> Self::RangeValues<'_, Q, R>
-//   where
-//     R: RangeBounds<Q>,
-//     [u8]: Borrow<Q>,
-//     Q: Ord + ?Sized,
-//     C: Comparator;
+impl<T, C, S> ImmutableWal<C, S> for T
+where
+  T: Constructor<C, S>,
+  T::Pointer: WithVersion,
+{
+}
 
-//   /// Returns the first key-value pair (version is less or equal to the specified version) in the map. The key in this pair is the minimum key in the wal.
-//   fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
-//   where
-//     C: Comparator;
+/// An abstract layer for the write-ahead log.
+pub trait Wal<C, S>: ImmutableWal<C, S> {
+  /// The read only reader type for this wal.
+  type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>
+  where
+    Self::Core: WalCore<Self::Pointer, C, S> + 'static,
+    Self::Allocator: 'static;
 
-//   /// Returns the last key-value pair (version is less or equal to the specified version) in the map. The key in this pair is the maximum key in the wal.
-//   fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
-//   where
-//     C: Comparator;
+  /// Returns `true` if this WAL instance is read-only.
+  #[inline]
+  fn read_only(&self) -> bool {
+    self.as_core().read_only()
+  }
 
-//   /// Returns the value associated with the key.
-//   fn get<Q>(&self, key: &Q) -> Option<&[u8]>
-//   where
-//     [u8]: Borrow<Q>,
-//     Q: ?Sized + Ord,
-//     C: Comparator;
+  /// Returns the mutable reference to the reserved slice.
+  ///
+  /// ## Safety
+  /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]
+  where
+    Self::Allocator: 'a,
+  {
+    self.as_core_mut().reserved_slice_mut()
+  }
 
-//   /// Returns a value associated to the highest element whose key is below the given bound
-//   /// and version is less or equal to the specified version.
-//   ///
-//   /// If no such element is found then `None` is returned.
-//   // TODO: implement this method for unsync::OrderWal when BTreeMap::upper_bound is stable
-//   #[inline]
-//   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
-//   where
-//     [u8]: Borrow<Q>,
-//     Q: ?Sized + Ord,
-//     C: Comparator,
-//   {
-//     self
-//       .range(version, (Bound::Unbounded, bound))
-//       .last()
-//       .map(|ent| ent.0)
-//   }
+  /// Flushes the to disk.
+  #[inline]
+  fn flush(&self) -> Result<(), Error> {
+    self.as_core().flush()
+  }
 
-//   /// Returns a value associated to the lowest element whose key is above the given bound
-//   /// and version is less or equal to the specified version.
-//   ///
-//   /// If no such element is found then `None` is returned.
-//   // TODO: implement this method for unsync::OrderWal when BTreeMap::lower_bound is stable
-//   #[inline]
-//   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
-//   where
-//     [u8]: Borrow<Q>,
-//     Q: ?Sized + Ord,
-//     C: Comparator,
-//   {
-//     self
-//       .range(version, (bound, Bound::Unbounded))
-//       .next()
-//       .map(|ent| ent.0)
-//   }
-// }
+  /// Flushes the to disk.
+  #[inline]
+  fn flush_async(&self) -> Result<(), Error> {
+    self.as_core().flush_async()
+  }
 
-// /// An abstract layer for the write-ahead log.
-// pub trait Wal<C, S>:
-//   sealed::Sealed<C, S, Pointer = super::pointer::MvccPointer<C>> + ImmutableWal<C, S>
-// {
-//   /// The read only reader type for this wal.
-//   type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>;
+  /// Returns the read-only view for the WAL.
+  fn reader(&self) -> Self::Reader;
 
-//   /// Returns `true` if this WAL instance is read-only.
-//   fn read_only(&self) -> bool {
-//     self.allocator().read_only()
-//   }
+  /// Get or insert a new entry into the WAL.
+  #[inline]
+  fn get_or_insert(
+    &mut self,
+    version: u64,
+    key: &[u8],
+    value: &[u8],
+  ) -> Result<Option<&[u8]>, Error>
+  where
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+  {
+    self.as_core_mut().get_or_insert(Some(version), key, value)
+  }
 
-//   /// Returns the mutable reference to the reserved slice.
-//   ///
-//   /// ## Safety
-//   /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
-//   /// - This method is not thread-safe, so be careful when using it.
-//   unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]
-//   where
-//     Self::Allocator: 'a,
-//   {
-//     let reserved = sealed::Sealed::options(self).reserved();
-//     if reserved == 0 {
-//       return &mut [];
-//     }
+  /// Get or insert a new entry into the WAL.
+  #[inline]
+  fn get_or_insert_with_value_builder<E>(
+    &mut self,
+    version: u64,
+    key: &[u8],
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+  ) -> Result<Option<&[u8]>, Either<E, Error>>
+  where
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+  {
+    self
+      .as_core_mut()
+      .get_or_insert_with_value_builder(Some(version), key, vb)
+  }
 
-//     let allocator = self.allocator();
-//     let reserved_slice = allocator.reserved_slice_mut();
-//     &mut reserved_slice[HEADER_SIZE..]
-//   }
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the key in place.
+  ///
+  /// See also [`insert_with_value_builder`](Wal::insert_with_value_builder) and [`insert_with_builders`](Wal::insert_with_builders).
+  #[inline]
+  fn insert_with_key_builder<E>(
+    &mut self,
+    version: u64,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+    value: &[u8],
+  ) -> Result<(), Either<E, Error>>
+  where
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+  {
+    self
+      .as_core_mut()
+      .insert_with_key_builder(Some(version), kb, value)
+  }
 
-//   /// Flushes the to disk.
-//   fn flush(&self) -> Result<(), Error> {
-//     if !self.read_only() {
-//       self.allocator().flush().map_err(Into::into)
-//     } else {
-//       Err(Error::read_only())
-//     }
-//   }
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the value in place.
+  ///
+  /// See also [`insert_with_key_builder`](Wal::insert_with_key_builder) and [`insert_with_builders`](Wal::insert_with_builders).
+  #[inline]
+  fn insert_with_value_builder<E>(
+    &mut self,
+    version: u64,
+    key: &[u8],
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+  ) -> Result<(), Either<E, Error>>
+  where
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+  {
+    self
+      .as_core_mut()
+      .insert_with_value_builder(Some(version), key, vb)
+  }
 
-//   /// Flushes the to disk.
-//   fn flush_async(&self) -> Result<(), Error> {
-//     if !self.read_only() {
-//       self.allocator().flush_async().map_err(Into::into)
-//     } else {
-//       Err(Error::read_only())
-//     }
-//   }
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the key and value in place.
+  #[inline]
+  fn insert_with_builders<KE, VE>(
+    &mut self,
+    version: u64,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
+  ) -> Result<(), Among<KE, VE, Error>>
+  where
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+  {
+    self
+      .as_core_mut()
+      .insert_with_builders(Some(version), kb, vb)
+  }
 
-//   /// Returns the read-only view for the WAL.
-//   fn reader(&self) -> Self::Reader;
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with_key_builder<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    B: BatchWithKeyBuilder<Self::Pointer>,
+    B::Value: Borrow<[u8]>,
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    self.as_core_mut().insert_batch_with_key_builder(batch)
+  }
 
-//   /// Get (version is less or equal to the specified version) or insert a new entry into the WAL.
-//   fn get_or_insert(
-//     &mut self,
-//     version: u64,
-//     key: &[u8],
-//     value: &[u8],
-//   ) -> Result<Option<&[u8]>, Error>
-//   where
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     self
-//       .get_or_insert_with_value_builder::<()>(
-//         version,
-//         key,
-//         ValueBuilder::once(value.len() as u32, |buf| {
-//           buf.put_slice_unchecked(value);
-//           Ok(())
-//         }),
-//       )
-//       .map_err(|e| e.unwrap_right())
-//   }
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with_value_builder<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<B::Error, Error>>
+  where
+    B: BatchWithValueBuilder<Self::Pointer>,
+    B::Key: Borrow<[u8]>,
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    self.as_core_mut().insert_batch_with_value_builder(batch)
+  }
 
-//   /// Get (version is less or equal to the specified version) or insert a new entry into the WAL.
-//   fn get_or_insert_with_value_builder<E>(
-//     &mut self,
-//     version: u64,
-//     key: &[u8],
-//     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-//   ) -> Result<Option<&[u8]>, Either<E, Error>>
-//   where
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer;
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with_builders<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
+  where
+    B: BatchWithBuilders<Self::Pointer>,
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    self.as_core_mut().insert_batch_with_builders(batch)
+  }
 
-//   /// Inserts a key-value pair into the WAL.
-//   fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
-//   where
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     let klen = VERSION_SIZE + key.len();
-//     self.check(
-//       klen,
-//       value.len(),
-//       self.maximum_key_size(),
-//       self.maximum_value_size(),
-//       self.read_only(),
-//     )?;
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
+  where
+    B: Batch<Pointer = Self::Pointer>,
+    B::Key: Borrow<[u8]>,
+    B::Value: Borrow<[u8]>,
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    self.as_core_mut().insert_batch(batch)
+  }
 
-//     self
-//       .insert_with_in::<(), ()>(
-//         KeyBuilder::once(klen as u32, |buf: &mut VacantBuffer<'_>| {
-//           buf.put_u64_le_unchecked(version);
-//           buf.put_slice_unchecked(key);
-//           Ok(())
-//         }),
-//         ValueBuilder::once(value.len() as u32, |buf: &mut VacantBuffer<'_>| {
-//           buf.put_slice_unchecked(value);
-//           Ok(())
-//         }),
-//       )
-//       .map(|ptr| self.insert_pointer(ptr))
-//       .map_err(Among::unwrap_right)
-//   }
-
-//   /// Inserts a key-value pair into the WAL. This method
-//   /// allows the caller to build the key in place.
-//   ///
-//   /// See also [`insert_with_value_builder`](Wal::insert_with_value_builder) and [`insert_with_builders`](Wal::insert_with_builders).
-//   fn insert_with_key_builder<E>(
-//     &mut self,
-//     version: u64,
-//     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-//     value: &[u8],
-//   ) -> Result<(), Either<E, Error>>
-//   where
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     let (ksize, kb) = kb.into_components();
-//     let klen = VERSION_SIZE + ksize as usize;
-//     self
-//       .check(
-//         klen,
-//         value.len(),
-//         self.maximum_key_size(),
-//         self.maximum_value_size(),
-//         self.read_only(),
-//       )
-//       .map_err(Either::Right)?;
-
-//     let kb = KeyBuilder::once(klen as u32, |buf: &mut VacantBuffer<'_>| {
-//       buf.put_u64_le_unchecked(version);
-//       let ptr = buf.as_mut_ptr();
-//       buf.set_len(klen);
-//       let mut buf = unsafe { VacantBuffer::new(ksize as usize, NonNull::new_unchecked(ptr)) };
-//       kb(&mut buf)
-//     });
-
-//     self
-//       .insert_with_in::<E, ()>(
-//         kb,
-//         ValueBuilder::once(value.len() as u32, |buf| {
-//           buf.put_slice(value).unwrap();
-//           Ok(())
-//         }),
-//       )
-//       .map(|ptr| self.insert_pointer(ptr))
-//       .map_err(Among::into_left_right)
-//   }
-
-//   /// Inserts a key-value pair into the WAL. This method
-//   /// allows the caller to build the value in place.
-//   ///
-//   /// See also [`insert_with_key_builder`](Wal::insert_with_key_builder) and [`insert_with_builders`](Wal::insert_with_builders).
-//   fn insert_with_value_builder<E>(
-//     &mut self,
-//     version: u64,
-//     key: &[u8],
-//     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-//   ) -> Result<(), Either<E, Error>>
-//   where
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     let klen = VERSION_SIZE + key.len();
-//     self
-//       .check(
-//         klen,
-//         vb.size() as usize,
-//         self.maximum_key_size(),
-//         self.maximum_value_size(),
-//         self.read_only(),
-//       )
-//       .map_err(Either::Right)?;
-
-//     self
-//       .insert_with_in::<(), E>(
-//         KeyBuilder::once(klen as u32, |buf| {
-//           buf.put_u64_le_unchecked(version);
-//           buf.put_slice_unchecked(key);
-//           Ok(())
-//         }),
-//         vb,
-//       )
-//       .map(|ptr| self.insert_pointer(ptr))
-//       .map_err(Among::into_middle_right)
-//   }
-
-//   /// Inserts a key-value pair into the WAL. This method
-//   /// allows the caller to build the key and value in place.
-//   fn insert_with_builders<KE, VE>(
-//     &mut self,
-//     version: u64,
-//     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
-//     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-//   ) -> Result<(), Among<KE, VE, Error>>
-//   where
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     let (ksize, kb) = kb.into_components();
-//     let klen = VERSION_SIZE + ksize as usize;
-//     self
-//       .check(
-//         klen,
-//         vb.size() as usize,
-//         self.maximum_key_size(),
-//         self.maximum_value_size(),
-//         self.read_only(),
-//       )
-//       .map_err(Among::Right)?;
-
-//     let kb = KeyBuilder::once(klen as u32, |buf: &mut VacantBuffer<'_>| {
-//       buf.put_u64_le_unchecked(version);
-//       let ptr = buf.as_mut_ptr();
-//       buf.set_len(klen);
-//       let mut buf = unsafe { VacantBuffer::new(ksize as usize, NonNull::new_unchecked(ptr)) };
-//       kb(&mut buf)
-//     });
-
-//     self
-//       .insert_with_in(kb, vb)
-//       .map(|ptr| self.insert_pointer(ptr))
-//   }
-
-//   /// Inserts a batch of key-value pairs into the WAL.
-//   fn insert_batch_with_key_builder<B>(
-//     &mut self,
-//     batch: &mut B,
-//   ) -> Result<(), Either<B::Error, Error>>
-//   where
-//     B: BatchWithKeyBuilder<MvccPointer<C>>,
-//     B::Value: Borrow<[u8]>,
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     if self.read_only() {
-//       return Err(Either::Right(Error::read_only()));
-//     }
-
-//     self
-//       .insert_batch_with_key_builder_in(batch)
-//       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
-//   }
-
-//   /// Inserts a batch of key-value pairs into the WAL.
-//   fn insert_batch_with_value_builder<B>(
-//     &mut self,
-//     batch: &mut B,
-//   ) -> Result<(), Either<B::Error, Error>>
-//   where
-//     B: BatchWithValueBuilder<MvccPointer<C>>,
-//     B::Key: Borrow<[u8]>,
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     if self.read_only() {
-//       return Err(Either::Right(Error::read_only()));
-//     }
-
-//     self
-//       .insert_batch_with_value_builder_in(batch)
-//       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
-//   }
-
-//   /// Inserts a batch of key-value pairs into the WAL.
-//   fn insert_batch_with_builders<B>(
-//     &mut self,
-//     batch: &mut B,
-//   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
-//   where
-//     B: BatchWithBuilders<MvccPointer<C>>,
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     if self.read_only() {
-//       return Err(Among::Right(Error::read_only()));
-//     }
-
-//     self
-//       .insert_batch_with_builders_in(batch)
-//       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
-//   }
-
-//   /// Inserts a batch of key-value pairs into the WAL.
-//   fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
-//   where
-//     B: Batch<Pointer = MvccPointer<C>>,
-//     B::Key: Borrow<[u8]>,
-//     B::Value: Borrow<[u8]>,
-//     C: Comparator + CheapClone,
-//     S: BuildChecksumer,
-//   {
-//     if self.read_only() {
-//       return Err(Error::read_only());
-//     }
-
-//     self
-//       .insert_batch_in(batch)
-//       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
-//   }
-// }
+  /// Inserts a key-value pair into the WAL.
+  #[inline]
+  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
+  where
+    C: CheapClone,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
+  {
+    WalCore::insert(self.as_core_mut(), Some(version), key, value)
+  }
+}

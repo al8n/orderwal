@@ -178,7 +178,7 @@ impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S> {
   #[inline]
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + sealed::Pointer + Ord,
+    P: Borrow<Q> + sealed::Pointer<Comparator = C> + Ord,
     Q: ?Sized + Ord,
   {
     self
@@ -191,7 +191,7 @@ impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S> {
   #[inline]
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + sealed::Pointer + Ord,
+    P: Borrow<Q> + sealed::Pointer<Comparator = C> + Ord,
     Q: ?Sized + Ord,
   {
     self

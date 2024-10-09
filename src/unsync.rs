@@ -4,13 +4,18 @@ use std::rc::Rc;
 use dbutils::{checksum::Crc32, Ascend};
 use rarena_allocator::{unsync::Arena, Allocator};
 
+use crate::pointer::MvccPointer;
+
 use super::{pointer::Pointer, sealed::Constructor};
 
 pub use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   builder::Builder,
-  wal::{ImmutableWal, Wal},
-  Comparator, KeyBuilder, VacantBuffer, ValueBuilder,
+  // wal::{ImmutableWal, Wal},
+  Comparator,
+  KeyBuilder,
+  VacantBuffer,
+  ValueBuilder,
 };
 
 mod c;
@@ -46,19 +51,20 @@ mod tests;
 // |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
 // +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
 // ```
-pub struct OrderWal<C = Ascend, S = Crc32> {
-  core: Rc<UnsafeCell<OrderWalCore<Pointer<C>, C, S>>>,
+pub struct OrderWal<P, C = Ascend, S = Crc32> {
+  core: Rc<UnsafeCell<OrderWalCore<P, C, S>>>,
   _s: PhantomData<S>,
 }
 
-impl<C, S> Constructor<C, S> for OrderWal<C, S>
+impl<P, C, S> Constructor<C, S> for OrderWal<P, C, S>
 where
   C: 'static,
   S: 'static,
+  P: 'static,
 {
   type Allocator = Arena;
-  type Core = OrderWalCore<Pointer<C>, C, S>;
-  type Pointer = Pointer<C>;
+  type Core = OrderWalCore<P, C, S>;
+  type Pointer = P;
 
   #[inline]
   fn as_core(&self) -> &Self::Core {
@@ -79,7 +85,7 @@ where
   }
 }
 
-impl<C: 'static, S: 'static> OrderWal<C, S> {
+impl<P: 'static, C: 'static, S: 'static> OrderWal<P, C, S> {
   /// Returns the path of the WAL if it is backed by a file.
   ///
   /// ## Example
@@ -97,7 +103,29 @@ impl<C: 'static, S: 'static> OrderWal<C, S> {
   }
 }
 
-impl<C, S> Wal<C, S> for OrderWal<C, S>
+impl<C, S> super::wal::Wal<C, S> for OrderWal<Pointer<C>, C, S>
+where
+  C: 'static,
+  S: 'static,
+{
+  type Reader = Self;
+
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    Self {
+      core: {
+        let core = self.core.clone();
+        unsafe {
+          (*core.get()).ro = true;
+        }
+        core
+      },
+      _s: PhantomData,
+    }
+  }
+}
+
+impl<C, S> super::mvcc::Wal<C, S> for OrderWal<MvccPointer<C>, C, S>
 where
   C: 'static,
   S: 'static,

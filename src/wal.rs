@@ -4,22 +4,21 @@ use core::{
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, CheapClone, Comparator};
+use dbutils::{buffer::VacantBuffer, CheapClone};
 use rarena_allocator::either::Either;
-
-use crate::{error::Error, KeyBuilder, ValueBuilder};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::BuildChecksumer,
+  error::Error,
   iter::*,
-  pointer::Pointer,
-  sealed::{Base, Constructor, WalCore},
-  Options,
+  pointer::WithoutVersion,
+  sealed::{Base, Constructor, Pointer, WalCore},
+  KeyBuilder, Options, ValueBuilder,
 };
 
 /// An abstract layer for the immutable write-ahead log.
-pub trait ImmutableWal<C, S>: Constructor<C, S, Pointer = Pointer<C>> {
+pub trait ImmutableWal<C, S>: Constructor<C, S> {
   /// Returns the reserved space in the WAL.
   ///
   /// ## Safety
@@ -81,161 +80,180 @@ pub trait ImmutableWal<C, S>: Constructor<C, S, Pointer = Pointer<C>> {
 
   /// Returns `true` if the WAL contains the specified key.
   #[inline]
-  fn contains_key<Q>(&self, key: &Q) -> bool
+  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    C: Comparator,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
   {
-    self.as_core().contains_key(None, key)
+    self.as_core().contains_key(Some(version), key)
   }
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   fn iter(
     &self,
-  ) -> Iter<'_, <<Self::Core as WalCore<Pointer<C>, C, S>>::Base as Base>::Iterator<'_>, Pointer<C>>
-  {
-    self.as_core().iter(None)
+    version: u64,
+  ) -> Iter<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    Self::Pointer,
+  > {
+    self.as_core().iter(Some(version))
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
   fn range<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> Range<
     '_,
-    <<Self::Core as WalCore<Pointer<C>, C, S>>::Base as Base>::Range<'_, Q, R>,
-    Pointer<C>,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
-    Q: Ord + ?Sized,
-    C: Comparator,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
   {
-    self.as_core().range(None, range)
+    self.as_core().range(Some(version), range)
   }
 
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys(
     &self,
-  ) -> Keys<'_, <<Self::Core as WalCore<Pointer<C>, C, S>>::Base as Base>::Iterator<'_>, Pointer<C>>
-  {
-    self.as_core().keys(None)
+    version: u64,
+  ) -> Keys<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    Self::Pointer,
+  > {
+    self.as_core().keys(Some(version))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
   #[inline]
   fn range_keys<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Core as WalCore<Pointer<C>, C, S>>::Base as Base>::Range<'_, Q, R>,
-    Pointer<C>,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
-    Q: Ord + ?Sized,
-    C: Comparator,
+    Q: ?Sized + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
   {
-    self.as_core().range_keys(None, range)
+    self.as_core().range_keys(Some(version), range)
   }
 
   /// Returns an iterator over the values in the WAL.
   #[inline]
   fn values(
     &self,
-  ) -> Values<'_, <<Self::Core as WalCore<Pointer<C>, C, S>>::Base as Base>::Iterator<'_>, Pointer<C>>
-  {
-    self.as_core().values(None)
+    version: u64,
+  ) -> Values<
+    '_,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    Self::Pointer,
+  > {
+    self.as_core().values(Some(version))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
   #[inline]
   fn range_values<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Core as WalCore<Pointer<C>, C, S>>::Base as Base>::Range<'_, Q, R>,
-    Pointer<C>,
+    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
+    Self::Pointer: Borrow<Q> + Pointer<Comparator = C> + Ord,
     Q: Ord + ?Sized,
-    C: Comparator,
   {
-    self.as_core().range_values(None, range)
+    self.as_core().range_values(Some(version), range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<(&[u8], &[u8])>
+  fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
-    C: Comparator,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
-    self.as_core().first(None)
+    self.as_core().first(Some(version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<(&[u8], &[u8])>
+  fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
-    C: Comparator,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
-    WalCore::last(self.as_core(), None)
+    WalCore::last(self.as_core(), Some(version))
   }
 
   /// Returns the value associated with the key.
   #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<&[u8]>
+  fn get<Q>(&self, version: u64, key: &Q) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    C: Comparator,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
   {
-    self.as_core().get(None, key)
+    self.as_core().get(Some(version), key)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
+  /// If no such element is found then `Some(version)` is returned.
   #[inline]
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    C: Comparator,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
   {
-    self.as_core().upper_bound(None, bound)
+    self.as_core().upper_bound(Some(version), bound)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
-  /// If no such element is found then `None` is returned.
+  /// If no such element is found then `Some(version)` is returned.
   #[inline]
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    C: Comparator,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
   {
-    self.as_core().lower_bound(None, bound)
+    self.as_core().lower_bound(Some(version), bound)
   }
 }
 
-impl<T, C, S> ImmutableWal<C, S> for T where T: Constructor<C, S, Pointer = Pointer<C>> {}
+impl<T, C, S> ImmutableWal<C, S> for T
+where
+  T: Constructor<C, S>,
+  T::Pointer: WithoutVersion,
+{
+}
 
 /// An abstract layer for the write-ahead log.
 pub trait Wal<C, S>: ImmutableWal<C, S> {
   /// The read only reader type for this wal.
   type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>
   where
-    Self::Core: WalCore<Pointer<C>, C, S> + 'static,
+    Self::Core: WalCore<Self::Pointer, C, S> + 'static,
     Self::Allocator: 'static;
 
   /// Returns `true` if this WAL instance is read-only.
@@ -274,28 +292,36 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
 
   /// Get or insert a new entry into the WAL.
   #[inline]
-  fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
+  fn get_or_insert(
+    &mut self,
+    version: u64,
+    key: &[u8],
+    value: &[u8],
+  ) -> Result<Option<&[u8]>, Error>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
-    self.as_core_mut().get_or_insert(None, key, value)
+    self.as_core_mut().get_or_insert(Some(version), key, value)
   }
 
   /// Get or insert a new entry into the WAL.
   #[inline]
   fn get_or_insert_with_value_builder<E>(
     &mut self,
+    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
-      .get_or_insert_with_value_builder(None, key, vb)
+      .get_or_insert_with_value_builder(Some(version), key, vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -305,14 +331,18 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
   #[inline]
   fn insert_with_key_builder<E>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
-    self.as_core_mut().insert_with_key_builder(None, kb, value)
+    self
+      .as_core_mut()
+      .insert_with_key_builder(Some(version), kb, value)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -322,14 +352,18 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
   #[inline]
   fn insert_with_value_builder<E>(
     &mut self,
+    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
-    self.as_core_mut().insert_with_value_builder(None, key, vb)
+    self
+      .as_core_mut()
+      .insert_with_value_builder(Some(version), key, vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -337,14 +371,18 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
   #[inline]
   fn insert_with_builders<KE, VE>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
-    self.as_core_mut().insert_with_builders(None, kb, vb)
+    self
+      .as_core_mut()
+      .insert_with_builders(Some(version), kb, vb)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -354,10 +392,11 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
-    B: BatchWithKeyBuilder<Pointer<C>>,
+    B: BatchWithKeyBuilder<Self::Pointer>,
     B::Value: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
     self.as_core_mut().insert_batch_with_key_builder(batch)
   }
@@ -369,10 +408,11 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
-    B: BatchWithValueBuilder<Pointer<C>>,
+    B: BatchWithValueBuilder<Self::Pointer>,
     B::Key: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
     self.as_core_mut().insert_batch_with_value_builder(batch)
   }
@@ -384,9 +424,10 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
     batch: &mut B,
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
-    B: BatchWithBuilders<Pointer<C>>,
-    C: Comparator + CheapClone,
+    B: BatchWithBuilders<Self::Pointer>,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
     self.as_core_mut().insert_batch_with_builders(batch)
   }
@@ -395,22 +436,24 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
   #[inline]
   fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
   where
-    B: Batch<Pointer = Pointer<C>>,
+    B: Batch<Pointer = Self::Pointer>,
     B::Key: Borrow<[u8]>,
     B::Value: Borrow<[u8]>,
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
     self.as_core_mut().insert_batch(batch)
   }
 
   /// Inserts a key-value pair into the WAL.
   #[inline]
-  fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>
+  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
-    C: Comparator + CheapClone,
+    C: CheapClone,
     S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = C> + Ord,
   {
-    WalCore::insert(self.as_core_mut(), None, key, value)
+    WalCore::insert(self.as_core_mut(), Some(version), key, value)
   }
 }
