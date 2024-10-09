@@ -1,9 +1,12 @@
 use core::ptr::NonNull;
 
-use checksum::{BuildChecksumer, Checksumer};
 use rarena_allocator::{ArenaPosition, BytesRefMut};
 
-use super::*;
+use super::{
+  batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
+  checksum::{BuildChecksumer, Checksumer},
+  *,
+};
 
 pub trait Pointer: Sized {
   type Comparator;
@@ -46,7 +49,7 @@ macro_rules! preprocess_batch {
     $batch
         .iter_mut()
         .try_fold((0u32, 0u64), |(num_entries, size), ent| {
-          let klen = ent.key_len();
+          let klen = ent.internal_key_len();
           let vlen = ent.value_len();
           $this.check_batch_entry(klen, vlen).map(|_| {
             let merged_len = merge_lengths(klen as u32, vlen as u32);
@@ -120,13 +123,14 @@ pub trait Sealed<C, S>: Constructor<C, S> {
   where
     C: Comparator;
 
-  fn insert_batch_with_key_builder_in<B>(
+  fn insert_batch_with_key_builder_in<P, B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
-    B: BatchWithKeyBuilder<crate::pointer::Pointer<C>>,
+    B: BatchWithKeyBuilder<P>,
     B::Value: Borrow<[u8]>,
+    P: Pointer<Comparator = C>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -136,7 +140,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
       let cmp = self.comparator();
 
       for ent in batch.iter_mut() {
-        let klen = ent.key_len();
+        let klen = ent.internal_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -148,7 +152,14 @@ pub trait Sealed<C, S>: Constructor<C, S> {
         }
 
         let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        ptr = if let Some(version) = ent.version {
+          buf.put_u64_le_unchecked(version);
+          ptr.add(VERSION_SIZE)
+        } else {
+          ptr
+        };
+
         buf.set_len(cursor + ent_len_size + klen);
         let f = ent.key_builder().builder();
         f(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr))).map_err(Either::Left)?;
@@ -165,13 +176,14 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     }
   }
 
-  fn insert_batch_with_value_builder_in<B>(
+  fn insert_batch_with_value_builder_in<P, B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
-    B: BatchWithValueBuilder<crate::pointer::Pointer<C>>,
+    B: BatchWithValueBuilder<P>,
     B::Key: Borrow<[u8]>,
+    P: Pointer<Comparator = C>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -181,7 +193,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
       let cmp = self.comparator();
 
       for ent in batch.iter_mut() {
-        let klen = ent.key_len();
+        let klen = ent.internal_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -193,8 +205,15 @@ pub trait Sealed<C, S>: Constructor<C, S> {
         }
 
         let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        ptr = if let Some(version) = ent.version {
+          buf.put_u64_le_unchecked(version);
+          ptr.add(VERSION_SIZE)
+        } else {
+          ptr
+        };
         cursor += klen + ent_len_size;
+
         buf.put_slice_unchecked(ent.key().borrow());
         buf.set_len(cursor + vlen);
         let f = ent.vb.builder();
@@ -211,12 +230,13 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     }
   }
 
-  fn insert_batch_with_builders_in<B>(
+  fn insert_batch_with_builders_in<P, B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
-    B: BatchWithBuilders<crate::pointer::Pointer<C>>,
+    B: BatchWithBuilders<P>,
+    P: Pointer<Comparator = C>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -226,7 +246,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
       let cmp = self.comparator();
 
       for ent in batch.iter_mut() {
-        let klen = ent.key_len();
+        let klen = ent.internal_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -239,8 +259,15 @@ pub trait Sealed<C, S>: Constructor<C, S> {
         }
 
         let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        ptr = if let Some(version) = ent.version {
+          buf.put_u64_le_unchecked(version);
+          ptr.add(VERSION_SIZE)
+        } else {
+          ptr
+        };
         buf.set_len(cursor + ent_len_size + klen);
+
         let f = ent.key_builder().builder();
         f(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr))).map_err(Among::Left)?;
         cursor += ent_len_size + klen;
@@ -252,7 +279,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
         ))
         .map_err(Among::Middle)?;
         cursor += vlen;
-        ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
+        ent.pointer = Some(<P as Pointer>::new(klen, vlen, ptr, cmp.cheap_clone()));
       }
 
       self
@@ -261,8 +288,12 @@ pub trait Sealed<C, S>: Constructor<C, S> {
     }
   }
 
-  fn insert_batch_in<B: Batch<Comparator = C>>(&mut self, batch: &mut B) -> Result<(), Error>
+  fn insert_batch_in<P, B>(&mut self, batch: &mut B) -> Result<(), Error>
   where
+    B: Batch<Pointer = P>,
+    B::Key: Borrow<[u8]>,
+    B::Value: Borrow<[u8]>,
+    P: Pointer<Comparator = C>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -272,7 +303,7 @@ pub trait Sealed<C, S>: Constructor<C, S> {
       let cmp = self.comparator();
 
       for ent in batch.iter_mut() {
-        let klen = ent.key_len();
+        let klen = ent.internal_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -283,7 +314,13 @@ pub trait Sealed<C, S>: Constructor<C, S> {
         }
 
         let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
-        let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        let mut ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        ptr = if let Some(version) = ent.version {
+          buf.put_u64_le_unchecked(version);
+          ptr.add(VERSION_SIZE)
+        } else {
+          ptr
+        };
         cursor += ent_len_size + klen;
         buf.put_slice_unchecked(ent.key().borrow());
         cursor += vlen;

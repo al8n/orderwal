@@ -8,11 +8,12 @@ use either::Either;
 use error::Error;
 use pointer::Pointer;
 use rarena_allocator::unsync::Arena;
-use wal::sealed::{Constructor, Sealed};
+use sealed::{Constructor, Sealed};
 
 pub use super::{
+  batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   builder::Builder,
-  wal::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal},
+  wal::{ImmutableWal, Wal},
   Comparator, KeyBuilder, VacantBuffer, ValueBuilder,
 };
 

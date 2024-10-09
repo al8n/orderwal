@@ -8,10 +8,12 @@ use dbutils::{
 };
 use rarena_allocator::either::Either;
 
-use super::{
-  pointer::{GenericPointer, Pointer},
-  KeyBuilder, ValueBuilder,
+use crate::{
+  pointer::{WithVersion, WithoutVersion},
+  VERSION_SIZE,
 };
+
+use super::{pointer::GenericPointer, KeyBuilder, ValueBuilder};
 
 pub(crate) struct BatchEncodedEntryMeta {
   /// The output of `merge_lengths(klen, vlen)`
@@ -45,14 +47,15 @@ impl BatchEncodedEntryMeta {
 }
 
 /// An entry which can be inserted into the [`Wal`](crate::wal::Wal).
-pub struct Entry<K, V, C> {
+pub struct Entry<K, V, P> {
   pub(crate) key: K,
   pub(crate) value: V,
-  pub(crate) pointer: Option<Pointer<C>>,
+  pub(crate) pointer: Option<P>,
   pub(crate) meta: BatchEncodedEntryMeta,
+  pub(crate) version: Option<u64>,
 }
 
-impl<K, V, C> Entry<K, V, C>
+impl<K, V, P> Entry<K, V, P>
 where
   K: Borrow<[u8]>,
   V: Borrow<[u8]>,
@@ -68,9 +71,20 @@ where
   pub fn value_len(&self) -> usize {
     self.value.borrow().len()
   }
+
+  #[inline]
+  pub(crate) fn internal_key_len(&self) -> usize {
+    match self.version {
+      Some(_) => self.key.borrow().len() + VERSION_SIZE,
+      None => self.key.borrow().len(),
+    }
+  }
 }
 
-impl<K, V, C> Entry<K, V, C> {
+impl<K, V, P> Entry<K, V, P>
+where
+  P: WithoutVersion,
+{
   /// Creates a new entry.
   #[inline]
   pub const fn new(key: K, value: V) -> Self {
@@ -79,9 +93,29 @@ impl<K, V, C> Entry<K, V, C> {
       value,
       pointer: None,
       meta: BatchEncodedEntryMeta::zero(),
+      version: None,
     }
   }
+}
 
+impl<K, V, P> Entry<K, V, P>
+where
+  P: WithVersion,
+{
+  /// Creates a new versioned entry.
+  #[inline]
+  pub const fn with_version(version: u64, key: K, value: V) -> Self {
+    Self {
+      key,
+      value,
+      pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
+      version: Some(version),
+    }
+  }
+}
+
+impl<K, V, P> Entry<K, V, P> {
   /// Returns the key.
   #[inline]
   pub const fn key(&self) -> &K {
@@ -107,6 +141,7 @@ pub struct EntryWithKeyBuilder<KB, V, P> {
   pub(crate) value: V,
   pub(crate) pointer: Option<P>,
   pub(crate) meta: BatchEncodedEntryMeta,
+  pub(crate) version: Option<u64>,
 }
 
 impl<KB, V, P> EntryWithKeyBuilder<KB, V, P>
@@ -120,7 +155,10 @@ where
   }
 }
 
-impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
+impl<KB, V, P> EntryWithKeyBuilder<KB, V, P>
+where
+  P: WithoutVersion,
+{
   /// Creates a new entry.
   #[inline]
   pub const fn new(kb: KeyBuilder<KB>, value: V) -> Self {
@@ -129,9 +167,29 @@ impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
       value,
       pointer: None,
       meta: BatchEncodedEntryMeta::zero(),
+      version: None,
     }
   }
+}
 
+impl<KB, V, P> EntryWithKeyBuilder<KB, V, P>
+where
+  P: WithVersion,
+{
+  /// Creates a new versioned entry.
+  #[inline]
+  pub const fn with_version(version: u64, kb: KeyBuilder<KB>, value: V) -> Self {
+    Self {
+      kb,
+      value,
+      pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
+      version: Some(version),
+    }
+  }
+}
+
+impl<KB, V, P> EntryWithKeyBuilder<KB, V, P> {
   /// Returns the key.
   #[inline]
   pub const fn key_builder(&self) -> &KeyBuilder<KB> {
@@ -155,6 +213,14 @@ impl<KB, V, C> EntryWithKeyBuilder<KB, V, C> {
   pub fn into_components(self) -> (KeyBuilder<KB>, V) {
     (self.kb, self.value)
   }
+
+  #[inline]
+  pub(crate) const fn internal_key_len(&self) -> usize {
+    match self.version {
+      Some(_) => self.kb.size() as usize + VERSION_SIZE,
+      None => self.kb.size() as usize,
+    }
+  }
 }
 
 /// An entry builder which can build an [`Entry`] to be inserted into the [`Wal`](crate::wal::Wal).
@@ -163,6 +229,7 @@ pub struct EntryWithValueBuilder<K, VB, P> {
   pub(crate) vb: ValueBuilder<VB>,
   pub(crate) pointer: Option<P>,
   pub(crate) meta: BatchEncodedEntryMeta,
+  pub(crate) version: Option<u64>,
 }
 
 impl<K, VB, C> EntryWithValueBuilder<K, VB, C>
@@ -171,12 +238,18 @@ where
 {
   /// Returns the length of the key.
   #[inline]
-  pub(crate) fn key_len(&self) -> usize {
-    self.key.borrow().len()
+  pub(crate) fn internal_key_len(&self) -> usize {
+    match self.version {
+      Some(_) => self.key.borrow().len() + VERSION_SIZE,
+      None => self.key.borrow().len(),
+    }
   }
 }
 
-impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
+impl<K, VB, P> EntryWithValueBuilder<K, VB, P>
+where
+  P: WithoutVersion,
+{
   /// Creates a new entry.
   #[inline]
   pub const fn new(key: K, vb: ValueBuilder<VB>) -> Self {
@@ -185,9 +258,29 @@ impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
       vb,
       pointer: None,
       meta: BatchEncodedEntryMeta::zero(),
+      version: None,
     }
   }
+}
 
+impl<K, VB, P> EntryWithValueBuilder<K, VB, P>
+where
+  P: WithVersion,
+{
+  /// Creates a new versioned entry.
+  #[inline]
+  pub const fn with_version(version: u64, key: K, vb: ValueBuilder<VB>) -> Self {
+    Self {
+      key,
+      vb,
+      pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
+      version: Some(version),
+    }
+  }
+}
+
+impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
   /// Returns the key.
   #[inline]
   pub const fn value_builder(&self) -> &ValueBuilder<VB> {
@@ -210,6 +303,89 @@ impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
   #[inline]
   pub fn into_components(self) -> (K, ValueBuilder<VB>) {
     (self.key, self.vb)
+  }
+}
+
+/// An entry builder which can build an entry to be inserted into the WALs.
+pub struct EntryWithBuilders<KB, VB, P> {
+  pub(crate) kb: KeyBuilder<KB>,
+  pub(crate) vb: ValueBuilder<VB>,
+  pub(crate) pointer: Option<P>,
+  pub(crate) meta: BatchEncodedEntryMeta,
+  pub(crate) version: Option<u64>,
+}
+
+impl<KB, VB, P> EntryWithBuilders<KB, VB, P>
+where
+  P: WithoutVersion,
+{
+  /// Creates a new entry.
+  #[inline]
+  pub const fn new(kb: KeyBuilder<KB>, vb: ValueBuilder<VB>) -> Self {
+    Self {
+      kb,
+      vb,
+      pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
+      version: None,
+    }
+  }
+}
+
+impl<KB, VB, P> EntryWithBuilders<KB, VB, P>
+where
+  P: WithVersion,
+{
+  /// Creates a new entry.
+  #[inline]
+  pub const fn with_version(version: u64, kb: KeyBuilder<KB>, vb: ValueBuilder<VB>) -> Self {
+    Self {
+      kb,
+      vb,
+      pointer: None,
+      meta: BatchEncodedEntryMeta::zero(),
+      version: Some(version),
+    }
+  }
+}
+
+impl<KB, VB, P> EntryWithBuilders<KB, VB, P> {
+  /// Returns the value builder.
+  #[inline]
+  pub const fn value_builder(&self) -> &ValueBuilder<VB> {
+    &self.vb
+  }
+
+  /// Returns the key builder.
+  #[inline]
+  pub const fn key_builder(&self) -> &KeyBuilder<KB> {
+    &self.kb
+  }
+
+  /// Returns the length of the key.
+  #[inline]
+  pub const fn key_len(&self) -> usize {
+    self.kb.size() as usize
+  }
+
+  /// Returns the length of the value.
+  #[inline]
+  pub const fn value_len(&self) -> usize {
+    self.vb.size() as usize
+  }
+
+  /// Consumes the entry and returns the key and value.
+  #[inline]
+  pub fn into_components(self) -> (KeyBuilder<KB>, ValueBuilder<VB>) {
+    (self.kb, self.vb)
+  }
+
+  #[inline]
+  pub(crate) const fn internal_key_len(&self) -> usize {
+    match self.version {
+      Some(_) => self.kb.size() as usize + VERSION_SIZE,
+      None => self.kb.size() as usize,
+    }
   }
 }
 
@@ -440,57 +616,6 @@ impl<'a, K: ?Sized, V: ?Sized> GenericEntry<'a, K, V> {
   #[inline]
   pub fn into_components(self) -> (Generic<'a, K>, Generic<'a, V>) {
     (self.key, self.value)
-  }
-}
-
-/// An entry builder which can build an [`GenericEntry`] to be inserted into the [`GenericOrderWal`](crate::swmr::generic::GenericOrderWal).
-pub struct EntryWithBuilders<KB, VB, P> {
-  pub(crate) kb: KeyBuilder<KB>,
-  pub(crate) vb: ValueBuilder<VB>,
-  pub(crate) pointer: Option<P>,
-  pub(crate) meta: BatchEncodedEntryMeta,
-}
-
-impl<KB, VB, P> EntryWithBuilders<KB, VB, P> {
-  /// Creates a new entry.
-  #[inline]
-  pub const fn new(kb: KeyBuilder<KB>, vb: ValueBuilder<VB>) -> Self {
-    Self {
-      kb,
-      vb,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-    }
-  }
-
-  /// Returns the value builder.
-  #[inline]
-  pub const fn value_builder(&self) -> &ValueBuilder<VB> {
-    &self.vb
-  }
-
-  /// Returns the key builder.
-  #[inline]
-  pub const fn key_builder(&self) -> &KeyBuilder<KB> {
-    &self.kb
-  }
-
-  /// Returns the length of the key.
-  #[inline]
-  pub const fn key_len(&self) -> usize {
-    self.kb.size() as usize
-  }
-
-  /// Returns the length of the value.
-  #[inline]
-  pub const fn value_len(&self) -> usize {
-    self.vb.size() as usize
-  }
-
-  /// Consumes the entry and returns the key and value.
-  #[inline]
-  pub fn into_components(self) -> (KeyBuilder<KB>, ValueBuilder<VB>) {
-    (self.kb, self.vb)
   }
 }
 

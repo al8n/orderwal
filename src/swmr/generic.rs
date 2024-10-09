@@ -26,14 +26,14 @@ use crate::{
   error::{self, Error},
   merge_lengths,
   pointer::GenericPointer,
-  wal::sealed::Constructor,
+  sealed::Constructor,
   BatchEncodedEntryMeta, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder, Flags,
   KeyBuilder, Options, ValueBuilder, CHECKSUM_SIZE, HEADER_SIZE, STATUS_SIZE,
 };
 
 pub use crate::{
+  batch::{BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, GenericBatch},
   entry::{Generic, GenericEntry, GenericEntryRef},
-  wal::{BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, GenericBatch},
 };
 
 pub use dbutils::{
@@ -181,7 +181,7 @@ pub struct GenericOrderWalCore<K: ?Sized, V: ?Sized, S> {
   cks: S,
 }
 
-impl<K, V, S> crate::wal::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S>
+impl<K, V, S> crate::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S>
 where
   K: ?Sized,
   V: ?Sized,

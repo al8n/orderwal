@@ -1,4 +1,4 @@
-use wal::sealed::{Base, WalCore};
+use sealed::{Base, WalCore};
 
 use super::*;
 

@@ -84,13 +84,23 @@ pub use wal::{ImmutableWal, Wal};
 mod options;
 pub use options::Options;
 
+mod batch;
+
 /// A single writer multiple readers ordered write-ahead Log implementation.
 pub mod swmr;
 
 /// An ordered write-ahead Log implementation.
 pub mod unsync;
 
+/// Versioned ordered write-ahead Log implementation.
+pub mod mvcc;
+
 mod pointer;
+
+mod sealed;
+
+/// The mvcc version size.
+const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 
 bitflags::bitflags! {
   /// The flags of the entry.

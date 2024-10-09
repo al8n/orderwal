@@ -1,9 +1,13 @@
-use core::ops::{Bound, RangeBounds};
+use core::{
+  ops::{Bound, RangeBounds},
+  ptr::NonNull,
+};
+
+use pointer::MvccPointer;
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::BuildChecksumer,
-  pointer::Pointer,
   *,
 };
 
@@ -119,52 +123,52 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     Q: ?Sized + Ord,
     C: Comparator;
 
-  /// Returns an iterator over the entries in the WAL.
-  fn iter(&self) -> Self::Iter<'_>
+  /// Returns an iterator over the entries (version is less or equal to the specified version) the WAL.
+  fn iter(&self, version: u64) -> Self::Iter<'_>
   where
     C: Comparator;
 
-  /// Returns an iterator over a subset of entries in the WAL.
-  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
-  where
-    R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: Ord + ?Sized,
-    C: Comparator;
-
-  /// Returns an iterator over the keys in the WAL.
-  fn keys(&self) -> Self::Keys<'_>
-  where
-    C: Comparator;
-
-  /// Returns an iterator over a subset of keys in the WAL.
-  fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
+  /// Returns an iterator over a subset of entries (version is less or equal to the specified version) in the WAL.
+  fn range<Q, R>(&self, version: u64, range: R) -> Self::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator;
 
-  /// Returns an iterator over the values in the WAL.
-  fn values(&self) -> Self::Values<'_>
+  /// Returns an iterator over the keys (version is less or equal to the specified version) in the WAL.
+  fn keys(&self, version: u64) -> Self::Keys<'_>
   where
     C: Comparator;
 
-  /// Returns an iterator over a subset of values in the WAL.
-  fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
+  /// Returns an iterator over a subset of keys (version is less or equal to the specified version) in the WAL.
+  fn range_keys<Q, R>(&self, version: u64, range: R) -> Self::RangeKeys<'_, Q, R>
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: Ord + ?Sized,
     C: Comparator;
 
-  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
-  fn first(&self) -> Option<(&[u8], &[u8])>
+  /// Returns an iterator over the values (version is less or equal to the specified version) in the WAL.
+  fn values(&self, version: u64) -> Self::Values<'_>
   where
     C: Comparator;
 
-  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(&self) -> Option<(&[u8], &[u8])>
+  /// Returns an iterator over a subset of values (version is less or equal to the specified version) in the WAL.
+  fn range_values<Q, R>(&self, version: u64, range: R) -> Self::RangeValues<'_, Q, R>
+  where
+    R: RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator;
+
+  /// Returns the first key-value pair (version is less or equal to the specified version) in the map. The key in this pair is the minimum key in the wal.
+  fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator;
+
+  /// Returns the last key-value pair (version is less or equal to the specified version) in the map. The key in this pair is the maximum key in the wal.
+  fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
     C: Comparator;
 
@@ -175,34 +179,38 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
     Q: ?Sized + Ord,
     C: Comparator;
 
-  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// Returns a value associated to the highest element whose key is below the given bound
+  /// and version is less or equal to the specified version.
+  ///
   /// If no such element is found then `None` is returned.
   // TODO: implement this method for unsync::OrderWal when BTreeMap::upper_bound is stable
   #[inline]
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     C: Comparator,
   {
     self
-      .range((Bound::Unbounded, bound))
+      .range(version, (Bound::Unbounded, bound))
       .last()
       .map(|ent| ent.0)
   }
 
-  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// Returns a value associated to the lowest element whose key is above the given bound
+  /// and version is less or equal to the specified version.
+  ///
   /// If no such element is found then `None` is returned.
   // TODO: implement this method for unsync::OrderWal when BTreeMap::lower_bound is stable
   #[inline]
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     C: Comparator,
   {
     self
-      .range((bound, Bound::Unbounded))
+      .range(version, (bound, Bound::Unbounded))
       .next()
       .map(|ent| ent.0)
   }
@@ -210,7 +218,7 @@ pub trait ImmutableWal<C, S>: sealed::Constructor<C, S> {
 
 /// An abstract layer for the write-ahead log.
 pub trait Wal<C, S>:
-  sealed::Sealed<C, S, Pointer = super::pointer::Pointer<C>> + ImmutableWal<C, S>
+  sealed::Sealed<C, S, Pointer = super::pointer::MvccPointer<C>> + ImmutableWal<C, S>
 {
   /// The read only reader type for this wal.
   type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>;
@@ -260,14 +268,20 @@ pub trait Wal<C, S>:
   /// Returns the read-only view for the WAL.
   fn reader(&self) -> Self::Reader;
 
-  /// Get or insert a new entry into the WAL.
-  fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
+  /// Get (version is less or equal to the specified version) or insert a new entry into the WAL.
+  fn get_or_insert(
+    &mut self,
+    version: u64,
+    key: &[u8],
+    value: &[u8],
+  ) -> Result<Option<&[u8]>, Error>
   where
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
     self
       .get_or_insert_with_value_builder::<()>(
+        version,
         key,
         ValueBuilder::once(value.len() as u32, |buf| {
           buf.put_slice_unchecked(value);
@@ -277,9 +291,10 @@ pub trait Wal<C, S>:
       .map_err(|e| e.unwrap_right())
   }
 
-  /// Get or insert a new entry into the WAL.
+  /// Get (version is less or equal to the specified version) or insert a new entry into the WAL.
   fn get_or_insert_with_value_builder<E>(
     &mut self,
+    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
@@ -287,12 +302,44 @@ pub trait Wal<C, S>:
     C: Comparator + CheapClone,
     S: BuildChecksumer;
 
+  /// Inserts a key-value pair into the WAL.
+  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    let klen = VERSION_SIZE + key.len();
+    self.check(
+      klen,
+      value.len(),
+      self.maximum_key_size(),
+      self.maximum_value_size(),
+      self.read_only(),
+    )?;
+
+    self
+      .insert_with_in::<(), ()>(
+        KeyBuilder::once(klen as u32, |buf: &mut VacantBuffer<'_>| {
+          buf.put_u64_le_unchecked(version);
+          buf.put_slice_unchecked(key);
+          Ok(())
+        }),
+        ValueBuilder::once(value.len() as u32, |buf: &mut VacantBuffer<'_>| {
+          buf.put_slice_unchecked(value);
+          Ok(())
+        }),
+      )
+      .map(|ptr| self.insert_pointer(ptr))
+      .map_err(Among::unwrap_right)
+  }
+
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
   ///
   /// See also [`insert_with_value_builder`](Wal::insert_with_value_builder) and [`insert_with_builders`](Wal::insert_with_builders).
   fn insert_with_key_builder<E>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
@@ -300,15 +347,25 @@ pub trait Wal<C, S>:
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    let (ksize, kb) = kb.into_components();
+    let klen = VERSION_SIZE + ksize as usize;
     self
       .check(
-        kb.size() as usize,
+        klen,
         value.len(),
         self.maximum_key_size(),
         self.maximum_value_size(),
         self.read_only(),
       )
       .map_err(Either::Right)?;
+
+    let kb = KeyBuilder::once(klen as u32, |buf: &mut VacantBuffer<'_>| {
+      buf.put_u64_le_unchecked(version);
+      let ptr = buf.as_mut_ptr();
+      buf.set_len(klen);
+      let mut buf = unsafe { VacantBuffer::new(ksize as usize, NonNull::new_unchecked(ptr)) };
+      kb(&mut buf)
+    });
 
     self
       .insert_with_in::<E, ()>(
@@ -328,6 +385,7 @@ pub trait Wal<C, S>:
   /// See also [`insert_with_key_builder`](Wal::insert_with_key_builder) and [`insert_with_builders`](Wal::insert_with_builders).
   fn insert_with_value_builder<E>(
     &mut self,
+    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
@@ -335,9 +393,10 @@ pub trait Wal<C, S>:
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    let klen = VERSION_SIZE + key.len();
     self
       .check(
-        key.len(),
+        klen,
         vb.size() as usize,
         self.maximum_key_size(),
         self.maximum_value_size(),
@@ -347,7 +406,8 @@ pub trait Wal<C, S>:
 
     self
       .insert_with_in::<(), E>(
-        KeyBuilder::once(key.len() as u32, |buf| {
+        KeyBuilder::once(klen as u32, |buf| {
+          buf.put_u64_le_unchecked(version);
           buf.put_slice_unchecked(key);
           Ok(())
         }),
@@ -361,6 +421,7 @@ pub trait Wal<C, S>:
   /// allows the caller to build the key and value in place.
   fn insert_with_builders<KE, VE>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
@@ -368,15 +429,25 @@ pub trait Wal<C, S>:
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
+    let (ksize, kb) = kb.into_components();
+    let klen = VERSION_SIZE + ksize as usize;
     self
       .check(
-        kb.size() as usize,
+        klen,
         vb.size() as usize,
         self.maximum_key_size(),
         self.maximum_value_size(),
         self.read_only(),
       )
       .map_err(Among::Right)?;
+
+    let kb = KeyBuilder::once(klen as u32, |buf: &mut VacantBuffer<'_>| {
+      buf.put_u64_le_unchecked(version);
+      let ptr = buf.as_mut_ptr();
+      buf.set_len(klen);
+      let mut buf = unsafe { VacantBuffer::new(ksize as usize, NonNull::new_unchecked(ptr)) };
+      kb(&mut buf)
+    });
 
     self
       .insert_with_in(kb, vb)
@@ -389,7 +460,7 @@ pub trait Wal<C, S>:
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
-    B: BatchWithKeyBuilder<Pointer<C>>,
+    B: BatchWithKeyBuilder<MvccPointer<C>>,
     B::Value: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
@@ -409,7 +480,7 @@ pub trait Wal<C, S>:
     batch: &mut B,
   ) -> Result<(), Either<B::Error, Error>>
   where
-    B: BatchWithValueBuilder<Pointer<C>>,
+    B: BatchWithValueBuilder<MvccPointer<C>>,
     B::Key: Borrow<[u8]>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
@@ -429,7 +500,7 @@ pub trait Wal<C, S>:
     batch: &mut B,
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
-    B: BatchWithBuilders<Pointer<C>>,
+    B: BatchWithBuilders<MvccPointer<C>>,
     C: Comparator + CheapClone,
     S: BuildChecksumer,
   {
@@ -445,7 +516,7 @@ pub trait Wal<C, S>:
   /// Inserts a batch of key-value pairs into the WAL.
   fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
   where
-    B: Batch<Pointer = Pointer<C>>,
+    B: Batch<Pointer = MvccPointer<C>>,
     B::Key: Borrow<[u8]>,
     B::Value: Borrow<[u8]>,
     C: Comparator + CheapClone,
@@ -458,34 +529,5 @@ pub trait Wal<C, S>:
     self
       .insert_batch_in(batch)
       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
-  }
-
-  /// Inserts a key-value pair into the WAL.
-  fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>
-  where
-    C: Comparator + CheapClone,
-    S: BuildChecksumer,
-  {
-    self.check(
-      key.len(),
-      value.len(),
-      self.maximum_key_size(),
-      self.maximum_value_size(),
-      self.read_only(),
-    )?;
-
-    self
-      .insert_with_in::<(), ()>(
-        KeyBuilder::once(key.len() as u32, |buf: &mut VacantBuffer<'_>| {
-          buf.put_slice_unchecked(key);
-          Ok(())
-        }),
-        ValueBuilder::once(value.len() as u32, |buf: &mut VacantBuffer<'_>| {
-          buf.put_slice_unchecked(value);
-          Ok(())
-        }),
-      )
-      .map(|ptr| self.insert_pointer(ptr))
-      .map_err(Among::unwrap_right)
   }
 }

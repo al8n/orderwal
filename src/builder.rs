@@ -1,8 +1,6 @@
-use checksum::BuildChecksumer;
-use options::ArenaOptionsExt;
-use wal::{sealed::Constructor, Wal};
-
-use super::*;
+use super::{
+  checksum::BuildChecksumer, options::ArenaOptionsExt, sealed::Constructor, wal::Wal, *,
+};
 
 /// A write-ahead log builder.
 pub struct Builder<C = Ascend, S = Crc32> {

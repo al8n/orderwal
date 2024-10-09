@@ -1,6 +1,6 @@
-use core::borrow::Borrow;
+use dbutils::buffer::VacantBuffer;
 
-use dbutils::{buffer::VacantBuffer, Comparator};
+use crate::sealed::Pointer;
 
 use super::entry::{
   Entry, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder, GenericEntry,
@@ -9,16 +9,16 @@ use super::entry::{
 /// A batch of keys and values that can be inserted into the [`Wal`](super::Wal).
 pub trait Batch {
   /// The key type.
-  type Key: Borrow<[u8]>;
+  type Key;
 
   /// The value type.
-  type Value: Borrow<[u8]>;
+  type Value;
 
-  /// The [`Comparator`] type.
-  type Comparator: Comparator;
+  /// The [`Pointer`] type.
+  type Pointer;
 
   /// The iterator type.
-  type IterMut<'a>: Iterator<Item = &'a mut Entry<Self::Key, Self::Value, Self::Comparator>>
+  type IterMut<'a>: Iterator<Item = &'a mut Entry<Self::Key, Self::Value, Self::Pointer>>
   where
     Self: 'a;
 
@@ -26,16 +26,14 @@ pub trait Batch {
   fn iter_mut(&mut self) -> Self::IterMut<'_>;
 }
 
-impl<K, V, C, T> Batch for T
+impl<K, V, P, T> Batch for T
 where
-  K: Borrow<[u8]>,
-  V: Borrow<[u8]>,
-  C: Comparator,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut Entry<K, V, C>>,
+  P: Pointer,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut Entry<K, V, P>>,
 {
   type Key = K;
   type Value = V;
-  type Comparator = C;
+  type Pointer = P;
 
   type IterMut<'a>
     = <&'a mut T as IntoIterator>::IntoIter

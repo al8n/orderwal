@@ -3,15 +3,16 @@ use crossbeam_skiplist::SkipSet;
 use crate::{
   error::Error,
   pointer::Pointer,
-  wal::sealed::{Constructor, Sealed, WalCore},
+  sealed::{Constructor, Sealed, WalCore},
   Ascend, Options,
 };
 use dbutils::checksum::{BuildChecksumer, Crc32};
 use rarena_allocator::{either::Either, Allocator};
 
 pub use crate::{
+  batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   builder::Builder,
-  wal::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder, ImmutableWal, Wal},
+  wal::{ImmutableWal, Wal},
   Comparator, KeyBuilder, VacantBuffer, ValueBuilder,
 };
 pub use dbutils::CheapClone;
