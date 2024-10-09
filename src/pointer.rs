@@ -5,7 +5,7 @@ use dbutils::{
   Comparator,
 };
 
-use crate::VERSION_SIZE;
+use crate::{sealed::Pointer as _, VERSION_SIZE};
 
 #[doc(hidden)]
 pub struct Pointer<C> {
@@ -20,38 +20,6 @@ pub struct Pointer<C> {
 
 unsafe impl<C: Send> Send for Pointer<C> {}
 unsafe impl<C: Sync> Sync for Pointer<C> {}
-
-impl<C> Pointer<C> {
-  #[inline]
-  pub(crate) const fn new(key_len: usize, value_len: usize, ptr: *const u8, cmp: C) -> Self {
-    Self {
-      ptr,
-      key_len,
-      value_len,
-      cmp,
-    }
-  }
-
-  #[inline]
-  pub const fn as_key_slice<'a>(&self) -> &'a [u8] {
-    if self.key_len == 0 {
-      return &[];
-    }
-
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
-  }
-
-  #[inline]
-  pub const fn as_value_slice<'a, 'b: 'a>(&'a self) -> &'b [u8] {
-    if self.value_len == 0 {
-      return &[];
-    }
-
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
-  }
-}
 
 impl<C: Comparator> PartialEq for Pointer<C> {
   fn eq(&self, other: &Self) -> bool {
@@ -91,7 +59,37 @@ impl<C> super::sealed::Pointer for Pointer<C> {
 
   #[inline]
   fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: C) -> Self {
-    Pointer::<C>::new(klen, vlen, ptr, cmp)
+    Self {
+      ptr,
+      key_len: klen,
+      value_len: vlen,
+      cmp,
+    }
+  }
+
+  #[inline]
+  fn as_key_slice<'a>(&self) -> &'a [u8] {
+    if self.key_len == 0 {
+      return &[];
+    }
+
+    // SAFETY: `ptr` is a valid pointer to `len` bytes.
+    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
+  }
+
+  #[inline]
+  fn as_value_slice<'a>(&self) -> &'a [u8] {
+    if self.value_len == 0 {
+      return &[];
+    }
+
+    // SAFETY: `ptr` is a valid pointer to `len` bytes.
+    unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
+  }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    0
   }
 }
 
@@ -113,6 +111,31 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   #[inline]
   fn new(klen: usize, vlen: usize, ptr: *const u8, _cmp: Self::Comparator) -> Self {
     Self::new(klen, vlen, ptr)
+  }
+
+  #[inline]
+  fn as_key_slice<'a>(&self) -> &'a [u8] {
+    if self.key_len == 0 {
+      return &[];
+    }
+
+    // SAFETY: `ptr` is a valid pointer to `len` bytes.
+    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
+  }
+
+  #[inline]
+  fn as_value_slice<'a>(&self) -> &'a [u8] {
+    if self.value_len == 0 {
+      return &[];
+    }
+
+    // SAFETY: `ptr` is a valid pointer to `len` bytes.
+    unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
+  }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    0
   }
 }
 
@@ -174,26 +197,6 @@ where
       _m: PhantomData,
     }
   }
-
-  #[inline]
-  pub const fn as_key_slice<'a>(&self) -> &'a [u8] {
-    if self.key_len == 0 {
-      return &[];
-    }
-
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
-  }
-
-  #[inline]
-  pub const fn as_value_slice<'a, 'b: 'a>(&'a self) -> &'b [u8] {
-    if self.value_len == 0 {
-      return &[];
-    }
-
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
-  }
 }
 
 #[doc(hidden)]
@@ -215,38 +218,10 @@ impl<C> MvccPointer<C> {
   pub(crate) const fn new(key_len: usize, value_len: usize, ptr: *const u8, cmp: C) -> Self {
     Self {
       ptr,
-      key_len,
+      key_len: key_len - VERSION_SIZE,
       value_len,
       cmp,
     }
-  }
-
-  #[inline]
-  pub fn version(&self) -> u64 {
-    unsafe {
-      let slice = slice::from_raw_parts(self.ptr, VERSION_SIZE);
-      u64::from_le_bytes(slice.try_into().unwrap())
-    }
-  }
-
-  #[inline]
-  pub const fn as_key_slice<'a>(&self) -> &'a [u8] {
-    if self.key_len == 0 {
-      return &[];
-    }
-
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(VERSION_SIZE), self.key_len) }
-  }
-
-  #[inline]
-  pub const fn as_value_slice<'a, 'b: 'a>(&'a self) -> &'b [u8] {
-    if self.value_len == 0 {
-      return &[];
-    }
-
-    // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(VERSION_SIZE + self.key_len), self.value_len) }
   }
 }
 
@@ -293,6 +268,34 @@ impl<C> super::sealed::Pointer for MvccPointer<C> {
   #[inline]
   fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: C) -> Self {
     MvccPointer::<C>::new(klen, vlen, ptr, cmp)
+  }
+
+  #[inline]
+  fn as_key_slice<'a>(&self) -> &'a [u8] {
+    if self.key_len == 0 {
+      return &[];
+    }
+
+    // SAFETY: `ptr` is a valid pointer to `len` bytes.
+    unsafe { slice::from_raw_parts(self.ptr.add(VERSION_SIZE), self.key_len) }
+  }
+
+  #[inline]
+  fn as_value_slice<'a>(&self) -> &'a [u8] {
+    if self.value_len == 0 {
+      return &[];
+    }
+
+    // SAFETY: `ptr` is a valid pointer to `len` bytes.
+    unsafe { slice::from_raw_parts(self.ptr.add(VERSION_SIZE + self.key_len), self.value_len) }
+  }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    unsafe {
+      let slice = slice::from_raw_parts(self.ptr, VERSION_SIZE);
+      u64::from_le_bytes(slice.try_into().unwrap())
+    }
   }
 }
 

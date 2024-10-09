@@ -10,6 +10,7 @@ use rarena_allocator::either::Either;
 
 use crate::{
   pointer::{WithVersion, WithoutVersion},
+  sealed::Pointer as _,
   VERSION_SIZE,
 };
 

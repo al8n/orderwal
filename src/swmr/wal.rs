@@ -63,6 +63,49 @@ where
   type Base = SkipSet<Pointer<C>>;
   type Pointer = Pointer<C>;
 
+  type Iter<'a>
+    = Iter<'a, C>
+  where
+    Self: 'a,
+    C: Comparator;
+  type Range<'a, Q, R>
+    = Range<'a, Q, R, C>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
+  type Keys<'a>
+    = Keys<'a, C>
+  where
+    Self: 'a,
+    C: Comparator;
+
+  type RangeKeys<'a, Q, R>
+    = RangeKeys<'a, Q, R, C>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
+
+  type Values<'a>
+    = Values<'a, C>
+  where
+    Self: 'a,
+    C: Comparator;
+
+  type RangeValues<'a, Q, R>
+    = RangeValues<'a, Q, R, C>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    Self: 'a,
+    C: Comparator;
+
   #[inline]
   fn construct(arena: Arena, set: SkipSet<Pointer<C>>, opts: Options, cmp: C, cks: S) -> Self {
     Self {
@@ -71,6 +114,198 @@ where
       cmp,
       opts,
       cks,
+    }
+  }
+
+  #[inline]
+  fn allocator(&self) -> &Self::Allocator {
+    &self.arena
+  }
+
+  #[inline]
+  fn options(&self) -> &Options {
+    &self.opts
+  }
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.map.len()
+  }
+
+  #[inline]
+  fn is_empty(&self) -> bool {
+    self.map.is_empty()
+  }
+
+  #[inline]
+  fn contains_key<Q>(&self, key: &Q) -> bool
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self.map.contains(key)
+  }
+
+  #[inline]
+  fn iter(&self) -> Self::Iter<'_>
+  where
+    C: Comparator,
+  {
+    Iter::new(self.map.iter())
+  }
+
+  #[inline]
+  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized + crossbeam_skiplist::Comparable<[u8]>,
+    C: Comparator,
+  {
+    Range::new(self.map.range(range))
+  }
+
+  #[inline]
+  fn keys(&self) -> Self::Keys<'_>
+  where
+    C: Comparator,
+  {
+    Keys::new(self.map.iter())
+  }
+
+  #[inline]
+  fn range_keys<Q, R>(&self, range: R) -> Self::RangeKeys<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    RangeKeys::new(self.map.range(range))
+  }
+
+  #[inline]
+  fn values(&self) -> Self::Values<'_>
+  where
+    C: Comparator,
+  {
+    Values::new(self.map.iter())
+  }
+
+  #[inline]
+  fn range_values<Q, R>(&self, range: R) -> Self::RangeValues<'_, Q, R>
+  where
+    R: core::ops::RangeBounds<Q>,
+    [u8]: Borrow<Q>,
+    Q: Ord + ?Sized,
+    C: Comparator,
+  {
+    RangeValues::new(self.map.range(range))
+  }
+
+  #[inline]
+  fn first(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator,
+  {
+    self
+      .map
+      .front()
+      .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
+  }
+
+  #[inline]
+  fn last(&self) -> Option<(&[u8], &[u8])>
+  where
+    C: Comparator,
+  {
+    self
+      .map
+      .back()
+      .map(|ent| (ent.as_key_slice(), ent.as_value_slice()))
+  }
+
+  #[inline]
+  fn get<Q>(&self, key: &Q) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self.map.get(key).map(|ent| ent.as_value_slice())
+  }
+
+  #[inline]
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self.map.upper_bound(bound).map(|ent| ent.as_value_slice())
+  }
+
+  #[inline]
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  where
+    [u8]: Borrow<Q>,
+    Q: ?Sized + Ord,
+    C: Comparator,
+  {
+    self.map.lower_bound(bound).map(|ent| ent.as_value_slice())
+  }
+
+  fn get_or_insert_with_value_builder<E>(
+    &mut self,
+    key: &[u8],
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+  ) -> Result<Option<&[u8]>, Either<E, Error>>
+  where
+    C: Comparator + CheapClone,
+    S: BuildChecksumer,
+  {
+    self
+      .check(
+        key.len(),
+        vb.size() as usize,
+        self.maximum_key_size(),
+        self.maximum_value_size(),
+        self.read_only(),
+      )
+      .map_err(Either::Right)?;
+
+    if let Some(ent) = self.map.get(key) {
+      return Ok(Some(ent.as_value_slice()));
+    }
+
+    self.insert_with_value_builder::<E>(key, vb).map(|_| None)
+  }
+
+  #[inline]
+  fn hasher(&self) -> &S {
+    &self.cks
+  }
+
+  #[inline]
+  fn comparator(&self) -> &C {
+    &self.cmp
+  }
+
+  #[inline]
+  fn insert_pointer(&mut self, ptr: Pointer<C>)
+  where
+    C: Comparator,
+  {
+    self.map.insert(ptr);
+  }
+
+  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = Pointer<C>>)
+  where
+    C: Comparator,
+  {
+    for ptr in ptrs {
+      self.map.insert(ptr);
     }
   }
 }

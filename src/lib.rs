@@ -12,10 +12,7 @@ pub use among;
 use among::Among;
 use crossbeam_skiplist::SkipSet;
 use error::Error;
-use rarena_allocator::{
-  either::{self, Either},
-  Allocator, Buffer, Freelist, Options as ArenaOptions,
-};
+use rarena_allocator::{either::Either, Allocator, Buffer, Freelist, Options as ArenaOptions};
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -94,6 +91,9 @@ pub mod unsync;
 
 /// Versioned ordered write-ahead Log implementation.
 pub mod mvcc;
+
+/// Iterators for the WALs.
+pub mod iter;
 
 mod pointer;
 

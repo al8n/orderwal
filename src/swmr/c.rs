@@ -3,59 +3,80 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
+use crossbeam_skiplist::SkipSet;
 use dbutils::Comparator;
 use rarena_allocator::sync::Arena;
-use std::collections::{btree_set, BTreeSet};
 
 use crate::{
   sealed::{self, WalCore},
   Options,
 };
 
-pub struct OrderWalCore<P, C, S> {
-  pub(super) arena: Arena,
-  pub(super) map: BTreeSet<P>,
-  pub(super) max_version: u64,
-  pub(super) min_version: u64,
-  pub(super) opts: Options,
-  pub(super) cmp: C,
-  pub(super) cks: S,
-}
-
-impl<P> sealed::Base for BTreeSet<P>
+impl<P> sealed::Base for SkipSet<P>
 where
-  P: sealed::Pointer + Ord,
+  P: sealed::Pointer + Send + Ord,
 {
   type Pointer = P;
 
-  fn insert(&mut self, ele: Self::Pointer) {
-    BTreeSet::insert(self, ele);
-  }
-
   type Item<'a>
-    = &'a P
+    = crossbeam_skiplist::set::Entry<'a, P>
   where
     Self::Pointer: 'a,
     Self: 'a;
 
   type Iterator<'a>
-    = btree_set::Iter<'a, P>
+    = crossbeam_skiplist::set::Iter<'a, P>
   where
     Self::Pointer: 'a,
     Self: 'a;
 
   type Range<'a, Q, R>
-    = btree_set::Range<'a, P>
+    = crossbeam_skiplist::set::Range<'a, Q, R, P>
   where
     Self::Pointer: 'a,
     Self: 'a,
-    Self::Pointer: Borrow<Q>,
     R: RangeBounds<Q>,
-    Q: ?Sized + Ord;
+    Self::Pointer: Borrow<Q>,
+    Q: Ord + ?Sized;
+
+  fn insert(&mut self, ele: Self::Pointer)
+  where
+    P: Ord + 'static,
+  {
+    SkipSet::insert(self, ele);
+  }
+
+  #[inline]
+  fn first(&self) -> Option<Self::Item<'_>> {
+    SkipSet::front(self)
+  }
+
+  #[inline]
+  fn last(&self) -> Option<Self::Item<'_>> {
+    SkipSet::back(self)
+  }
+
+  #[inline]
+  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Borrow<Q>,
+    Q: Ord + ?Sized,
+  {
+    SkipSet::get(self, key)
+  }
+
+  #[inline]
+  fn contains<Q>(&self, key: &Q) -> bool
+  where
+    Self::Pointer: Borrow<Q>,
+    Q: Ord + ?Sized,
+  {
+    SkipSet::contains(self, key)
+  }
 
   #[inline]
   fn iter(&self) -> Self::Iterator<'_> {
-    self.iter()
+    SkipSet::iter(self)
   }
 
   #[inline]
@@ -65,45 +86,27 @@ where
     Self::Pointer: Borrow<Q>,
     Q: Ord + ?Sized,
   {
-    self.range(range)
+    SkipSet::range(self, range)
   }
+}
 
-  #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
-  where
-    Self::Pointer: Borrow<Q>,
-    Q: ?Sized + Ord,
-  {
-    self.get(key)
-  }
-
-  #[inline]
-  fn contains<Q>(&self, key: &Q) -> bool
-  where
-    Self::Pointer: Borrow<Q>,
-    Q: ?Sized + Ord,
-  {
-    self.contains(key)
-  }
-
-  #[inline]
-  fn first(&self) -> Option<Self::Item<'_>> {
-    self.first()
-  }
-
-  #[inline]
-  fn last(&self) -> Option<Self::Item<'_>> {
-    self.last()
-  }
+pub struct OrderWalCore<P, C, S> {
+  pub(super) arena: Arena,
+  pub(super) map: SkipSet<P>,
+  pub(super) max_version: u64,
+  pub(super) min_version: u64,
+  pub(super) opts: Options,
+  pub(super) cmp: C,
+  pub(super) cks: S,
 }
 
 impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S>
 where
   C: Comparator,
-  P: sealed::Pointer<Comparator = C> + Ord,
+  P: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Base = BTreeSet<P>;
+  type Base = SkipSet<P>;
 
   #[inline]
   fn base(&self) -> &Self::Base {
@@ -113,7 +116,7 @@ where
   #[inline]
   fn construct(
     arena: Arena,
-    set: BTreeSet<P>,
+    set: SkipSet<P>,
     opts: Options,
     cmp: C,
     checksumer: S,
@@ -163,30 +166,46 @@ where
     &self.arena
   }
 
-  // TODO: implement this method for unsync::OrderWal when BTreeMap::upper_bound is stable
   #[inline]
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
     P: Borrow<Q> + sealed::Pointer + Ord,
     Q: ?Sized + Ord,
   {
-    self
-      .range(version, (Bound::Unbounded, bound))
-      .last()
-      .map(|ent| ent.0)
+    match version {
+      None => self.map.upper_bound(bound).map(|ent| ent.as_key_slice()),
+      Some(version) => {
+        let mut ent = self.map.upper_bound(bound);
+        loop {
+          match ent {
+            Some(ent) if ent.version() <= version => return Some(ent.as_key_slice()),
+            Some(e) => ent = e.next(),
+            None => return None,
+          }
+        }
+      }
+    }
   }
 
-  // TODO: implement this method for unsync::OrderWal when BTreeMap::lower_bound is stable
   #[inline]
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<&[u8]>
   where
     P: Borrow<Q> + sealed::Pointer,
     Q: ?Sized + Ord,
   {
-    self
-      .range(version, (bound, Bound::Unbounded))
-      .next()
-      .map(|ent| ent.0)
+    match version {
+      None => self.map.lower_bound(bound).map(|ent| ent.as_key_slice()),
+      Some(version) => {
+        let mut ent = self.map.lower_bound(bound);
+        loop {
+          match ent {
+            Some(ent) if ent.version() <= version => return Some(ent.as_key_slice()),
+            Some(e) => ent = e.next(),
+            None => return None,
+          }
+        }
+      }
+    }
   }
 
   #[inline]
@@ -206,17 +225,8 @@ where
 
   #[inline]
   fn insert_pointers(&mut self, ptrs: impl Iterator<Item = P>) {
-    self.map.extend(ptrs);
+    for ptr in ptrs {
+      self.map.insert(ptr);
+    }
   }
 }
-
-// #[test]
-// fn test_() {
-//   let core: OrderWalCore<pointer::Pointer<Ascend>, Ascend, Crc32> = todo!();
-
-//   let start: &[u8] = &[0u8, 1u8];
-//   let end: &[u8] = &[10u8];
-//   core.range::<[u8], _>(None, (Bound::Included(start), Bound::Excluded(end)));
-//   core.upper_bound::<[u8]>(None, Bound::Included(start));
-//   core.get_or_insert(None, &[0u8], &[1]);
-// }
