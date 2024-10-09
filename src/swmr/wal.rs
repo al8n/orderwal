@@ -126,18 +126,22 @@ impl<C, S> Sealed<C, S> for OrderWal<C, S>
 where
   C: Comparator + CheapClone + Send + 'static,
 {
+  #[inline]
   fn hasher(&self) -> &S {
     &self.core.cks
   }
 
+  #[inline]
   fn options(&self) -> &Options {
     &self.core.opts
   }
 
+  #[inline]
   fn comparator(&self) -> &C {
     &self.core.cmp
   }
 
+  #[inline]
   fn insert_pointer(&self, ptr: Pointer<C>)
   where
     C: Comparator,
