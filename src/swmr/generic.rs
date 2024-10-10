@@ -26,7 +26,7 @@ use crate::{
   error::{self, Error},
   merge_lengths,
   pointer::GenericPointer,
-  sealed::Constructor,
+  sealed::Constructable,
   BatchEncodedEntryMeta, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder, Flags,
   KeyBuilder, Options, ValueBuilder, CHECKSUM_SIZE, HEADER_SIZE, STATUS_SIZE,
 };
@@ -174,14 +174,14 @@ where
   }
 }
 #[doc(hidden)]
-pub struct GenericOrderWalCore<K: ?Sized, V: ?Sized, S> {
+pub struct GenericOrderCore<K: ?Sized, V: ?Sized, S> {
   arena: Arena,
   map: SkipSet<GenericPointer<K, V>>,
   opts: Options,
   cks: S,
 }
 
-impl<K, V, S> crate::sealed::WalCore<(), S> for GenericOrderWalCore<K, V, S>
+impl<K, V, S> crate::sealed::Core<(), S> for GenericOrderCore<K, V, S>
 where
   K: ?Sized,
   V: ?Sized,
@@ -203,7 +203,7 @@ where
   }
 }
 
-impl<K, V, S> GenericOrderWalCore<K, V, S>
+impl<K, V, S> GenericOrderCore<K, V, S>
 where
   K: ?Sized,
   V: ?Sized,
@@ -266,14 +266,14 @@ where
   }
 }
 
-impl<K, V, S> Constructor<(), S> for GenericOrderWal<K, V, S>
+impl<K, V, S> Constructable<(), S> for GenericOrderWal<K, V, S>
 where
   K: ?Sized,
   V: ?Sized,
 {
   type Allocator = Arena;
 
-  type Core = GenericOrderWalCore<K, V, S>;
+  type Core = GenericOrderCore<K, V, S>;
 
   type Pointer = GenericPointer<K, V>;
 
@@ -289,7 +289,7 @@ where
   }
 }
 
-impl<K, V, S> GenericOrderWalCore<K, V, S>
+impl<K, V, S> GenericOrderCore<K, V, S>
 where
   K: Type + Ord + ?Sized,
   for<'a> <K as Type>::Ref<'a>: KeyRef<'a, K>,
@@ -381,7 +381,7 @@ where
 ///
 /// Users can create multiple readers from the WAL by [`GenericOrderWal::reader`], but only one writer is allowed.
 pub struct GenericOrderWal<K: ?Sized, V: ?Sized, S = Crc32> {
-  core: Arc<GenericOrderWalCore<K, V, S>>,
+  core: Arc<GenericOrderCore<K, V, S>>,
   ro: bool,
 }
 

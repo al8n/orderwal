@@ -5,7 +5,7 @@ use core::{
 
 use among::Among;
 use dbutils::{buffer::VacantBuffer, CheapClone};
-use rarena_allocator::either::Either;
+use rarena_allocator::{either::Either, Allocator};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
@@ -13,12 +13,12 @@ use super::{
   error::Error,
   iter::*,
   pointer::WithoutVersion,
-  sealed::{Base, Constructor, Pointer, WalCore},
+  sealed::{Base, Constructable, Pointer, Core},
   KeyBuilder, Options, ValueBuilder,
 };
 
 /// An abstract layer for the immutable write-ahead log.
-pub trait ImmutableWal<C, S>: Constructor<C, S> {
+pub trait Reader<C, S>: Constructable<C, S> {
   /// Returns the reserved space in the WAL.
   ///
   /// ## Safety
@@ -31,9 +31,8 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
-  fn path(&self) -> Option<&std::path::Path> {
-    // self.allocator().path().map(|p| p.as_path())
-    todo!()
+  fn path(&self) -> Option<&<<Self as Constructable<C, S>>::Allocator as Allocator>::Path> {
+    self.as_core().path()
   }
 
   /// Returns the number of entries in the WAL.
@@ -96,7 +95,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
     version: u64,
   ) -> Iter<
     '_,
-    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
     self.as_core().iter(Some(version))
@@ -110,7 +109,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
     range: R,
   ) -> Range<
     '_,
-    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
     Self::Pointer,
   >
   where
@@ -129,7 +128,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
     version: u64,
   ) -> Keys<
     '_,
-    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
     self.as_core().keys(Some(version))
@@ -143,7 +142,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
     Self::Pointer,
   >
   where
@@ -162,7 +161,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
     version: u64,
   ) -> Values<
     '_,
-    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
     self.as_core().values(Some(version))
@@ -176,7 +175,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Core as WalCore<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
     Self::Pointer,
   >
   where
@@ -202,7 +201,7 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
   where
     Self::Pointer: Pointer<Comparator = C> + Ord,
   {
-    WalCore::last(self.as_core(), Some(version))
+    Core::last(self.as_core(), Some(version))
   }
 
   /// Returns the value associated with the key.
@@ -241,19 +240,19 @@ pub trait ImmutableWal<C, S>: Constructor<C, S> {
   }
 }
 
-impl<T, C, S> ImmutableWal<C, S> for T
+impl<T, C, S> Reader<C, S> for T
 where
-  T: Constructor<C, S>,
+  T: Constructable<C, S>,
   T::Pointer: WithoutVersion,
 {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Wal<C, S>: ImmutableWal<C, S> {
+pub trait Writer<C, S>: Reader<C, S> {
   /// The read only reader type for this wal.
-  type Reader: ImmutableWal<C, S, Pointer = Self::Pointer>
+  type Reader: Reader<C, S, Pointer = Self::Pointer>
   where
-    Self::Core: WalCore<Self::Pointer, C, S> + 'static,
+    Self::Core: Core<Self::Pointer, C, S> + 'static,
     Self::Allocator: 'static;
 
   /// Returns `true` if this WAL instance is read-only.
@@ -454,6 +453,6 @@ pub trait Wal<C, S>: ImmutableWal<C, S> {
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = C> + Ord,
   {
-    WalCore::insert(self.as_core_mut(), Some(version), key, value)
+    Core::insert(self.as_core_mut(), Some(version), key, value)
   }
 }

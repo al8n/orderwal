@@ -3,15 +3,16 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
+use dbutils::equivalent::Comparable;
 use rarena_allocator::{unsync::Arena, Allocator};
 use std::collections::{btree_set, BTreeSet};
 
 use crate::{
-  sealed::{self, WalCore},
+  sealed::{self, Core},
   Options,
 };
 
-pub struct OrderWalCore<P, C, S> {
+pub struct OrderCore<P, C, S> {
   pub(super) arena: Arena,
   pub(super) map: BTreeSet<P>,
   pub(super) max_version: u64,
@@ -82,8 +83,7 @@ impl<P> sealed::Base for BTreeSet<P> {
   #[inline]
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Self::Pointer: Borrow<Q>,
-    Q: ?Sized + Ord,
+    Q: ?Sized + Ord + Comparable<Self::Pointer>,
     Self::Pointer: Ord,
   {
     self.contains(key)
@@ -106,7 +106,7 @@ impl<P> sealed::Base for BTreeSet<P> {
   }
 }
 
-impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S> {
+impl<P, C, S> Core<P, C, S> for OrderCore<P, C, S> {
   type Allocator = Arena;
   type Base = BTreeSet<P>;
 
@@ -229,7 +229,7 @@ impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S> {
 
 // #[test]
 // fn test_() {
-//   let core: OrderWalCore<pointer::Pointer<Ascend>, Ascend, Crc32> = todo!();
+//   let core: OrderCore<pointer::Pointer<Ascend>, Ascend, Crc32> = todo!();
 
 //   let start: &[u8] = &[0u8, 1u8];
 //   let end: &[u8] = &[10u8];

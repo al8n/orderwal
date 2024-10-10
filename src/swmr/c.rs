@@ -4,17 +4,17 @@ use core::{
 };
 
 use crossbeam_skiplist::SkipSet;
-use dbutils::Comparator;
+use dbutils::{Comparator, equivalent::Comparable};
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  sealed::{self, WalCore},
+  sealed::{self, Core},
   Options,
 };
 
 impl<P> sealed::Base for SkipSet<P>
 where
-  P: sealed::Pointer + Send + Ord,
+  P: Send + Ord,
 {
   type Pointer = P;
 
@@ -68,8 +68,7 @@ where
   #[inline]
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Self::Pointer: Borrow<Q>,
-    Q: Ord + ?Sized,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     SkipSet::contains(self, key)
   }
@@ -90,7 +89,7 @@ where
   }
 }
 
-pub struct OrderWalCore<P, C, S> {
+pub struct OrderCore<P, C, S> {
   pub(super) arena: Arena,
   pub(super) map: SkipSet<P>,
   pub(super) max_version: u64,
@@ -100,10 +99,9 @@ pub struct OrderWalCore<P, C, S> {
   pub(super) cks: S,
 }
 
-impl<P, C, S> WalCore<P, C, S> for OrderWalCore<P, C, S>
+impl<P, C, S> Core<P, C, S> for OrderCore<P, C, S>
 where
-  C: Comparator,
-  P: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
+  P: Ord + Send + 'static,
 {
   type Allocator = Arena;
   type Base = SkipSet<P>;

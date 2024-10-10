@@ -1,25 +1,65 @@
 use core::{
-  borrow::Borrow,
-  ops::{Bound, RangeBounds},
+  borrow::Borrow, marker::PhantomData, ops::{Bound, RangeBounds}
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, CheapClone};
+use dbutils::{buffer::VacantBuffer, equivalent::Comparable, traits::{KeyRef, Type, TypeRef}, CheapClone, Comparator};
 use rarena_allocator::{either::Either, Allocator};
-
-use crate::{pointer::WithVersion, sealed::Pointer};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::BuildChecksumer,
   error::Error,
   iter::*,
-  sealed::{Base, Constructable, Core},
+  pointer::WithoutVersion,
+  sealed::{Base, Constructable, Pointer, Core},
   KeyBuilder, Options, ValueBuilder,
 };
 
+
+pub struct GenericComparator<K: ?Sized> {
+  _k: PhantomData<K>,
+}
+
+impl<K: ?Sized> CheapClone for GenericComparator<K> {}
+
+impl<K: ?Sized> Clone for GenericComparator<K> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<K: ?Sized> Copy for GenericComparator<K> {}
+
+impl<K: ?Sized> core::fmt::Debug for GenericComparator<K> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("GenericComparator")
+      .finish()
+  }
+}
+
+impl<K> Comparator for GenericComparator<K>
+where
+  K: ?Sized + Type,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+{
+  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
+    unsafe { <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(a, b) }
+  }
+
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
+    unsafe {
+      let start = start_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
+      let end = end_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
+      let key = <K::Ref<'_> as TypeRef<'_>>::from_slice(key);
+      
+      (start, end).contains(&key)
+    }
+  }
+}
+
 /// An abstract layer for the immutable write-ahead log.
-pub trait Reader<C, S>: Constructable<C, S> {
+pub trait Reader<K: ?Sized, V: ?Sized, S>: Constructable<GenericComparator<K>, S> {
   /// Returns the reserved space in the WAL.
   ///
   /// ## Safety
@@ -32,7 +72,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
-  fn path(&self) -> Option<&<<Self as Constructable<C, S>>::Allocator as Allocator>::Path> {
+  fn path(&self) -> Option<&<<Self as Constructable<GenericComparator<K>, S>>::Allocator as Allocator>::Path> {
     self.as_core().path()
   }
 
@@ -78,17 +118,6 @@ pub trait Reader<C, S>: Constructable<C, S> {
     self.as_core().options()
   }
 
-  /// Returns `true` if the WAL contains the specified key.
-  #[inline]
-  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
-  where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
-  {
-    self.as_core().contains_key(Some(version), key)
-  }
-
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   fn iter(
@@ -96,7 +125,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
     version: u64,
   ) -> Iter<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
     self.as_core().iter(Some(version))
@@ -104,20 +133,20 @@ pub trait Reader<C, S>: Constructable<C, S> {
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range<Q, R>(
-    &self,
+  fn range<'a, Q, R>(
+    &'a self,
     version: u64,
     range: R,
   ) -> Range<
-    '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    'a,
+    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Range<'a, Q, R>,
     Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: ?Sized + Ord + Comparable<Self::Pointer>,
+    K: Type,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K::Ref<'a>>,
   {
     self.as_core().range(Some(version), range)
   }
@@ -129,7 +158,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
     version: u64,
   ) -> Keys<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
     self.as_core().keys(Some(version))
@@ -143,14 +172,14 @@ pub trait Reader<C, S>: Constructable<C, S> {
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Range<'_, Q, R>,
     Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core().range_keys(Some(version), range)
   }
@@ -162,7 +191,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
     version: u64,
   ) -> Values<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
     self.as_core().values(Some(version))
@@ -176,12 +205,12 @@ pub trait Reader<C, S>: Constructable<C, S> {
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Range<'_, Q, R>,
     Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Pointer<Comparator = GenericComparator<K>> + Ord,
     Q: Ord + ?Sized,
   {
     self.as_core().range_values(Some(version), range)
@@ -191,7 +220,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core().first(Some(version))
   }
@@ -200,60 +229,123 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     Core::last(self.as_core(), Some(version))
   }
 
-  /// Returns the value associated with the key.
+  /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<&[u8]>
+  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: ?Sized + Ord + Comparable<Self::Pointer>,
+    K: Type,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K::Ref<'a>>,
   {
-    self.as_core().get(Some(version), key)
+    self.as_core().contains_key(None, key)
   }
 
-  /// Returns a value associated to the highest element whose key is below the given bound.
-  /// If no such element is found then `Some(version)` is returned.
-  #[inline]
-  fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
-  where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
-  {
-    self.as_core().upper_bound(Some(version), bound)
-  }
+  // /// Returns `true` if the key exists in the WAL.
+  // ///
+  // /// ## Safety
+  // /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  // #[inline]
+  // unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
+  //   self.core.contains_key_by_bytes(key)
+  // }
 
-  /// Returns a value associated to the lowest element whose key is above the given bound.
-  /// If no such element is found then `Some(version)` is returned.
-  #[inline]
-  fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
-  where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
-  {
-    self.as_core().lower_bound(Some(version), bound)
-  }
+  // /// Gets the value associated with the key.
+  // #[inline]
+  // fn get<'a, Q>(&'a self, key: &Q) -> Option<GenericEntryRef<'a, K, V>>
+  // where
+  //   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  //   V: Type,
+  // {
+  //   self.core.get(key)
+  // }
+
+  // /// Gets the value associated with the key.
+  // ///
+  // /// ## Safety
+  // /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  // #[inline]
+  // unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>>
+  // where
+  //   V: Type,
+  // {
+  //   self.core.get_by_bytes(key)
+  // }
+
+  // /// Returns a value associated to the highest element whose key is below the given bound.
+  // /// If no such element is found then `None` is returned.
+  // #[inline]
+  // fn upper_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<GenericEntryRef<'a, K, V>>
+  // where
+  //   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  //   V: Type,
+  // {
+  //   self.core.upper_bound(bound)
+  // }
+
+  // /// Returns a value associated to the highest element whose key is below the given bound.
+  // /// If no such element is found then `None` is returned.
+  // ///
+  // /// ## Safety
+  // /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  // #[inline]
+  // unsafe fn upper_bound_by_bytes(
+  //   &self,
+  //   bound: Bound<&[u8]>,
+  // ) -> Option<GenericEntryRef<'_, K, V>>
+  // where
+  //   V: Type,
+  // {
+  //   self.core.upper_bound_by_bytes(bound)
+  // }
+
+  // /// Returns a value associated to the lowest element whose key is above the given bound.
+  // /// If no such element is found then `None` is returned.
+  // #[inline]
+  // pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<GenericEntryRef<'a, K, V>>
+  // where
+  //   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  //   V: Type,
+  // {
+  //   self.core.lower_bound(bound)
+  // }
+
+  // /// Returns a value associated to the lowest element whose key is above the given bound.
+  // /// If no such element is found then `None` is returned.
+  // ///
+  // /// ## Safety
+  // /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  // #[inline]
+  // pub unsafe fn lower_bound_by_bytes(
+  //   &self,
+  //   bound: Bound<&[u8]>,
+  // ) -> Option<GenericEntryRef<'_, K, V>>
+  // where
+  //   V: Type,
+  // {
+  //   self.core.lower_bound_by_bytes(bound)
+  // }
 }
 
-impl<T, C, S> Reader<C, S> for T
+impl<T, K, V, S> Reader<K, V, S> for T
 where
-  T: Constructable<C, S>,
-  T::Pointer: WithVersion,
+  T: Constructable<GenericComparator<K>, S>,
+  T::Pointer: WithoutVersion,
+  K: ?Sized,
+  V: ?Sized,
 {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Writer<C, S>: Reader<C, S> {
+pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   /// The read only reader type for this wal.
-  type Reader: Reader<C, S, Pointer = Self::Pointer>
+  type Reader: Reader<K, V, S, Pointer = Self::Pointer>
   where
-    Self::Core: Core<Self::Pointer, C, S> + 'static,
+    Self::Core: Core<Self::Pointer, GenericComparator<K>, S> + 'static,
     Self::Allocator: 'static;
 
   /// Returns `true` if this WAL instance is read-only.
@@ -299,9 +391,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     value: &[u8],
   ) -> Result<Option<&[u8]>, Error>
   where
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
     self.as_core_mut().get_or_insert(Some(version), key, value)
   }
@@ -315,9 +407,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -336,9 +428,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
   where
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -357,9 +449,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
   where
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -376,9 +468,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
   where
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -394,9 +486,9 @@ pub trait Writer<C, S>: Reader<C, S> {
   where
     B: BatchWithKeyBuilder<Self::Pointer>,
     B::Value: Borrow<[u8]>,
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert_batch_with_key_builder(batch)
   }
@@ -410,9 +502,9 @@ pub trait Writer<C, S>: Reader<C, S> {
   where
     B: BatchWithValueBuilder<Self::Pointer>,
     B::Key: Borrow<[u8]>,
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert_batch_with_value_builder(batch)
   }
@@ -425,9 +517,9 @@ pub trait Writer<C, S>: Reader<C, S> {
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<Self::Pointer>,
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert_batch_with_builders(batch)
   }
@@ -439,9 +531,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     B: Batch<Pointer = Self::Pointer>,
     B::Key: Borrow<[u8]>,
     B::Value: Borrow<[u8]>,
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert_batch(batch)
   }
@@ -450,9 +542,9 @@ pub trait Writer<C, S>: Reader<C, S> {
   #[inline]
   fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
-    C: CheapClone,
+    
     S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     Core::insert(self.as_core_mut(), Some(version), key, value)
   }

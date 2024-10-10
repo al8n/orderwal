@@ -1,7 +1,7 @@
 use core::ops::Bound;
 
 use super::*;
-use wal::{ImmutableWal, Wal};
+use wal::{Reader, Wal};
 
 const MB: usize = 1024 * 1024;
 

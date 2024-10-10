@@ -65,8 +65,8 @@ pub mod error;
 mod buffer;
 pub use buffer::*;
 
-mod builder;
-pub use builder::Builder;
+// mod builder;
+// pub use builder::Builder;
 
 mod entry;
 pub use entry::*;
@@ -75,22 +75,25 @@ pub use entry::*;
 pub mod utils;
 use utils::*;
 
-mod wal;
-pub use wal::{ImmutableWal, Wal};
+// mod wal;
+// pub use wal::{Reader, Wal};
 
 mod options;
 pub use options::Options;
 
 mod batch;
 
+mod base;
+
+mod mvcc;
+
+mod generic;
+
 /// A single writer multiple readers ordered write-ahead Log implementation.
 pub mod swmr;
 
-/// An ordered write-ahead Log implementation.
-pub mod unsync;
-
-/// Versioned ordered write-ahead Log implementation.
-pub mod mvcc;
+// /// An ordered write-ahead Log implementation.
+// pub mod unsync;
 
 /// Iterators for the WALs.
 pub mod iter;

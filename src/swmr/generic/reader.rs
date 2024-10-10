@@ -4,10 +4,10 @@ use std::sync::Arc;
 use dbutils::equivalent::Comparable;
 use rarena_allocator::Allocator;
 
-use super::{GenericEntryRef, GenericOrderWalCore, Iter, KeyRef, Range, Type, HEADER_SIZE};
+use super::{GenericEntryRef, GenericOrderCore, Iter, KeyRef, Range, Type, HEADER_SIZE};
 
 /// A read-only view of a generic single-writer, multi-reader WAL.
-pub struct GenericOrderWalReader<K: ?Sized, V: ?Sized, S>(Arc<GenericOrderWalCore<K, V, S>>);
+pub struct GenericOrderWalReader<K: ?Sized, V: ?Sized, S>(Arc<GenericOrderCore<K, V, S>>);
 
 impl<K, V, S> Clone for GenericOrderWalReader<K, V, S>
 where
@@ -24,7 +24,7 @@ where
   K: ?Sized,
   V: ?Sized,
 {
-  pub(super) fn new(wal: Arc<GenericOrderWalCore<K, V, S>>) -> Self {
+  pub(super) fn new(wal: Arc<GenericOrderCore<K, V, S>>) -> Self {
     Self(wal)
   }
 

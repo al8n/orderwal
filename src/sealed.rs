@@ -3,12 +3,13 @@ use core::{
   ptr::NonNull,
 };
 
-use iter::{Iter, Keys, Range, RangeKeys, RangeValues, Values};
+use dbutils::equivalent::{Equivalent, Comparable};
 use rarena_allocator::{ArenaPosition, BytesRefMut};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::{BuildChecksumer, Checksumer},
+  iter::*,
   *,
 };
 
@@ -79,8 +80,8 @@ pub trait Base: Default {
 
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Self::Pointer: Borrow<Q> + Ord,
-    Q: Ord + ?Sized;
+    // Self::Pointer: Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
 
   fn iter(&self) -> Self::Iterator<'_>;
 
@@ -134,7 +135,7 @@ macro_rules! preprocess_batch {
   }};
 }
 
-pub trait WalCore<P, C, S> {
+pub trait Core<P, C, S> {
   type Allocator: Allocator;
   type Base: Base<Pointer = P>;
 
@@ -383,9 +384,10 @@ pub trait WalCore<P, C, S> {
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, version: Option<u64>, key: &Q) -> bool
   where
-    [u8]: Borrow<Q>,
-    P: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
-    Q: ?Sized + Ord,
+    // [u8]: Borrow<Q>,
+    // P: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: ?Sized + Ord + Comparable<P>,
+    P: Pointer<Comparator = C>,
   {
     match version {
       Some(version) => {
@@ -395,7 +397,7 @@ pub trait WalCore<P, C, S> {
 
         self.base().iter().any(|p| {
           let p = p.as_pointer();
-          p.version() <= version && p.as_key_slice().borrow() == key
+          p.version() <= version && key.equivalent(p)
         })
       }
       None => self.base().contains(key),
@@ -1051,9 +1053,9 @@ pub trait WalCore<P, C, S> {
   }
 }
 
-pub trait Constructor<C, S>: Sized {
+pub trait Constructable<C, S>: Sized {
   type Allocator: Allocator + 'static;
-  type Core: WalCore<Self::Pointer, C, S, Allocator = Self::Allocator> + 'static;
+  type Core: Core<Self::Pointer, C, S, Allocator = Self::Allocator> + 'static;
   type Pointer;
 
   #[inline]
@@ -1079,7 +1081,7 @@ pub trait Constructor<C, S>: Sized {
     arena
       .flush_range(0, HEADER_SIZE)
       .map(|_| {
-        <Self::Core as WalCore<Self::Pointer, C, S>>::construct(
+        <Self::Core as Core<Self::Pointer, C, S>>::construct(
           arena,
           Default::default(),
           opts,
@@ -1116,7 +1118,7 @@ pub trait Constructor<C, S>: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let mut set = <Self::Core as WalCore<Self::Pointer, C, S>>::Base::default();
+    let mut set = <Self::Core as Core<Self::Pointer, C, S>>::Base::default();
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -1267,7 +1269,7 @@ pub trait Constructor<C, S>: Sized {
       }
     }
 
-    Ok(<Self::Core as WalCore<Self::Pointer, C, S>>::construct(
+    Ok(<Self::Core as Core<Self::Pointer, C, S>>::construct(
       arena,
       set,
       opts,
