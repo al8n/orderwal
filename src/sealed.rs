@@ -3,12 +3,14 @@ use core::{
   ptr::NonNull,
 };
 
+use batch::{Batch2, BatchEntry};
 use dbutils::equivalent::{Comparable, Equivalent};
 use rarena_allocator::{ArenaPosition, BytesRefMut};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::{BuildChecksumer, Checksumer},
+  entry::BatchEncodedEntryMeta,
   iter::*,
   *,
 };
@@ -101,13 +103,13 @@ macro_rules! preprocess_batch {
     $batch
         .iter_mut()
         .try_fold((0u32, 0u64), |(num_entries, size), ent| {
-          let klen = ent.internal_key_len();
+          let klen = ent.encoded_key_len();
           let vlen = ent.value_len();
           $this.check_batch_entry(klen, vlen).map(|_| {
             let merged_len = merge_lengths(klen as u32, vlen as u32);
             let merged_len_size = encoded_u64_varint_len(merged_len);
             let ent_size = klen as u64 + vlen as u64 + merged_len_size as u64;
-            ent.meta = BatchEncodedEntryMeta::new(klen, vlen, merged_len, merged_len_size);
+            ent.set_encoded_meta(BatchEncodedEntryMeta::new(klen, vlen, merged_len, merged_len_size));
             (num_entries + 1, size + ent_size)
           })
         })
@@ -699,6 +701,8 @@ pub trait Core<P, C, S> {
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<P>,
+    B::KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), B::KeyError>,
+    B::ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), B::ValueError>,
     C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
@@ -710,6 +714,87 @@ pub trait Core<P, C, S> {
     self
       .insert_batch_with_builders_in(batch)
       .map(|_| self.insert_pointers(batch.iter_mut().map(|ent| ent.pointer.take().unwrap())))
+  }
+
+  fn insert_batch_with_builders_generic<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<
+    (),
+    Among<<B::Entry as BatchEntry>::KeyError, <B::Entry as BatchEntry>::ValueError, Error>,
+  >
+  where
+    B: Batch2,
+    B::Entry: BatchEntry<Pointer = P>,
+    C: CheapClone,
+    S: BuildChecksumer,
+    P: Pointer<Comparator = C> + Ord,
+  {
+    if self.read_only() {
+      return Err(Among::Right(Error::read_only()));
+    }
+
+    let (mut cursor, allocator, mut buf) = preprocess_batch!(self(batch)).map_err(Among::Right)?;
+
+    unsafe {
+      let cmp = self.comparator();
+      let mut minimum = self.minimum_version();
+      let mut maximum = self.maximum_version();
+
+      for ent in batch.iter_mut() {
+        let klen = ent.encoded_key_len();
+        let vlen = ent.value_len();
+        let meta = ent.encoded_meta();
+        let merged_kv_len = meta.kvlen;
+        let merged_kv_len_size = meta.kvlen_size;
+
+        let remaining = buf.remaining();
+        if remaining < merged_kv_len_size + klen + vlen {
+          return Err(Among::Right(
+            Error::larger_batch_size(buf.capacity() as u32),
+          ));
+        }
+
+        let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
+        let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        let (key_ptr, val_ptr) = if let Some(version) = ent.version() {
+          buf.put_u64_le_unchecked(version);
+          let kptr = ptr.add(VERSION_SIZE);
+          maximum = maximum.max(version);
+          minimum = minimum.min(version);
+          (kptr, ptr.add(klen))
+        } else {
+          (ptr, ptr.add(klen))
+        };
+        buf.set_len(cursor + ent_len_size + klen);
+
+        let (_, f) = ent.key_builder().into_components();
+        f(&mut VacantBuffer::new(
+          klen,
+          NonNull::new_unchecked(key_ptr),
+        ))
+        .map_err(Among::Left)?;
+        cursor += ent_len_size + klen;
+        buf.set_len(cursor + vlen);
+        let (_, f) = ent.value_builder().into_components();
+        f(&mut VacantBuffer::new(
+          klen,
+          NonNull::new_unchecked(val_ptr),
+        ))
+        .map_err(Among::Middle)?;
+        cursor += vlen;
+        ent.set_pointer(<P as Pointer>::new(klen, vlen, ptr, cmp.cheap_clone()));
+      }
+
+      self
+        .insert_batch_helper(allocator, buf, cursor)
+        .map(|_| {
+          self.update_maximum_version(maximum);
+          self.update_minimum_version(minimum);
+          self.insert_pointers(batch.iter_mut().map(|ent| ent.take_pointer().unwrap()));
+        })
+        .map_err(Among::Right)
+    }
   }
 
   fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
@@ -782,7 +867,7 @@ pub trait Core<P, C, S> {
       let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
+        let klen = ent.encoded_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -848,7 +933,7 @@ pub trait Core<P, C, S> {
       let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
+        let klen = ent.encoded_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -897,6 +982,8 @@ pub trait Core<P, C, S> {
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<P>,
+    B::KeyBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), B::KeyError>,
+    B::ValueBuilder: Fn(&mut VacantBuffer<'_>) -> Result<(), B::ValueError>,
     C: CheapClone,
     S: BuildChecksumer,
     P: Pointer<Comparator = C>,
@@ -909,7 +996,7 @@ pub trait Core<P, C, S> {
       let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
+        let klen = ent.encoded_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;
@@ -980,7 +1067,7 @@ pub trait Core<P, C, S> {
       let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
-        let klen = ent.internal_key_len();
+        let klen = ent.encoded_key_len();
         let vlen = ent.value_len();
         let merged_kv_len = ent.meta.kvlen;
         let merged_kv_len_size = ent.meta.kvlen_size;

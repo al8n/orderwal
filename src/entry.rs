@@ -14,7 +14,7 @@ use crate::{
 
 use super::{KeyBuilder, ValueBuilder};
 
-pub(crate) struct BatchEncodedEntryMeta {
+pub struct BatchEncodedEntryMeta {
   /// The output of `merge_lengths(klen, vlen)`
   pub(crate) kvlen: u64,
   /// the length of `encoded_u64_varint(merge_lengths(klen, vlen))`
@@ -72,7 +72,7 @@ where
   }
 
   #[inline]
-  pub(crate) fn internal_key_len(&self) -> usize {
+  pub(crate) fn encoded_key_len(&self) -> usize {
     match self.version {
       Some(_) => self.key.borrow().len() + VERSION_SIZE,
       None => self.key.borrow().len(),
@@ -131,6 +131,11 @@ impl<K, V, P> Entry<K, V, P> {
   #[inline]
   pub fn into_components(self) -> (K, V) {
     (self.key, self.value)
+  }
+
+  #[inline]
+  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
+    self.meta = meta;
   }
 }
 
@@ -214,11 +219,16 @@ impl<KB, V, P> EntryWithKeyBuilder<KB, V, P> {
   }
 
   #[inline]
-  pub(crate) const fn internal_key_len(&self) -> usize {
+  pub(crate) const fn encoded_key_len(&self) -> usize {
     match self.version {
       Some(_) => self.kb.size() as usize + VERSION_SIZE,
       None => self.kb.size() as usize,
     }
+  }
+
+  #[inline]
+  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
+    self.meta = meta;
   }
 }
 
@@ -237,7 +247,7 @@ where
 {
   /// Returns the length of the key.
   #[inline]
-  pub(crate) fn internal_key_len(&self) -> usize {
+  pub(crate) fn encoded_key_len(&self) -> usize {
     match self.version {
       Some(_) => self.key.borrow().len() + VERSION_SIZE,
       None => self.key.borrow().len(),
@@ -302,6 +312,11 @@ impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
   #[inline]
   pub fn into_components(self) -> (K, ValueBuilder<VB>) {
     (self.key, self.vb)
+  }
+
+  #[inline]
+  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
+    self.meta = meta;
   }
 }
 
@@ -380,10 +395,15 @@ impl<KB, VB, P> EntryWithBuilders<KB, VB, P> {
   }
 
   #[inline]
-  pub(crate) const fn internal_key_len(&self) -> usize {
+  pub(crate) const fn encoded_key_len(&self) -> usize {
     match self.version {
       Some(_) => self.kb.size() as usize + VERSION_SIZE,
       None => self.kb.size() as usize,
     }
+  }
+
+  #[inline]
+  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
+    self.meta = meta;
   }
 }

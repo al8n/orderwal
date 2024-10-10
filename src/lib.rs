@@ -69,7 +69,7 @@ pub use buffer::*;
 // pub use builder::Builder;
 
 mod entry;
-pub use entry::*;
+pub use entry::{Entry, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder};
 
 /// Utilities.
 pub mod utils;

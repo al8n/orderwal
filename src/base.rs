@@ -7,6 +7,8 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, equivalent::Comparable, CheapClone};
 use rarena_allocator::{either::Either, Allocator};
 
+use crate::batch::{Batch2, BatchEntry2, BufWriter};
+
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::BuildChecksumer,
@@ -384,49 +386,19 @@ pub trait Writer<C, S>: Reader<C, S> {
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_key_builder<B>(
+  fn insert_batch_with<KB, VB, B>(
     &mut self,
     batch: &mut B,
-  ) -> Result<(), Either<B::Error, Error>>
+  ) -> Result<(), Among<KB::Error, VB::Error, Error>>
   where
-    B: BatchWithKeyBuilder<Self::Pointer>,
-    B::Value: Borrow<[u8]>,
+    B: Batch2<Entry = BatchEntry2<KB, VB, Self::Pointer>>,
+    KB: BufWriter,
+    VB: BufWriter,
     C: CheapClone,
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = C> + Ord,
   {
-    self.as_core_mut().insert_batch_with_key_builder(batch)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_value_builder<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<B::Error, Error>>
-  where
-    B: BatchWithValueBuilder<Self::Pointer>,
-    B::Key: Borrow<[u8]>,
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
-  {
-    self.as_core_mut().insert_batch_with_value_builder(batch)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_builders<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
-  where
-    B: BatchWithBuilders<Self::Pointer>,
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
-  {
-    self.as_core_mut().insert_batch_with_builders(batch)
+    self.as_core_mut().insert_batch_with_builders_generic(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.

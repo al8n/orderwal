@@ -15,7 +15,7 @@ use dbutils::{
 use rarena_allocator::{either::Either, Allocator};
 use ref_cast::RefCast;
 
-use crate::sealed::WithoutVersion;
+use crate::{batch::{Batch2, BatchEntry2, BufWriter}, sealed::WithoutVersion};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
@@ -29,6 +29,9 @@ mod iter;
 pub use iter::{
   GenericIter, GenericKeys, GenericRange, GenericRangeKeys, GenericRangeValues, GenericValues,
 };
+
+mod batch;
+pub use batch::*;
 
 mod entry;
 pub use entry::*;
@@ -465,61 +468,48 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   /// Returns the read-only view for the WAL.
   fn reader(&self) -> Self::Reader;
 
-  /// Get or insert a new entry into the WAL.
-  #[inline]
-  fn get_or_insert<'a>(
-    &'a mut self,
-    key: impl Into<Generic<'a, K>>,
-    val: impl Into<Generic<'a, V>>,
-  ) -> Result<Option<V::Ref<'a>>, Error>
-  where
-    K: Type + Ord + for<'b> Comparable<K::Ref<'b>> + 'a,
-    for<'b> K::Ref<'b>: KeyRef<'b, K>,
-    V: Type + 'a,
-    for<'b> Query<'b, K, K>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K>,
-  {
-    // let key: Generic<'a, K> = key.into();
+  // /// Get or insert a new entry into the WAL.
+  // #[inline]
+  // fn get_or_insert<'a>(
+  //   &'a mut self,
+  //   key: impl Into<Generic<'a, K>>,
+  //   val: impl Into<Generic<'a, V>>,
+  // ) -> Result<Option<V::Ref<'a>>, Among<K::Error, V::Error, Error>>
+  // where
+  //   K: Type + Ord + for<'b> Comparable<K::Ref<'b>> + 'a,
+  //   for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  //   V: Type + 'a,
+  //   Query<'a, K, Generic<'a, K>>: Comparable<Self::Pointer> + Ord,
+  //   Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K> + Ord,
+  //   S: BuildChecksumer,
+  // {
 
-    // match key.data() {
-    //   Either::Left(key) => {
-    //     if let Some(val) = self.as_core().get(None, &Query::new(key)) {
-    //       return Ok(Some(ty_ref(val)));
-    //     }
-    //   }
-    //   Either::Right(key) => {
-    //     if let Some(val) = unsafe { Reader::get(self, ty_ref(key)) } {
-    //       return Ok(Some(ty_ref(val)));
-    //     }
-    //   },
-    // }
+  //   let key: Generic<'a, K> = key.into();
+  //   let val: Generic<'a, V> = val.into();
 
-    // if let Some(val) = base.get(None, Query::new(key)) {
-    //   return Ok(Some(val.as_pointer().as_value_slice()));
-    // }
+  //   let vb = ValueBuilder::once(val.encoded_len() as u32, |buf| {
+  //     val.encode_to_buffer(buf).map(|_| ())
+  //   });
+  //   self.as_core_mut().get_or_insert_with_value_builder(None, &key, vb)
+  //     .map(|res| res.map(ty_ref::<V>))
+  // }
 
-    // self
-    //   .insert_with_value_builder::<E>(version, key, vb)
-    //   .map(|_| None)
-    todo!()
-  }
-
-  /// Get or insert a new entry into the WAL.
-  #[inline]
-  fn get_or_insert_with_value_builder<E>(
-    &mut self,
-    version: u64,
-    key: &[u8],
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-  ) -> Result<Option<&[u8]>, Either<E, Error>>
-  where
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
-  {
-    self
-      .as_core_mut()
-      .get_or_insert_with_value_builder(Some(version), key, vb)
-  }
+  // /// Get or insert a new entry into the WAL.
+  // #[inline]
+  // fn get_or_insert_with_value_builder<E>(
+  //   &mut self,
+  //   version: u64,
+  //   key: &[u8],
+  //   vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+  // ) -> Result<Option<&[u8]>, Either<E, Error>>
+  // where
+  //   S: BuildChecksumer,
+  //   Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
+  // {
+  //   self
+  //     .as_core_mut()
+  //     .get_or_insert_with_value_builder(Some(version), key, vb)
+  // }
 
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
@@ -528,7 +518,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   #[inline]
   fn insert_with_key_builder<E>(
     &mut self,
-    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
@@ -536,9 +525,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
-    self
-      .as_core_mut()
-      .insert_with_key_builder(Some(version), kb, value)
+    self.as_core_mut().insert_with_key_builder(None, kb, value)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -548,7 +535,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   #[inline]
   fn insert_with_value_builder<E>(
     &mut self,
-    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
@@ -556,9 +542,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
-    self
-      .as_core_mut()
-      .insert_with_value_builder(Some(version), key, vb)
+    self.as_core_mut().insert_with_value_builder(None, key, vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -566,7 +550,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   #[inline]
   fn insert_with_builders<KE, VE>(
     &mut self,
-    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
@@ -574,70 +557,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
-    self
-      .as_core_mut()
-      .insert_with_builders(Some(version), kb, vb)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_key_builder<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<B::Error, Error>>
-  where
-    B: BatchWithKeyBuilder<Self::Pointer>,
-    B::Value: Borrow<[u8]>,
-
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
-  {
-    self.as_core_mut().insert_batch_with_key_builder(batch)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_value_builder<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<B::Error, Error>>
-  where
-    B: BatchWithValueBuilder<Self::Pointer>,
-    B::Key: Borrow<[u8]>,
-
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
-  {
-    self.as_core_mut().insert_batch_with_value_builder(batch)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_builders<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
-  where
-    B: BatchWithBuilders<Self::Pointer>,
-
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
-  {
-    self.as_core_mut().insert_batch_with_builders(batch)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
-  where
-    B: Batch<Pointer = Self::Pointer>,
-    B::Key: Borrow<[u8]>,
-    B::Value: Borrow<[u8]>,
-
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
-  {
-    self.as_core_mut().insert_batch(batch)
+    self.as_core_mut().insert_with_builders(None, kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
@@ -648,6 +568,35 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     Core::insert(self.as_core_mut(), Some(version), key, value)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch<'a, B>(&mut self, batch: &'a mut B) -> Result<(), Among<K::Error, V::Error, Error>>
+  where
+    B: Batch2<Entry = GenericBatchEntry<'a, K, V, Self::Pointer>>,
+    K: Type + 'a,
+    V: Type + 'a,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
+  {
+    self.as_core_mut().insert_batch_with_builders_generic(batch)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with<KB, VB, B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<KB::Error, VB::Error, Error>>
+  where
+    B: Batch2<Entry = BatchEntry2<KB, VB, Self::Pointer>>,
+    KB: BufWriter,
+    VB: BufWriter,
+    S: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+  {
+    self.as_core_mut().insert_batch_with_builders_generic(batch)
   }
 }
 
