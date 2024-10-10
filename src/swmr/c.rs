@@ -1,14 +1,11 @@
-use core::{
-  borrow::Borrow,
-  ops::{Bound, RangeBounds},
-};
+use core::ops::{Bound, RangeBounds};
 
 use crossbeam_skiplist::SkipSet;
-use dbutils::{Comparator, equivalent::Comparable};
+use dbutils::equivalent::Comparable;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  sealed::{self, Core},
+  sealed::{self, Core, Pointer},
   Options,
 };
 
@@ -31,13 +28,12 @@ where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = crossbeam_skiplist::set::Range<'a, Q, R, P>
+    = crossbeam_skiplist::set::Range<'a, Q, R, Self::Pointer>
   where
     Self::Pointer: 'a,
     Self: 'a,
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q>,
-    Q: Ord + ?Sized;
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
 
   fn insert(&mut self, ele: Self::Pointer)
   where
@@ -59,8 +55,7 @@ where
   #[inline]
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Borrow<Q>,
-    Q: Ord + ?Sized,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     SkipSet::get(self, key)
   }
@@ -82,8 +77,7 @@ where
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q>,
-    Q: Ord + ?Sized,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     SkipSet::range(self, range)
   }
@@ -160,6 +154,16 @@ where
   }
 
   #[inline]
+  fn update_maximum_version(&mut self, version: u64) {
+    self.max_version = version;
+  }
+
+  #[inline]
+  fn update_minimum_version(&mut self, version: u64) {
+    self.min_version = version;
+  }
+
+  #[inline]
   fn allocator(&self) -> &Self::Allocator {
     &self.arena
   }
@@ -167,8 +171,8 @@ where
   #[inline]
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + sealed::Pointer + Ord,
-    Q: ?Sized + Ord,
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     match version {
       None => self.map.upper_bound(bound).map(|ent| ent.as_key_slice()),
@@ -188,8 +192,8 @@ where
   #[inline]
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + sealed::Pointer,
-    Q: ?Sized + Ord,
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     match version {
       None => self.map.lower_bound(bound).map(|ent| ent.as_key_slice()),

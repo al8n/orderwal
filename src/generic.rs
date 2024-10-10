@@ -1,62 +1,43 @@
 use core::{
-  borrow::Borrow, marker::PhantomData, ops::{Bound, RangeBounds}
+  borrow::Borrow,
+  cmp,
+  marker::PhantomData,
+  ops::{Bound, RangeBounds},
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, equivalent::Comparable, traits::{KeyRef, Type, TypeRef}, CheapClone, Comparator};
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalent::{Comparable, Equivalent},
+  traits::{KeyRef, Type, TypeRef},
+  CheapClone, Comparator,
+};
 use rarena_allocator::{either::Either, Allocator};
+use ref_cast::RefCast;
+
+use crate::sealed::WithoutVersion;
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::BuildChecksumer,
   error::Error,
-  iter::*,
-  pointer::WithoutVersion,
-  sealed::{Base, Constructable, Pointer, Core},
+  sealed::{Base, Constructable, Core, Pointer},
   KeyBuilder, Options, ValueBuilder,
 };
 
+mod iter;
+pub use iter::{
+  GenericIter, GenericKeys, GenericRange, GenericRangeKeys, GenericRangeValues, GenericValues,
+};
 
-pub struct GenericComparator<K: ?Sized> {
-  _k: PhantomData<K>,
-}
+mod entry;
+pub use entry::*;
 
-impl<K: ?Sized> CheapClone for GenericComparator<K> {}
+mod query;
+use query::*;
 
-impl<K: ?Sized> Clone for GenericComparator<K> {
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-
-impl<K: ?Sized> Copy for GenericComparator<K> {}
-
-impl<K: ?Sized> core::fmt::Debug for GenericComparator<K> {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("GenericComparator")
-      .finish()
-  }
-}
-
-impl<K> Comparator for GenericComparator<K>
-where
-  K: ?Sized + Type,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
-{
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
-    unsafe { <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(a, b) }
-  }
-
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    unsafe {
-      let start = start_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
-      let end = end_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
-      let key = <K::Ref<'_> as TypeRef<'_>>::from_slice(key);
-      
-      (start, end).contains(&key)
-    }
-  }
-}
+mod pointer;
+use pointer::*;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K: ?Sized, V: ?Sized, S>: Constructable<GenericComparator<K>, S> {
@@ -72,7 +53,9 @@ pub trait Reader<K: ?Sized, V: ?Sized, S>: Constructable<GenericComparator<K>, S
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
-  fn path(&self) -> Option<&<<Self as Constructable<GenericComparator<K>, S>>::Allocator as Allocator>::Path> {
+  fn path(
+    &self,
+  ) -> Option<&<<Self as Constructable<GenericComparator<K>, S>>::Allocator as Allocator>::Path> {
     self.as_core().path()
   }
 
@@ -122,213 +105,313 @@ pub trait Reader<K: ?Sized, V: ?Sized, S>: Constructable<GenericComparator<K>, S
   #[inline]
   fn iter(
     &self,
-    version: u64,
-  ) -> Iter<
+  ) -> GenericIter<
     '_,
+    K,
+    V,
     <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
-    self.as_core().iter(Some(version))
+    GenericIter::new(self.as_core().iter(None))
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
   fn range<'a, Q, R>(
     &'a self,
-    version: u64,
     range: R,
-  ) -> Range<
+  ) -> GenericRange<
     'a,
-    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Range<'a, Q, R>,
-    Self::Pointer,
+    K,
+    V,
+    R,
+    Q,
+    <Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base,
   >
   where
     R: RangeBounds<Q>,
-    Q: ?Sized + Ord + Comparable<Self::Pointer>,
-    K: Type,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K::Ref<'a>>,
+    K: Type + Ord,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    self.as_core().range(Some(version), range)
+    GenericRange::new(self.as_core().range(None, GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys(
     &self,
-    version: u64,
-  ) -> Keys<
+  ) -> GenericKeys<
     '_,
+    K,
     <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
-    self.as_core().keys(Some(version))
+    GenericKeys::new(self.as_core().keys(None))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
   #[inline]
-  fn range_keys<Q, R>(
-    &self,
-    version: u64,
+  fn range_keys<'a, Q, R>(
+    &'a self,
     range: R,
-  ) -> RangeKeys<
-    '_,
-    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Range<'_, Q, R>,
-    Self::Pointer,
+  ) -> GenericRangeKeys<
+    'a,
+    K,
+    R,
+    Q,
+    <Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base,
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = GenericComparator<K>> + Ord,
+    K: Type + Ord,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    self.as_core().range_keys(Some(version), range)
+    GenericRangeKeys::new(
+      self
+        .as_core()
+        .range_keys(None, GenericQueryRange::new(range)),
+    )
   }
 
   /// Returns an iterator over the values in the WAL.
   #[inline]
   fn values(
     &self,
-    version: u64,
-  ) -> Values<
+  ) -> GenericValues<
     '_,
+    V,
     <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Iterator<'_>,
     Self::Pointer,
   > {
-    self.as_core().values(Some(version))
+    GenericValues::new(self.as_core().values(None))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
   #[inline]
-  fn range_values<Q, R>(
-    &self,
-    version: u64,
+  fn range_values<'a, Q, R>(
+    &'a self,
     range: R,
-  ) -> RangeValues<
-    '_,
-    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base as Base>::Range<'_, Q, R>,
-    Self::Pointer,
+  ) -> GenericRangeValues<
+    'a,
+    K,
+    V,
+    R,
+    Q,
+    <Self::Core as Core<Self::Pointer, GenericComparator<K>, S>>::Base,
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q> + Pointer<Comparator = GenericComparator<K>> + Ord,
-    Q: Ord + ?Sized,
+    K: Type + Ord,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    self.as_core().range_values(Some(version), range)
+    GenericRangeValues::new(
+      self
+        .as_core()
+        .range_values(None, GenericQueryRange::new(range)),
+    )
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
+  fn first_entry(&self) -> Option<(K::Ref<'_>, V::Ref<'_>)>
   where
+    K: Type,
+    V: Type,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self.as_core().first(Some(version))
+    self.as_core().first(None).map(kv_ref::<K, V>)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
+  fn last(&self) -> Option<(&[u8], &[u8])>
   where
+    K: Type,
+    V: Type,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    Core::last(self.as_core(), Some(version))
+    Core::last(self.as_core(), None)
   }
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
   fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<Self::Pointer>,
     K: Type,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    self.as_core().contains_key(None, key)
+    self.as_core().contains_key(None, &Query::new(key))
   }
 
-  // /// Returns `true` if the key exists in the WAL.
-  // ///
-  // /// ## Safety
-  // /// - The given `key` must be valid to construct to `K::Ref` without remaining.
-  // #[inline]
-  // unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool {
-  //   self.core.contains_key_by_bytes(key)
-  // }
+  /// Returns `true` if the key exists in the WAL.
+  ///
+  /// ## Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool
+  where
+    K: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    Slice<K>: Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self.as_core().contains_key(None, Slice::<K>::ref_cast(key))
+  }
 
-  // /// Gets the value associated with the key.
-  // #[inline]
-  // fn get<'a, Q>(&'a self, key: &Q) -> Option<GenericEntryRef<'a, K, V>>
-  // where
-  //   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  //   V: Type,
-  // {
-  //   self.core.get(key)
-  // }
+  /// Gets the value associated with the key.
+  #[inline]
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<V::Ref<'a>>
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .get(None, &Query::new(key))
+      .map(|p| unsafe { <V::Ref<'_> as TypeRef<'_>>::from_slice(p) })
+  }
 
-  // /// Gets the value associated with the key.
-  // ///
-  // /// ## Safety
-  // /// - The given `key` must be valid to construct to `K::Ref` without remaining.
-  // #[inline]
-  // unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<GenericEntryRef<'_, K, V>>
-  // where
-  //   V: Type,
-  // {
-  //   self.core.get_by_bytes(key)
-  // }
+  /// Returns the key-value pair corresponding to the supplied key.
+  ///
+  /// The supplied key may be any type which can compare with the WAL's [`K::Ref<'_>`](Type::Ref) type, but the ordering
+  /// on the borrowed form *must* match the ordering on the key type.
+  #[inline]
+  fn get_key_value<'a, Q>(&'a self, key: &Q) -> Option<(K::Ref<'a>, V::Ref<'a>)>
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .get_entry(None, &Query::new(key))
+      .map(kv_ref::<K, V>)
+  }
 
-  // /// Returns a value associated to the highest element whose key is below the given bound.
-  // /// If no such element is found then `None` is returned.
-  // #[inline]
-  // fn upper_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<GenericEntryRef<'a, K, V>>
-  // where
-  //   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  //   V: Type,
-  // {
-  //   self.core.upper_bound(bound)
-  // }
+  /// Gets the value associated with the key.
+  ///
+  /// ## Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<V::Ref<'_>>
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    Slice<K>: Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .get(None, Slice::<K>::ref_cast(key))
+      .map(ty_ref::<V>)
+  }
 
-  // /// Returns a value associated to the highest element whose key is below the given bound.
-  // /// If no such element is found then `None` is returned.
-  // ///
-  // /// ## Safety
-  // /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
-  // #[inline]
-  // unsafe fn upper_bound_by_bytes(
-  //   &self,
-  //   bound: Bound<&[u8]>,
-  // ) -> Option<GenericEntryRef<'_, K, V>>
-  // where
-  //   V: Type,
-  // {
-  //   self.core.upper_bound_by_bytes(bound)
-  // }
+  /// Returns the key-value pair corresponding to the supplied key.
+  ///
+  /// ## Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn get_key_value_by_bytes(&self, key: &[u8]) -> Option<(K::Ref<'_>, V::Ref<'_>)>
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    Slice<K>: Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .get_entry(None, Slice::<K>::ref_cast(key))
+      .map(kv_ref::<K, V>)
+  }
 
-  // /// Returns a value associated to the lowest element whose key is above the given bound.
-  // /// If no such element is found then `None` is returned.
-  // #[inline]
-  // pub fn lower_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<GenericEntryRef<'a, K, V>>
-  // where
-  //   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-  //   V: Type,
-  // {
-  //   self.core.lower_bound(bound)
-  // }
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn upper_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<V::Ref<'a>>
+  where
+    K: Type + Ord,
+    V: Type,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .upper_bound(None, bound.map(Query::ref_cast))
+      .map(ty_ref::<V>)
+  }
 
-  // /// Returns a value associated to the lowest element whose key is above the given bound.
-  // /// If no such element is found then `None` is returned.
-  // ///
-  // /// ## Safety
-  // /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
-  // #[inline]
-  // pub unsafe fn lower_bound_by_bytes(
-  //   &self,
-  //   bound: Bound<&[u8]>,
-  // ) -> Option<GenericEntryRef<'_, K, V>>
-  // where
-  //   V: Type,
-  // {
-  //   self.core.lower_bound_by_bytes(bound)
-  // }
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn upper_bound_by_bytes(&self, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    Slice<K>: Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .upper_bound(None, bound.map(Slice::ref_cast))
+      .map(ty_ref::<V>)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn lower_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<V::Ref<'a>>
+  where
+    K: Type + Ord,
+    V: Type,
+    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .lower_bound(None, bound.map(Query::ref_cast))
+      .map(ty_ref::<V>)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn lower_bound_by_bytes(&self, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    Slice<K>: Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+  {
+    self
+      .as_core()
+      .lower_bound(None, bound.map(Slice::ref_cast))
+      .map(ty_ref::<V>)
+  }
 }
 
 impl<T, K, V, S> Reader<K, V, S> for T
@@ -384,18 +467,41 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
 
   /// Get or insert a new entry into the WAL.
   #[inline]
-  fn get_or_insert(
-    &mut self,
-    version: u64,
-    key: &[u8],
-    value: &[u8],
-  ) -> Result<Option<&[u8]>, Error>
+  fn get_or_insert<'a>(
+    &'a mut self,
+    key: impl Into<Generic<'a, K>>,
+    val: impl Into<Generic<'a, V>>,
+  ) -> Result<Option<V::Ref<'a>>, Error>
   where
-    
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
+    K: Type + Ord + for<'b> Comparable<K::Ref<'b>> + 'a,
+    for<'b> K::Ref<'b>: KeyRef<'b, K>,
+    V: Type + 'a,
+    for<'b> Query<'b, K, K>: Comparable<Self::Pointer> + Ord,
+    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K>,
   {
-    self.as_core_mut().get_or_insert(Some(version), key, value)
+    // let key: Generic<'a, K> = key.into();
+
+    // match key.data() {
+    //   Either::Left(key) => {
+    //     if let Some(val) = self.as_core().get(None, &Query::new(key)) {
+    //       return Ok(Some(ty_ref(val)));
+    //     }
+    //   }
+    //   Either::Right(key) => {
+    //     if let Some(val) = unsafe { Reader::get(self, ty_ref(key)) } {
+    //       return Ok(Some(ty_ref(val)));
+    //     }
+    //   },
+    // }
+
+    // if let Some(val) = base.get(None, Query::new(key)) {
+    //   return Ok(Some(val.as_pointer().as_value_slice()));
+    // }
+
+    // self
+    //   .insert_with_value_builder::<E>(version, key, vb)
+    //   .map(|_| None)
+    todo!()
   }
 
   /// Get or insert a new entry into the WAL.
@@ -407,7 +513,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
-    
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
@@ -428,7 +533,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
   where
-    
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
@@ -449,7 +553,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
   where
-    
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
@@ -468,7 +571,6 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
   where
-    
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Borrow<[u8]> + Ord,
   {
@@ -486,7 +588,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   where
     B: BatchWithKeyBuilder<Self::Pointer>,
     B::Value: Borrow<[u8]>,
-    
+
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
@@ -502,7 +604,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   where
     B: BatchWithValueBuilder<Self::Pointer>,
     B::Key: Borrow<[u8]>,
-    
+
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
@@ -517,7 +619,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   ) -> Result<(), Among<B::KeyError, B::ValueError, Error>>
   where
     B: BatchWithBuilders<Self::Pointer>,
-    
+
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
@@ -531,7 +633,7 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
     B: Batch<Pointer = Self::Pointer>,
     B::Key: Borrow<[u8]>,
     B::Value: Borrow<[u8]>,
-    
+
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
@@ -542,10 +644,23 @@ pub trait Writer<K: ?Sized, V: ?Sized, S>: Reader<K, V, S> {
   #[inline]
   fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
-    
     S: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     Core::insert(self.as_core_mut(), Some(version), key, value)
   }
+}
+
+#[inline]
+fn ty_ref<T: ?Sized + Type>(src: &[u8]) -> T::Ref<'_> {
+  unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(src) }
+}
+
+#[inline]
+fn kv_ref<'a, K, V>((k, v): (&'a [u8], &'a [u8])) -> (K::Ref<'a>, V::Ref<'a>)
+where
+  K: Type + ?Sized,
+  V: Type + ?Sized,
+{
+  (ty_ref::<K>(k), ty_ref::<V>(v))
 }

@@ -4,17 +4,15 @@ use core::{
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, CheapClone};
+use dbutils::{buffer::VacantBuffer, equivalent::Comparable, CheapClone};
 use rarena_allocator::{either::Either, Allocator};
-
-use crate::{pointer::WithVersion, sealed::Pointer};
 
 use super::{
   batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
   checksum::BuildChecksumer,
   error::Error,
   iter::*,
-  sealed::{Base, Constructable, Core},
+  sealed::{Base, Constructable, Core, Pointer, WithVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
@@ -82,9 +80,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
   where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().contains_key(Some(version), key)
   }
@@ -115,9 +112,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().range(Some(version), range)
   }
@@ -148,9 +144,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().range_keys(Some(version), range)
   }
@@ -181,8 +176,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q> + Pointer<Comparator = C> + Ord,
-    Q: Ord + ?Sized,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().range_values(Some(version), range)
   }
@@ -209,9 +204,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn get<Q>(&self, version: u64, key: &Q) -> Option<&[u8]>
   where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().get(Some(version), key)
   }
@@ -221,9 +215,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().upper_bound(Some(version), bound)
   }
@@ -233,9 +226,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Self::Pointer: Pointer<Comparator = C>,
   {
     self.as_core().lower_bound(Some(version), bound)
   }

@@ -220,19 +220,13 @@ where
 }
 
 /// An iterator over a subset of the entries in the WAL.
-pub struct Range<'a, R, P>
-where
-  P: sealed::Pointer,
-{
+pub struct Range<'a, R, P> {
   iter: R,
   version: Option<u64>,
   _m: PhantomData<&'a P>,
 }
 
-impl<R, P> Range<'_, R, P>
-where
-  P: sealed::Pointer,
-{
+impl<R, P> Range<'_, R, P> {
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: R) -> Self {
     Self {
@@ -303,19 +297,13 @@ where
 }
 
 /// An iterator over the keys in a subset of the entries in the WAL.
-pub struct RangeKeys<'a, R, P>
-where
-  P: sealed::Pointer,
-{
+pub struct RangeKeys<'a, R, P> {
   iter: R,
   version: Option<u64>,
   _m: PhantomData<&'a P>,
 }
 
-impl<R, P> RangeKeys<'_, R, P>
-where
-  P: sealed::Pointer,
-{
+impl<R, P> RangeKeys<'_, R, P> {
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: R) -> Self {
     Self {
@@ -376,19 +364,13 @@ where
 }
 
 /// An iterator over the values in a subset of the entries in the WAL.
-pub struct RangeValues<'a, R, P>
-where
-  P: sealed::Pointer,
-{
+pub struct RangeValues<'a, R, P> {
   iter: R,
   version: Option<u64>,
   _m: PhantomData<&'a P>,
 }
 
-impl<R, P> RangeValues<'_, R, P>
-where
-  P: sealed::Pointer,
-{
+impl<R, P> RangeValues<'_, R, P> {
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: R) -> Self {
     Self {

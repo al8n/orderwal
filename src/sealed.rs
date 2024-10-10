@@ -3,7 +3,7 @@ use core::{
   ptr::NonNull,
 };
 
-use dbutils::equivalent::{Equivalent, Comparable};
+use dbutils::equivalent::{Comparable, Equivalent};
 use rarena_allocator::{ArenaPosition, BytesRefMut};
 
 use super::{
@@ -24,6 +24,14 @@ pub trait Pointer: Sized {
 
   fn version(&self) -> u64;
 }
+
+/// A marker trait which indicates that such pointer has a version.
+pub trait WithVersion {}
+
+/// A marker trait which indicates that such pointer does not have a version.
+pub trait WithoutVersion {}
+
+pub trait GenericPointer<K: ?Sized, V: ?Sized>: Pointer {}
 
 pub trait AsPointer<P> {
   fn as_pointer(&self) -> &P;
@@ -57,9 +65,8 @@ pub trait Base: Default {
   where
     Self::Pointer: 'a,
     Self: 'a,
-    Self::Pointer: Borrow<Q>,
     R: RangeBounds<Q>,
-    Q: ?Sized + Ord;
+    Q: ?Sized + Ord + Comparable<Self::Pointer>;
 
   fn insert(&mut self, ele: Self::Pointer)
   where
@@ -75,12 +82,10 @@ pub trait Base: Default {
 
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Borrow<Q> + Ord,
-    Q: Ord + ?Sized;
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
 
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    // Self::Pointer: Ord,
     Q: Ord + ?Sized + Comparable<Self::Pointer>;
 
   fn iter(&self) -> Self::Iterator<'_>;
@@ -88,8 +93,7 @@ pub trait Base: Default {
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q> + Ord,
-    Q: Ord + ?Sized;
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
 }
 
 macro_rules! preprocess_batch {
@@ -264,6 +268,16 @@ pub trait Core<P, C, S> {
   fn minimum_version(&self) -> u64;
 
   #[inline]
+  fn update_versions(&mut self, version: u64) {
+    self.update_maximum_version(version);
+    self.update_minimum_version(version);
+  }
+
+  fn update_maximum_version(&mut self, version: u64);
+
+  fn update_minimum_version(&mut self, version: u64);
+
+  #[inline]
   fn contains_version(&self, version: u64) -> bool {
     self.minimum_version() <= version && version <= self.maximum_version()
   }
@@ -281,8 +295,8 @@ pub trait Core<P, C, S> {
   ) -> Range<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
-    Q: Ord + ?Sized,
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     Range::new(version, self.base().range(range))
   }
@@ -301,8 +315,8 @@ pub trait Core<P, C, S> {
   ) -> RangeKeys<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
-    Q: Ord + ?Sized,
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     RangeKeys::new(version, self.base().range(range))
   }
@@ -320,8 +334,8 @@ pub trait Core<P, C, S> {
   ) -> RangeValues<'_, <Self::Base as Base>::Range<'_, Q, R>, P>
   where
     R: RangeBounds<Q>,
-    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
-    Q: Ord + ?Sized,
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     RangeValues::new(version, self.base().range(range))
   }
@@ -384,10 +398,8 @@ pub trait Core<P, C, S> {
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, version: Option<u64>, key: &Q) -> bool
   where
-    // [u8]: Borrow<Q>,
-    // P: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
-    Q: ?Sized + Ord + Comparable<P>,
     P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     match version {
       Some(version) => {
@@ -408,9 +420,8 @@ pub trait Core<P, C, S> {
   #[inline]
   fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<&[u8]>
   where
-    [u8]: Borrow<Q>,
-    P: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
-    Q: ?Sized + Ord,
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
   {
     if let Some(version) = version {
       if !self.contains_version(version) {
@@ -419,7 +430,7 @@ pub trait Core<P, C, S> {
 
       self.base().iter().find_map(|p| {
         let p = p.as_pointer();
-        if p.version() <= version && p.as_key_slice().borrow() == key {
+        if p.version() <= version && Equivalent::equivalent(key, p) {
           Some(p.as_value_slice())
         } else {
           None
@@ -433,15 +444,42 @@ pub trait Core<P, C, S> {
     }
   }
 
+  #[inline]
+  fn get_entry<Q>(&self, version: Option<u64>, key: &Q) -> Option<(&[u8], &[u8])>
+  where
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>,
+  {
+    if let Some(version) = version {
+      if !self.contains_version(version) {
+        return None;
+      }
+
+      self.base().iter().find_map(|p| {
+        let p = p.as_pointer();
+        if p.version() <= version && Equivalent::equivalent(key, p) {
+          Some((p.as_key_slice(), p.as_value_slice()))
+        } else {
+          None
+        }
+      })
+    } else {
+      self.base().get(key).map(|ent| {
+        let p = ent.as_pointer();
+        (p.as_key_slice(), p.as_value_slice())
+      })
+    }
+  }
+
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
-    Q: ?Sized + Ord;
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>;
 
   fn lower_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Borrow<Q> + Pointer<Comparator = C> + Ord,
-    Q: ?Sized + Ord;
+    P: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<P>;
 
   /// Get or insert a new entry into the WAL.
   fn get_or_insert(
@@ -531,7 +569,12 @@ pub trait Core<P, C, S> {
           Ok(())
         }),
       )
-      .map(|ptr| self.insert_pointer(ptr))
+      .map(|ptr| {
+        self.insert_pointer(ptr);
+        if let Some(version) = version {
+          self.update_versions(version);
+        }
+      })
       .map_err(Among::into_left_right)
   }
 
@@ -555,7 +598,12 @@ pub trait Core<P, C, S> {
         }),
         vb,
       )
-      .map(|ptr| self.insert_pointer(ptr))
+      .map(|ptr| {
+        self.insert_pointer(ptr);
+        if let Some(version) = version {
+          self.update_versions(version);
+        }
+      })
       .map_err(Among::into_middle_right)
   }
 
@@ -570,9 +618,12 @@ pub trait Core<P, C, S> {
     S: BuildChecksumer,
     P: Pointer<Comparator = C> + Ord,
   {
-    self
-      .insert_with_in(version, kb, vb)
-      .map(|ptr| self.insert_pointer(ptr))
+    self.insert_with_in(version, kb, vb).map(|ptr| {
+      self.insert_pointer(ptr);
+      if let Some(version) = version {
+        self.update_versions(version);
+      }
+    })
   }
 
   fn insert(&mut self, version: Option<u64>, key: &[u8], value: &[u8]) -> Result<(), Error>
@@ -593,7 +644,12 @@ pub trait Core<P, C, S> {
           Ok(())
         }),
       )
-      .map(|ptr| self.insert_pointer(ptr))
+      .map(|ptr| {
+        self.insert_pointer(ptr);
+        if let Some(version) = version {
+          self.update_versions(version);
+        }
+      })
       .map_err(Among::unwrap_right)
   }
 
@@ -722,6 +778,8 @@ pub trait Core<P, C, S> {
 
     unsafe {
       let cmp = self.comparator();
+      let mut minimum = self.minimum_version();
+      let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
         let klen = ent.internal_key_len();
@@ -739,6 +797,8 @@ pub trait Core<P, C, S> {
         let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
         let key_ptr = if let Some(version) = ent.version {
           buf.put_u64_le_unchecked(version);
+          maximum = maximum.max(version);
+          minimum = minimum.min(version);
           ptr.add(VERSION_SIZE)
         } else {
           ptr
@@ -760,6 +820,10 @@ pub trait Core<P, C, S> {
 
       self
         .insert_batch_helper(allocator, buf, cursor)
+        .map(|_| {
+          self.update_maximum_version(maximum);
+          self.update_minimum_version(minimum);
+        })
         .map_err(Either::Right)
     }
   }
@@ -780,6 +844,8 @@ pub trait Core<P, C, S> {
 
     unsafe {
       let cmp = self.comparator();
+      let mut minimum = self.minimum_version();
+      let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
         let klen = ent.internal_key_len();
@@ -797,6 +863,8 @@ pub trait Core<P, C, S> {
         let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
         let val_ptr = if let Some(version) = ent.version {
           buf.put_u64_le_unchecked(version);
+          maximum = maximum.max(version);
+          minimum = minimum.min(version);
           ptr.add(klen)
         } else {
           ptr
@@ -815,6 +883,10 @@ pub trait Core<P, C, S> {
 
       self
         .insert_batch_helper(allocator, buf, cursor)
+        .map(|_| {
+          self.update_maximum_version(maximum);
+          self.update_minimum_version(minimum);
+        })
         .map_err(Either::Right)
     }
   }
@@ -833,6 +905,8 @@ pub trait Core<P, C, S> {
 
     unsafe {
       let cmp = self.comparator();
+      let mut minimum = self.minimum_version();
+      let mut maximum = self.maximum_version();
 
       for ent in batch.iter_mut() {
         let klen = ent.internal_key_len();
@@ -852,6 +926,8 @@ pub trait Core<P, C, S> {
         let (key_ptr, val_ptr) = if let Some(version) = ent.version {
           buf.put_u64_le_unchecked(version);
           let kptr = ptr.add(VERSION_SIZE);
+          maximum = maximum.max(version);
+          minimum = minimum.min(version);
           (kptr, ptr.add(klen))
         } else {
           (ptr, ptr.add(klen))
@@ -878,6 +954,10 @@ pub trait Core<P, C, S> {
 
       self
         .insert_batch_helper(allocator, buf, cursor)
+        .map(|_| {
+          self.update_maximum_version(maximum);
+          self.update_minimum_version(minimum);
+        })
         .map_err(Among::Right)
     }
   }
@@ -896,6 +976,9 @@ pub trait Core<P, C, S> {
     unsafe {
       let cmp = self.comparator();
 
+      let mut minimum = self.minimum_version();
+      let mut maximum = self.maximum_version();
+
       for ent in batch.iter_mut() {
         let klen = ent.internal_key_len();
         let vlen = ent.value_len();
@@ -910,6 +993,8 @@ pub trait Core<P, C, S> {
         let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
         let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
         if let Some(version) = ent.version {
+          maximum = maximum.max(version);
+          minimum = minimum.min(version);
           buf.put_u64_le_unchecked(version);
         }
         cursor += ent_len_size + klen;
@@ -919,7 +1004,10 @@ pub trait Core<P, C, S> {
         ent.pointer = Some(Pointer::new(klen, vlen, ptr, cmp.cheap_clone()));
       }
 
-      self.insert_batch_helper(allocator, buf, cursor)
+      self.insert_batch_helper(allocator, buf, cursor).map(|_| {
+        self.update_maximum_version(maximum);
+        self.update_minimum_version(minimum);
+      })
     }
   }
 

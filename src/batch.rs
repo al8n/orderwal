@@ -2,9 +2,7 @@ use dbutils::buffer::VacantBuffer;
 
 use crate::sealed::Pointer;
 
-use super::entry::{
-  Entry, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder, GenericEntry,
-};
+use super::entry::{Entry, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder};
 
 /// A batch of keys and values that can be inserted into the [`Wal`](super::Wal).
 pub trait Batch {
@@ -174,44 +172,6 @@ where
     Self: 'a;
 
   fn iter_mut(&mut self) -> Self::IterMut<'_> {
-    IntoIterator::into_iter(self)
-  }
-}
-
-/// The container for entries in the [`GenericBatch`].
-pub trait GenericBatch<'e> {
-  /// The key type.
-  type Key: 'e;
-
-  /// The value type.
-  type Value: 'e;
-
-  /// The mutable iterator type.
-  type IterMut<'a>: Iterator<Item = &'a mut GenericEntry<'e, Self::Key, Self::Value>>
-  where
-    Self: 'e,
-    'e: 'a;
-
-  /// Returns an mutable iterator over the keys and values.
-  fn iter_mut(&'e mut self) -> Self::IterMut<'e>;
-}
-
-impl<'e, K, V, T> GenericBatch<'e> for T
-where
-  K: 'e,
-  V: 'e,
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut GenericEntry<'e, K, V>>,
-{
-  type Key = K;
-  type Value = V;
-
-  type IterMut<'a>
-    = <&'a mut T as IntoIterator>::IntoIter
-  where
-    Self: 'e,
-    'e: 'a;
-
-  fn iter_mut(&'e mut self) -> Self::IterMut<'e> {
     IntoIterator::into_iter(self)
   }
 }

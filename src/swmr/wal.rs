@@ -1,7 +1,7 @@
 use crate::{
-  pointer::{Pointer, MvccPointer},
+  pointer::{MvccPointer, Pointer},
   sealed::Constructable,
-  Ascend
+  Ascend,
 };
 use dbutils::{checksum::Crc32, Comparator};
 use rarena_allocator::Allocator;
@@ -13,8 +13,7 @@ use rarena_allocator::Allocator;
 //   Comparator, KeyBuilder, VacantBuffer, ValueBuilder,
 // };
 
-
-use core::marker::PhantomData;
+use core::{cell::UnsafeCell, marker::PhantomData};
 use rarena_allocator::sync::Arena;
 use std::sync::Arc;
 
@@ -22,7 +21,6 @@ mod reader;
 pub use reader::*;
 
 use super::c::OrderCore;
-
 
 #[cfg(all(
   test,
@@ -38,7 +36,7 @@ mod tests;
 
 /// An ordered write-ahead log implementation for single thread environments.
 pub struct OrderWal<P, C = Ascend, S = Crc32> {
-  core: Arc<OrderCore<P, C, S>>,
+  core: Arc<UnsafeCell<OrderCore<P, C, S>>>,
   _s: PhantomData<S>,
 }
 
@@ -54,18 +52,18 @@ where
 
   #[inline]
   fn as_core(&self) -> &Self::Core {
-    &self.core
+    unsafe { &*self.core.get() }
   }
 
   #[inline]
   fn as_core_mut(&mut self) -> &mut Self::Core {
-    unreachable!()
+    unsafe { &mut *self.core.get() }
   }
 
   #[inline]
   fn from_core(core: Self::Core) -> Self {
     Self {
-      core: Arc::new(core),
+      core: Arc::new(UnsafeCell::new(core)),
       _s: PhantomData,
     }
   }
@@ -98,7 +96,7 @@ where
 
   #[inline]
   fn reader(&self) -> Self::Reader {
-    OrderWalReader::new(self.core.clone())    
+    OrderWalReader::new(self.core.clone())
   }
 }
 

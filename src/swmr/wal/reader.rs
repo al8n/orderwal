@@ -6,7 +6,7 @@ pub struct OrderWalReader<P, C, S>(OrderWal<P, C, S>);
 impl<P, C, S> OrderWalReader<P, C, S> {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn new(wal: Arc<OrderCore<P, C, S>>) -> Self {
+  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<P, C, S>>>) -> Self {
     Self(OrderWal {
       core: wal.clone(),
       _s: PhantomData,
@@ -26,18 +26,18 @@ where
 
   #[inline]
   fn as_core(&self) -> &Self::Core {
-    &self.0.core
+    self.0.as_core()
   }
 
   #[inline]
   fn as_core_mut(&mut self) -> &mut Self::Core {
-    unreachable!()
+    self.0.as_core_mut()
   }
 
   #[inline]
   fn from_core(core: Self::Core) -> Self {
     Self(OrderWal {
-      core: Arc::new(core),
+      core: Arc::new(UnsafeCell::new(core)),
       _s: PhantomData,
     })
   }

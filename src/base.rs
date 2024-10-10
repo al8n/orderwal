@@ -4,7 +4,7 @@ use core::{
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, CheapClone};
+use dbutils::{buffer::VacantBuffer, equivalent::Comparable, CheapClone};
 use rarena_allocator::{either::Either, Allocator};
 
 use super::{
@@ -12,8 +12,7 @@ use super::{
   checksum::BuildChecksumer,
   error::Error,
   iter::*,
-  pointer::WithoutVersion,
-  sealed::{Base, Constructable, Pointer, Core},
+  sealed::{Base, Constructable, Core, Pointer, WithoutVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
@@ -114,9 +113,8 @@ pub trait Reader<C, S>: Constructable<C, S> {
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
   {
     self.as_core().range(Some(version), range)
   }

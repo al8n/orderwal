@@ -9,14 +9,17 @@
 mod c;
 mod wal;
 
-
 /// An ordered write-ahead log implementation for single thread environments.
 pub mod base {
+  use core::ops::Bound;
+
+  use dbutils::checksum::Crc32;
+
   use crate::pointer::Pointer;
 
   use super::wal;
 
-  pub use crate::base::{Writer, Reader};
+  pub use crate::base::{Reader, Writer};
 
   /// An ordered write-ahead log implementation for single thread environments.
   ///
@@ -35,17 +38,29 @@ pub mod base {
   /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
   /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type OrderWal<C, S> =  wal::OrderWal<Pointer<C>, C, S>;
-}
+  pub type OrderWal<C, S = Crc32> = wal::OrderWal<Pointer<C>, C, S>;
 
+  #[test]
+  fn test_() {
+    let wal: OrderWal<dbutils::Ascend> = todo!();
+    let start: &[u8] = &[1, 2, 3];
+    let end: &[u8] = &[4, 5, 6];
+
+    wal.range::<[u8], _>(3, (Bound::Included(start), Bound::Excluded(end)));
+  }
+}
 
 /// A multiple version ordered write-ahead log implementation for single thread environments.
 pub mod mvcc {
+  use core::ops::Bound;
+
+  use dbutils::checksum::Crc32;
+
   use crate::pointer::MvccPointer;
 
   use super::wal;
 
-  pub use crate::mvcc::{Writer, Reader};
+  pub use crate::mvcc::{Reader, Writer};
 
   /// A multiple versioned ordered write-ahead log implementation for single thread environments.
   ///
@@ -62,6 +77,14 @@ pub mod mvcc {
   /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
   /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type OrderWal<C, S> =  wal::OrderWal<MvccPointer<C>, C, S>;
-}
+  pub type OrderWal<C, S = Crc32> = wal::OrderWal<MvccPointer<C>, C, S>;
 
+  #[test]
+  fn test_() {
+    let wal: OrderWal<dbutils::Ascend> = todo!();
+    let start: &[u8] = &[1, 2, 3];
+    let end: &[u8] = &[4, 5, 6];
+
+    wal.range::<[u8], _>(3, (Bound::Included(start), Bound::Excluded(end)));
+  }
+}
