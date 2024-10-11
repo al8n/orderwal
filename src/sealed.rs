@@ -71,7 +71,21 @@ pub trait Memtable: Default {
     R: RangeBounds<Q>,
     Q: ?Sized + Ord + Comparable<Self::Pointer>;
 
-  fn insert(&mut self, ele: Self::Pointer)
+  fn len(&self) -> usize;
+
+  fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
   where
     Self::Pointer: Ord + 'static;
 
@@ -99,9 +113,9 @@ pub trait Memtable: Default {
     Q: Ord + ?Sized + Comparable<Self::Pointer>;
 }
 
-pub trait Wal<P, C, S> {
+pub trait Wal<C, S> {
   type Allocator: Allocator;
-  type Memtable: Memtable<Pointer = P>;
+  type Memtable;
 
   fn construct(
     arena: Self::Allocator,
@@ -247,7 +261,14 @@ pub trait Wal<P, C, S> {
   }
 
   #[inline]
-  fn iter(&self, version: Option<u64>) -> Iter<'_, <Self::Memtable as Memtable>::Iterator<'_>, P> {
+  fn iter(
+    &self,
+    version: Option<u64>,
+  ) -> Iter<'_, <Self::Memtable as Memtable>::Iterator<'_>, <Self::Memtable as Memtable>::Pointer>
+  where
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+  {
     Iter::new(version, self.memtable().iter())
   }
 
@@ -256,17 +277,25 @@ pub trait Wal<P, C, S> {
     &self,
     version: Option<u64>,
     range: R,
-  ) -> Range<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, P>
+  ) -> Range<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, <Self::Memtable as Memtable>::Pointer>
   where
     R: RangeBounds<Q>,
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     Range::new(version, self.memtable().range(range))
   }
 
   #[inline]
-  fn keys(&self, version: Option<u64>) -> Keys<'_, <Self::Memtable as Memtable>::Iterator<'_>, P> {
+  fn keys(
+    &self,
+    version: Option<u64>,
+  ) -> Keys<'_, <Self::Memtable as Memtable>::Iterator<'_>, <Self::Memtable as Memtable>::Pointer>
+  where
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+  {
     Keys::new(version, self.memtable().iter())
   }
 
@@ -276,11 +305,16 @@ pub trait Wal<P, C, S> {
     &self,
     version: Option<u64>,
     range: R,
-  ) -> RangeKeys<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, P>
+  ) -> RangeKeys<
+    '_,
+    <Self::Memtable as Memtable>::Range<'_, Q, R>,
+    <Self::Memtable as Memtable>::Pointer,
+  >
   where
     R: RangeBounds<Q>,
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     RangeKeys::new(version, self.memtable().range(range))
   }
@@ -289,7 +323,11 @@ pub trait Wal<P, C, S> {
   fn values(
     &self,
     version: Option<u64>,
-  ) -> Values<'_, <Self::Memtable as Memtable>::Iterator<'_>, P> {
+  ) -> Values<'_, <Self::Memtable as Memtable>::Iterator<'_>, <Self::Memtable as Memtable>::Pointer>
+  where
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+  {
     Values::new(version, self.memtable().iter())
   }
 
@@ -298,11 +336,16 @@ pub trait Wal<P, C, S> {
     &self,
     version: Option<u64>,
     range: R,
-  ) -> RangeValues<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, P>
+  ) -> RangeValues<
+    '_,
+    <Self::Memtable as Memtable>::Range<'_, Q, R>,
+    <Self::Memtable as Memtable>::Pointer,
+  >
   where
     R: RangeBounds<Q>,
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     RangeValues::new(version, self.memtable().range(range))
   }
@@ -311,7 +354,8 @@ pub trait Wal<P, C, S> {
   #[inline]
   fn first(&self, version: Option<u64>) -> Option<(&[u8], &[u8])>
   where
-    P: Pointer + Ord,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
   {
     match version {
       Some(version) => {
@@ -338,7 +382,8 @@ pub trait Wal<P, C, S> {
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   fn last(&self, version: Option<u64>) -> Option<(&[u8], &[u8])>
   where
-    P: Pointer + Ord,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
   {
     match version {
       Some(version) => {
@@ -365,8 +410,9 @@ pub trait Wal<P, C, S> {
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, version: Option<u64>, key: &Q) -> bool
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     match version {
       Some(version) => {
@@ -387,8 +433,9 @@ pub trait Wal<P, C, S> {
   #[inline]
   fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<&[u8]>
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     if let Some(version) = version {
       if !self.contains_version(version) {
@@ -414,8 +461,9 @@ pub trait Wal<P, C, S> {
   #[inline]
   fn get_entry<Q>(&self, version: Option<u64>, key: &Q) -> Option<(&[u8], &[u8])>
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     if let Some(version) = version {
       if !self.contains_version(version) {
@@ -440,13 +488,15 @@ pub trait Wal<P, C, S> {
 
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>;
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
 
   fn lower_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>;
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
 
   /// Get or insert a new entry into the WAL.
   fn get_or_insert(
@@ -458,7 +508,8 @@ pub trait Wal<P, C, S> {
   where
     C: CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
     self
       .get_or_insert_with_value_builder::<()>(
@@ -481,7 +532,8 @@ pub trait Wal<P, C, S> {
   where
     C: CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
   {
     let base = self.memtable();
     match version {
@@ -518,13 +570,18 @@ pub trait Wal<P, C, S> {
     }
   }
 
-  fn insert_pointer(&mut self, ptr: P)
+  fn insert_pointer(&mut self, ptr: <Self::Memtable as Memtable>::Pointer) -> Result<(), Error>
   where
-    P: Ord;
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Ord;
 
-  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = P>)
+  fn insert_pointers(
+    &mut self,
+    ptrs: impl Iterator<Item = <Self::Memtable as Memtable>::Pointer>,
+  ) -> Result<(), Error>
   where
-    P: Ord;
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Ord;
 
   fn insert<KE, VE>(
     &mut self,
@@ -537,110 +594,97 @@ pub trait Wal<P, C, S> {
     VE: super::entry::BufWriterOnce,
     C: CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Ord,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
     }
 
-    self
-      .insert_in::<KE, VE>(version, kb, vb)
-      .map(|ptr| self.insert_pointer(ptr))
-  }
+    let res = {
+      let klen = if version.is_some() {
+        kb.len() + VERSION_SIZE
+      } else {
+        kb.len()
+      };
 
-  fn insert_in<KE, VE>(
-    &mut self,
-    version: Option<u64>,
-    kb: KE,
-    vb: VE,
-  ) -> Result<P, Among<KE::Error, VE::Error, Error>>
-  where
-    KE: super::entry::BufWriterOnce,
-    VE: super::entry::BufWriterOnce,
-    C: CheapClone,
-    S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Ord,
-  {
-    let klen = if version.is_some() {
-      kb.len() + VERSION_SIZE
-    } else {
-      kb.len()
-    };
+      let vlen = vb.len();
+      self
+        .check(
+          klen,
+          vlen,
+          self.maximum_key_size(),
+          self.maximum_value_size(),
+          self.read_only(),
+        )
+        .map_err(Either::Right)?;
 
-    let vlen = vb.len();
-    self
-      .check(
-        klen,
-        vlen,
-        self.maximum_key_size(),
-        self.maximum_value_size(),
-        self.read_only(),
-      )
-      .map_err(Either::Right)?;
+      let (len_size, kvlen, elen) = entry_size(klen as u32, vlen as u32);
+      let allocator = self.allocator();
+      let is_ondisk = allocator.is_ondisk();
+      let buf = allocator.alloc_bytes(elen);
+      let mut cks = self.hasher().build_checksumer();
 
-    let (len_size, kvlen, elen) = entry_size(klen as u32, vlen as u32);
-    let allocator = self.allocator();
-    let is_ondisk = allocator.is_ondisk();
-    let buf = allocator.alloc_bytes(elen);
-    let mut cks = self.hasher().build_checksumer();
+      match buf {
+        Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
+        Ok(mut buf) => {
+          unsafe {
+            // We allocate the buffer with the exact size, so it's safe to write to the buffer.
+            let flag = Flags::COMMITTED.bits();
 
-    match buf {
-      Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
-      Ok(mut buf) => {
-        unsafe {
-          // We allocate the buffer with the exact size, so it's safe to write to the buffer.
-          let flag = Flags::COMMITTED.bits();
+            cks.update(&[flag]);
 
-          cks.update(&[flag]);
+            buf.put_u8_unchecked(Flags::empty().bits());
+            let written = buf.put_u64_varint_unchecked(kvlen);
+            debug_assert_eq!(
+              written, len_size,
+              "the precalculated size should be equal to the written size"
+            );
 
-          buf.put_u8_unchecked(Flags::empty().bits());
-          let written = buf.put_u64_varint_unchecked(kvlen);
-          debug_assert_eq!(
-            written, len_size,
-            "the precalculated size should be equal to the written size"
-          );
+            let ko = STATUS_SIZE + written;
+            let ptr = if let Some(version) = version {
+              buf.put_u64_le_unchecked(version);
+              buf.as_mut_ptr().add(ko + VERSION_SIZE)
+            } else {
+              buf.as_mut_ptr().add(ko)
+            };
+            buf.set_len(ko + klen + vlen);
 
-          let ko = STATUS_SIZE + written;
-          let ptr = if let Some(version) = version {
-            buf.put_u64_le_unchecked(version);
-            buf.as_mut_ptr().add(ko + VERSION_SIZE)
-          } else {
-            buf.as_mut_ptr().add(ko)
-          };
-          buf.set_len(ko + klen + vlen);
+            kb.write_once(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr)))
+              .map_err(Among::Left)?;
 
-          kb.write_once(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr)))
-            .map_err(Among::Left)?;
+            let vo = ko + klen;
+            vb.write_once(&mut VacantBuffer::new(
+              vlen,
+              NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
+            ))
+            .map_err(Among::Middle)?;
 
-          let vo = ko + klen;
-          vb.write_once(&mut VacantBuffer::new(
-            vlen,
-            NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
-          ))
-          .map_err(Among::Middle)?;
+            let cks = {
+              cks.update(&buf[1..]);
+              cks.digest()
+            };
+            buf.put_u64_le_unchecked(cks);
 
-          let cks = {
-            cks.update(&buf[1..]);
-            cks.digest()
-          };
-          buf.put_u64_le_unchecked(cks);
+            // commit the entry
+            buf[0] |= Flags::COMMITTED.bits();
 
-          // commit the entry
-          buf[0] |= Flags::COMMITTED.bits();
+            if self.options().sync() && is_ondisk {
+              allocator
+                .flush_header_and_range(buf.offset(), elen as usize)
+                .map_err(|e| Among::Right(e.into()))?;
+            }
 
-          if self.options().sync() && is_ondisk {
-            allocator
-              .flush_header_and_range(buf.offset(), elen as usize)
-              .map_err(|e| Among::Right(e.into()))?;
+            buf.detach();
+            let cmp = self.comparator().cheap_clone();
+            let ptr = buf.as_ptr().add(ko);
+            Ok(Pointer::new(klen, vlen, ptr, cmp))
           }
-
-          buf.detach();
-          let cmp = self.comparator().cheap_clone();
-          let ptr = buf.as_ptr().add(ko);
-          Ok(Pointer::new(klen, vlen, ptr, cmp))
         }
       }
-    }
+    };
+
+    res.and_then(|ptr| self.insert_pointer(ptr).map_err(Among::Right))
   }
 
   fn insert_batch<W, B>(
@@ -653,8 +697,9 @@ pub trait Wal<P, C, S> {
     B::Value: BufWriter,
     C: CheapClone,
     S: BuildChecksumer,
-    P: Pointer<Comparator = C> + Ord,
-    W: Constructable<Wal = Self, Pointer = P>,
+    W: Constructable<Wal = Self, Memtable = Self::Memtable>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -755,7 +800,12 @@ pub trait Wal<P, C, S> {
         ))
         .map_err(Among::Middle)?;
         cursor += vlen;
-        ent.set_pointer(<P as Pointer>::new(klen, vlen, ptr, cmp.cheap_clone()));
+        ent.set_pointer(<<Self::Memtable as Memtable>::Pointer as Pointer>::new(
+          klen,
+          vlen,
+          ptr,
+          cmp.cheap_clone(),
+        ));
       }
 
       let total_size = buf.capacity();
@@ -785,9 +835,9 @@ pub trait Wal<P, C, S> {
       buf.detach();
     }
 
-    self.insert_pointers(batch.iter_mut().map(|e| e.take_pointer().unwrap()));
-
-    Ok(())
+    self
+      .insert_pointers(batch.iter_mut().map(|e| e.take_pointer().unwrap()))
+      .map_err(Among::Right)
   }
 
   #[inline]
@@ -814,9 +864,10 @@ pub trait Wal<P, C, S> {
 
 pub trait Constructable: Sized {
   type Allocator: Allocator + 'static;
-  type Wal: Wal<Self::Pointer, Self::Comparator, Self::Checksumer, Allocator = Self::Allocator>
+  type Wal: Wal<Self::Comparator, Self::Checksumer, Allocator = Self::Allocator, Memtable = Self::Memtable>
     + 'static;
-  type Pointer: Pointer<Comparator = Self::Comparator>;
+  // type Pointer: Pointer<Comparator = Self::Comparator>;
+  type Memtable: Memtable;
   type Comparator;
   type Checksumer;
   type Reader;
@@ -849,7 +900,7 @@ pub trait Constructable: Sized {
     arena
       .flush_range(0, HEADER_SIZE)
       .map(|_| {
-        <Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::construct(
+        <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
           arena,
           Default::default(),
           opts,
@@ -872,7 +923,7 @@ pub trait Constructable: Sized {
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];
@@ -886,8 +937,7 @@ pub trait Constructable: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let mut set =
-      <Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable::default();
+    let mut set = <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable::default();
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -952,7 +1002,7 @@ pub trait Constructable: Sized {
             break;
           }
 
-          let pointer: Self::Pointer = Pointer::new(
+          let pointer: <Self::Memtable as Memtable>::Pointer = Pointer::new(
             key_len,
             value_len,
             arena.get_pointer(cursor + STATUS_SIZE + readed),
@@ -963,7 +1013,7 @@ pub trait Constructable: Sized {
           minimum_version = minimum_version.min(version);
           maximum_version = maximum_version.max(version);
 
-          set.insert(pointer);
+          set.insert(pointer)?;
           cursor += cks_offset + CHECKSUM_SIZE;
         } else {
           let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
@@ -1011,7 +1061,7 @@ pub trait Constructable: Sized {
             let klen = klen as usize;
             let vlen = vlen as usize;
 
-            let ptr: Self::Pointer = Pointer::new(
+            let ptr: <Self::Memtable as Memtable>::Pointer = Pointer::new(
               klen,
               vlen,
               arena.get_pointer(cursor + STATUS_SIZE + readed + sub_cursor + kvlen),
@@ -1022,7 +1072,7 @@ pub trait Constructable: Sized {
             minimum_version = minimum_version.min(version);
             maximum_version = maximum_version.max(version);
 
-            set.insert(ptr);
+            set.insert(ptr)?;
             let ent_len = kvlen + klen + vlen;
             sub_cursor += kvlen + klen + vlen;
             batch_data_buf = &batch_data_buf[ent_len..];
@@ -1038,19 +1088,17 @@ pub trait Constructable: Sized {
       }
     }
 
-    Ok(<Self::Wal as Wal<
-      Self::Pointer,
-      Self::Comparator,
-      Self::Checksumer,
-    >>::construct(
-      arena,
-      set,
-      opts,
-      cmp,
-      checksumer,
-      maximum_version,
-      minimum_version,
-    ))
+    Ok(
+      <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
+        arena,
+        set,
+        opts,
+        cmp,
+        checksumer,
+        maximum_version,
+        minimum_version,
+      ),
+    )
   }
 
   fn from_core(core: Self::Wal) -> Self;

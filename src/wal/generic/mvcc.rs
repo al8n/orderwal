@@ -26,7 +26,7 @@ use super::{
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<Comparator = GenericComparator<K>>
 where
-  Self::Pointer: WithVersion + GenericPointer<K, V>,
+  <Self::Memtable as sealed::Memtable>::Pointer: WithVersion + GenericPointer<K, V>,
 {
   /// Returns the reserved space in the WAL.
   ///
@@ -95,9 +95,12 @@ where
     '_,
     K,
     V,
-    <<Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    Self::Pointer,
-  >{
+    <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <Self::Memtable as sealed::Memtable>::Pointer,
+  >
+  where
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
+  {
     GenericIter::new(self.as_core().iter(Some(version)))
   }
 
@@ -113,14 +116,14 @@ where
     V,
     R,
     Q,
-    <Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable,
+    <Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
     R: RangeBounds<Q>,
     K: Type + Ord,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     GenericRange::new(
       self
@@ -137,9 +140,12 @@ where
   ) -> GenericKeys<
     '_,
     K,
-    <<Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    Self::Pointer,
-  >{
+    <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <Self::Memtable as sealed::Memtable>::Pointer,
+  >
+  where
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
+  {
     GenericKeys::new(self.as_core().keys(Some(version)))
   }
 
@@ -154,14 +160,14 @@ where
     K,
     R,
     Q,
-    <Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable,
+    <Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
     R: RangeBounds<Q>,
     K: Type + Ord,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     GenericRangeKeys::new(
       self
@@ -178,9 +184,12 @@ where
   ) -> GenericValues<
     '_,
     V,
-    <<Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    Self::Pointer,
-  >{
+    <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <Self::Memtable as sealed::Memtable>::Pointer,
+  >
+  where
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
+  {
     GenericValues::new(self.as_core().values(Some(version)))
   }
 
@@ -196,14 +205,14 @@ where
     V,
     R,
     Q,
-    <Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable,
+    <Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
     R: RangeBounds<Q>,
     K: Type + Ord,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     GenericRangeValues::new(
       self
@@ -218,7 +227,7 @@ where
   where
     K: Type,
     V: Type,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core().first(Some(version)).map(kv_ref::<K, V>)
   }
@@ -229,7 +238,7 @@ where
   where
     K: Type,
     V: Type,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     Wal::last(self.as_core(), Some(version))
   }
@@ -240,8 +249,8 @@ where
   where
     K: Type,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self.as_core().contains_key(Some(version), &Query::new(key))
   }
@@ -255,8 +264,8 @@ where
   where
     K: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<Self::Pointer>,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    Slice<K>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer>,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -270,8 +279,8 @@ where
     K: Type,
     V: Type,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -289,8 +298,8 @@ where
     K: Type,
     V: Type,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -308,8 +317,8 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<Self::Pointer>,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    Slice<K>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer>,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -331,8 +340,8 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<Self::Pointer>,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    Slice<K>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer>,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -348,8 +357,8 @@ where
     K: Type + Ord,
     V: Type,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -368,8 +377,8 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<Self::Pointer>,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    Slice<K>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer>,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -385,8 +394,8 @@ where
     K: Type + Ord,
     V: Type,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -405,8 +414,8 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<Self::Pointer>,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
+    Slice<K>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer>,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
     self
       .as_core()
@@ -418,7 +427,7 @@ where
 impl<T, K, V> Reader<K, V> for T
 where
   T: Constructable<Comparator = GenericComparator<K>>,
-  T::Pointer: WithVersion + GenericPointer<K, V>,
+  <T::Memtable as sealed::Memtable>::Pointer: WithVersion + GenericPointer<K, V>,
   K: ?Sized,
   V: ?Sized,
 {
@@ -427,8 +436,8 @@ where
 /// An abstract layer for the write-ahead log.
 pub trait Writer<K: ?Sized, V: ?Sized>: Reader<K, V>
 where
-  Self::Pointer: WithVersion + GenericPointer<K, V>,
-  Self::Reader: Reader<K, V, Pointer = Self::Pointer>,
+  <Self::Memtable as sealed::Memtable>::Pointer: WithVersion + GenericPointer<K, V>,
+  Self::Reader: Reader<K, V, Memtable = Self::Memtable>,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -475,8 +484,8 @@ where
   //   K: Type + Ord + for<'b> Comparable<K::Ref<'b>> + 'a,
   //   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   //   V: Type + 'a,
-  //   Query<'a, K, Generic<'a, K>>: Comparable<Self::Pointer> + Ord,
-  //   Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K> + Ord,
+  //   Query<'a, K, Generic<'a, K>>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
+  //   <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Comparable<K> + Ord,
   //   Self::Checksumer: BuildChecksumer,
   // {
 
@@ -500,7 +509,7 @@ where
   // ) -> Result<Option<&[u8]>, Either<E, Error>>
   // where
   //   Self::Checksumer: BuildChecksumer,
-  //   Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+  //   <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   // {
   //   self
   //     .as_core_mut()
@@ -522,7 +531,7 @@ where
     K: Type,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert(Some(version), kb, value.into())
   }
@@ -542,7 +551,7 @@ where
     K: Type + 'a,
     V: Type,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert(Some(version), key.into(), vb)
   }
@@ -560,7 +569,7 @@ where
     K: Type,
     V: Type,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert(Some(version), kb, vb)
   }
@@ -577,7 +586,7 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self
       .as_core_mut()
@@ -595,7 +604,8 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch)
   }
@@ -612,7 +622,8 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch)
   }
@@ -629,7 +640,8 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch)
   }
@@ -645,7 +657,7 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
     self.as_core_mut().insert_batch(batch)
   }

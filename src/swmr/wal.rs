@@ -5,87 +5,13 @@ use dbutils::equivalent::Comparable;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  sealed::{self, Pointer, Wal},
+  error::Error,
+  sealed::{self, Memtable, Pointer, Wal},
   Options,
 };
-
-impl<P> sealed::Memtable for SkipSet<P>
-where
-  P: Send + Ord,
-{
-  type Pointer = P;
-
-  type Item<'a>
-    = crossbeam_skiplist::set::Entry<'a, P>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
-  type Iterator<'a>
-    = crossbeam_skiplist::set::Iter<'a, P>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
-  type Range<'a, Q, R>
-    = crossbeam_skiplist::set::Range<'a, Q, R, Self::Pointer>
-  where
-    Self::Pointer: 'a,
-    Self: 'a,
-    R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
-
-  fn insert(&mut self, ele: Self::Pointer)
-  where
-    P: Ord + 'static,
-  {
-    SkipSet::insert(self, ele);
-  }
-
-  #[inline]
-  fn first(&self) -> Option<Self::Item<'_>> {
-    SkipSet::front(self)
-  }
-
-  #[inline]
-  fn last(&self) -> Option<Self::Item<'_>> {
-    SkipSet::back(self)
-  }
-
-  #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
-  where
-    Q: Ord + ?Sized + Comparable<P>,
-  {
-    SkipSet::get(self, key)
-  }
-
-  #[inline]
-  fn contains<Q>(&self, key: &Q) -> bool
-  where
-    Q: Ord + ?Sized + Comparable<P>,
-  {
-    SkipSet::contains(self, key)
-  }
-
-  #[inline]
-  fn iter(&self) -> Self::Iterator<'_> {
-    SkipSet::iter(self)
-  }
-
-  #[inline]
-  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<P>,
-  {
-    SkipSet::range(self, range)
-  }
-}
-
-pub struct OrderCore<P, C, S> {
+pub struct OrderCore<M, C, S> {
   pub(super) arena: Arena,
-  pub(super) map: SkipSet<P>,
+  pub(super) map: M,
   pub(super) max_version: u64,
   pub(super) min_version: u64,
   pub(super) opts: Options,
@@ -93,12 +19,13 @@ pub struct OrderCore<P, C, S> {
   pub(super) cks: S,
 }
 
-impl<P, C, S> Wal<P, C, S> for OrderCore<P, C, S>
+impl<M, C, S> Wal<C, S> for OrderCore<M, C, S>
 where
-  P: Ord + Send + 'static,
+  M: Memtable,
+  M::Pointer: Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Memtable = SkipSet<P>;
+  type Memtable = M;
 
   #[inline]
   fn memtable(&self) -> &Self::Memtable {
@@ -107,8 +34,8 @@ where
 
   #[inline]
   fn construct(
-    arena: Arena,
-    set: SkipSet<P>,
+    arena: Self::Allocator,
+    set: Self::Memtable,
     opts: Options,
     cmp: C,
     checksumer: S,
@@ -171,8 +98,9 @@ where
   #[inline]
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    // P: Pointer<Comparator = C>,
+    M::Pointer: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<M::Pointer>,
   {
     match version {
       None => self.map.upper_bound(bound).map(|ent| ent.as_key_slice()),
@@ -192,8 +120,9 @@ where
   #[inline]
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<&[u8]>
   where
-    P: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<P>,
+    // P: Pointer<Comparator = C>,
+    M::Pointer: Pointer<Comparator = C>,
+    Q: Ord + ?Sized + Comparable<M::Pointer>,
   {
     match version {
       None => self.map.lower_bound(bound).map(|ent| ent.as_key_slice()),
@@ -221,14 +150,16 @@ where
   }
 
   #[inline]
-  fn insert_pointer(&mut self, ptr: P) {
+  fn insert_pointer(&mut self, ptr: M::Pointer) -> Result<(), Error> {
     self.map.insert(ptr);
+    Ok(())
   }
 
   #[inline]
-  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = P>) {
+  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = M::Pointer>) -> Result<(), Error> {
     for ptr in ptrs {
       self.map.insert(ptr);
     }
+    Ok(())
   }
 }

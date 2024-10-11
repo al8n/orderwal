@@ -1,5 +1,5 @@
 use crate::{
-  sealed::{WithVersion, WithoutVersion},
+  sealed::{Memtable, WithVersion, WithoutVersion},
   VERSION_SIZE,
 };
 
@@ -42,14 +42,14 @@ pub struct BatchEntry<K, V, C: Constructable> {
   pub(crate) key: K,
   pub(crate) value: V,
   pub(crate) meta: EncodedBatchEntryMeta,
-  pointer: Option<C::Pointer>,
+  pointer: Option<<C::Memtable as Memtable>::Pointer>,
   version: Option<u64>,
 }
 
 impl<K, V, C> BatchEntry<K, V, C>
 where
   C: Constructable,
-  C::Pointer: WithoutVersion,
+  <C::Memtable as Memtable>::Pointer: WithoutVersion,
 {
   /// Creates a new entry.
   #[inline]
@@ -67,7 +67,7 @@ where
 impl<K, V, C> BatchEntry<K, V, C>
 where
   C: Constructable,
-  C::Pointer: WithVersion,
+  <C::Memtable as Memtable>::Pointer: WithVersion,
 {
   /// Creates a new entry.
   #[inline]
@@ -152,12 +152,12 @@ impl<K, V, C: Constructable> BatchEntry<K, V, C> {
   }
 
   #[inline]
-  pub(crate) fn take_pointer(&mut self) -> Option<C::Pointer> {
+  pub(crate) fn take_pointer(&mut self) -> Option<<C::Memtable as Memtable>::Pointer> {
     self.pointer.take()
   }
 
   #[inline]
-  pub(crate) fn set_pointer(&mut self, pointer: C::Pointer) {
+  pub(crate) fn set_pointer(&mut self, pointer: <C::Memtable as Memtable>::Pointer) {
     self.pointer = Some(pointer);
   }
 

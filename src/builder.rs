@@ -1,4 +1,4 @@
-use sealed::Immutable;
+use sealed::{Immutable, Memtable, Pointer};
 
 use super::{checksum::BuildChecksumer, options::ArenaOptionsExt, sealed::Constructable, *};
 
@@ -790,7 +790,8 @@ impl<C, S> Builder<C, S> {
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<Comparator = C, Checksumer = S> + Immutable,
-    W::Pointer: Ord + 'static,
+    W::Memtable: Memtable,
+    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     self
       .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -836,7 +837,8 @@ impl<C, S> Builder<C, S> {
     C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     W: Constructable<Comparator = C, Checksumer = S> + Immutable,
-    W::Pointer: Ord + 'static,
+    W::Memtable: Memtable,
+    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     let Self { opts, cmp, cks } = self;
 
@@ -886,7 +888,8 @@ impl<C, S> Builder<C, S> {
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<Comparator = C, Checksumer = S>,
-    W::Pointer: Ord + 'static,
+    W::Memtable: Memtable,
+    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     self
       .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -931,7 +934,8 @@ impl<C, S> Builder<C, S> {
     C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     W: Constructable<Comparator = C, Checksumer = S>,
-    W::Pointer: Ord + 'static,
+    W::Memtable: Memtable,
+    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  sealed::{self, Constructable, Immutable},
+  sealed::{self, Constructable, Immutable, Memtable},
   swmr::wal::OrderCore,
   wal::generic::GenericComparator,
 };
@@ -28,19 +28,20 @@ where
   }
 }
 
-impl<K, V, P, S> Constructable for GenericOrderWalReader<K, V, P, S>
+impl<K, V, M, S> Constructable for GenericOrderWalReader<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  P: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
+  M: Memtable + 'static,
+  M::Pointer: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<Self::Pointer, Self::Comparator, Self::Checksumer>;
-  type Pointer = P;
+  type Wal = OrderCore<Self::Memtable, Self::Comparator, Self::Checksumer>;
+  type Memtable = M;
   type Checksumer = S;
   type Comparator = GenericComparator<K>;
-  type Reader = GenericOrderWalReader<K, V, P, S>;
+  type Reader = GenericOrderWalReader<K, V, M, S>;
 
   #[inline]
   fn as_core(&self) -> &Self::Wal {
@@ -63,27 +64,28 @@ where
 }
 
 /// An [`OrderWal`] reader.
-pub struct OrderWalReader<P, C, S>(OrderWal<P, C, S>);
+pub struct OrderWalReader<M, C, S>(OrderWal<M, C, S>);
 
-impl<P, C, S> OrderWalReader<P, C, S> {
+impl<M, C, S> OrderWalReader<M, C, S> {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<P, C, S>>>) -> Self {
+  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<M, C, S>>>) -> Self {
     Self(OrderWal::construct(wal))
   }
 }
 
-impl<P, C, S> Immutable for OrderWalReader<P, C, S> {}
+impl<M, C, S> Immutable for OrderWalReader<M, C, S> {}
 
-impl<P, C, S> Constructable for OrderWalReader<P, C, S>
+impl<M, C, S> Constructable for OrderWalReader<M, C, S>
 where
   C: 'static,
   S: 'static,
-  P: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
+  M: Memtable + 'static,
+  M::Pointer: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<P, C, S>;
-  type Pointer = P;
+  type Wal = OrderCore<Self::Memtable, C, S>;
+  type Memtable = M;
   type Checksumer = S;
   type Comparator = C;
   type Reader = Self;

@@ -89,6 +89,8 @@ pub mod iter;
 
 mod sealed;
 
+mod memtable;
+
 /// The mvcc version size.
 const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 

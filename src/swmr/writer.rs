@@ -1,5 +1,5 @@
 use crate::{
-  sealed::{self, Constructable},
+  sealed::{self, Constructable, Memtable},
   wal::{
     bytes::pointer::{Pointer, VersionPointer},
     generic::{GenericComparator, GenericPointer, GenericVersionPointer},
@@ -31,8 +31,8 @@ use super::{
 mod tests;
 
 /// A ordered write-ahead log implementation for concurrent thread environments.
-pub struct GenericOrderWal<K: ?Sized, V: ?Sized, P, S = Crc32> {
-  pub(super) core: Arc<UnsafeCell<OrderCore<P, GenericComparator<K>, S>>>,
+pub struct GenericOrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
+  pub(super) core: Arc<UnsafeCell<OrderCore<M, GenericComparator<K>, S>>>,
   pub(super) _s: PhantomData<S>,
   pub(super) _v: PhantomData<V>,
 }
@@ -50,19 +50,20 @@ impl<K: ?Sized, V: ?Sized, P, S> GenericOrderWal<K, V, P, S> {
   }
 }
 
-impl<K, V, P, S> Constructable for GenericOrderWal<K, V, P, S>
+impl<K, V, M, S> Constructable for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  P: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
+  M: Memtable + 'static,
+  M::Pointer: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<Self::Pointer, Self::Comparator, Self::Checksumer>;
-  type Pointer = P;
+  type Wal = OrderCore<Self::Memtable, Self::Comparator, Self::Checksumer>;
+  type Memtable = M;
   type Checksumer = S;
   type Comparator = GenericComparator<K>;
-  type Reader = GenericOrderWalReader<K, V, P, S>;
+  type Reader = GenericOrderWalReader<K, V, M, S>;
 
   #[inline]
   fn as_core(&self) -> &Self::Wal {
@@ -84,12 +85,13 @@ where
   }
 }
 
-impl<K, V, P, S> GenericOrderWal<K, V, P, S>
+impl<K, V, M, S> GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  P: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
+  M: Memtable + 'static,
+  M::Pointer: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
 {
   /// Returns the path of the WAL if it is backed by a file.
   ///
@@ -108,32 +110,28 @@ where
   }
 }
 
-impl<K, V, S> crate::wal::generic::base::Writer<K, V>
-  for GenericOrderWal<K, V, GenericPointer<K, V>, S>
+impl<K, V, M, S> crate::wal::generic::base::Writer<K, V> for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
+  M: Memtable<Pointer = GenericPointer<K, V>> + 'static,
   GenericPointer<K, V>: Ord,
   S: 'static,
 {
-  // type Reader = GenericOrderWalReader<K, V, GenericPointer<K, V>, S>;
-
   #[inline]
   fn reader(&self) -> Self::Reader {
     GenericOrderWalReader::new(self.core.clone())
   }
 }
 
-impl<K, V, S> crate::wal::generic::mvcc::Writer<K, V>
-  for GenericOrderWal<K, V, GenericVersionPointer<K, V>, S>
+impl<K, V, M, S> crate::wal::generic::mvcc::Writer<K, V> for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
+  M: Memtable<Pointer = GenericVersionPointer<K, V>> + 'static,
   GenericVersionPointer<K, V>: Ord,
   S: 'static,
 {
-  // type Reader = GenericOrderWalReader<K, V, GenericVersionPointer<K, V>, S>;
-
   #[inline]
   fn reader(&self) -> Self::Reader {
     GenericOrderWalReader::new(self.core.clone())
@@ -156,18 +154,19 @@ impl<P, C, S> OrderWal<P, C, S> {
   }
 }
 
-impl<P, C, S> Constructable for OrderWal<P, C, S>
+impl<M, C, S> Constructable for OrderWal<M, C, S>
 where
   C: 'static,
   S: 'static,
-  P: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
+  M: Memtable + 'static,
+  M::Pointer: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<P, C, S>;
-  type Pointer = P;
+  type Wal = OrderCore<Self::Memtable, C, S>;
+  type Memtable = M;
   type Checksumer = S;
   type Comparator = C;
-  type Reader = OrderWalReader<P, C, S>;
+  type Reader = OrderWalReader<M, C, S>;
 
   #[inline]
   fn as_core(&self) -> &Self::Wal {
@@ -188,9 +187,10 @@ where
   }
 }
 
-impl<P, C, S> OrderWal<P, C, S>
+impl<M, C, S> OrderWal<M, C, S>
 where
-  P: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
+  M: Memtable + 'static,
+  M::Pointer: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
   C: 'static,
   S: 'static,
 {
@@ -211,8 +211,9 @@ where
   }
 }
 
-impl<C, S> crate::wal::bytes::base::Writer for OrderWal<Pointer<C>, C, S>
+impl<M, C, S> crate::wal::bytes::base::Writer for OrderWal<M, C, S>
 where
+  M: Memtable<Pointer = Pointer<C>> + 'static,
   C: Comparator + Send + 'static,
   S: 'static,
 {
@@ -222,8 +223,9 @@ where
   }
 }
 
-impl<C, S> crate::wal::bytes::mvcc::Writer for OrderWal<VersionPointer<C>, C, S>
+impl<M, C, S> crate::wal::bytes::mvcc::Writer for OrderWal<M, C, S>
 where
+  M: Memtable<Pointer = VersionPointer<C>> + 'static,
   C: Comparator + Send + 'static,
   S: 'static,
 {

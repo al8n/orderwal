@@ -1,0 +1,112 @@
+use core::ops::RangeBounds;
+
+use crossbeam_skiplist::SkipSet;
+use dbutils::equivalent::Comparable;
+
+use crate::{error::Error, sealed};
+
+pub struct LinkedTable<P>(SkipSet<P>);
+
+impl<P> Default for LinkedTable<P> {
+  #[inline]
+  fn default() -> Self {
+    Self(SkipSet::new())
+  }
+}
+
+impl<P> sealed::Memtable for LinkedTable<P>
+where
+  P: Send + Ord,
+{
+  type Pointer = P;
+
+  type Item<'a>
+    = crossbeam_skiplist::set::Entry<'a, P>
+  where
+    Self::Pointer: 'a,
+    Self: 'a;
+
+  type Iterator<'a>
+    = crossbeam_skiplist::set::Iter<'a, P>
+  where
+    Self::Pointer: 'a,
+    Self: 'a;
+
+  type Range<'a, Q, R>
+    = crossbeam_skiplist::set::Range<'a, Q, R, Self::Pointer>
+  where
+    Self::Pointer: 'a,
+    Self: 'a,
+    R: RangeBounds<Q>,
+    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.0.len()
+  }
+
+  #[inline]
+  fn upper_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+  {
+    self.0.upper_bound(bound)
+  }
+
+  #[inline]
+  fn lower_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+  {
+    self.0.lower_bound(bound)
+  }
+
+  #[inline]
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  where
+    P: Ord + 'static,
+  {
+    self.0.insert(ele);
+    Ok(())
+  }
+
+  #[inline]
+  fn first(&self) -> Option<Self::Item<'_>> {
+    self.0.front()
+  }
+
+  #[inline]
+  fn last(&self) -> Option<Self::Item<'_>> {
+    self.0.back()
+  }
+
+  #[inline]
+  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<P>,
+  {
+    self.0.get(key)
+  }
+
+  #[inline]
+  fn contains<Q>(&self, key: &Q) -> bool
+  where
+    Q: Ord + ?Sized + Comparable<P>,
+  {
+    self.0.contains(key)
+  }
+
+  #[inline]
+  fn iter(&self) -> Self::Iterator<'_> {
+    self.0.iter()
+  }
+
+  #[inline]
+  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: Ord + ?Sized + Comparable<P>,
+  {
+    self.0.range(range)
+  }
+}

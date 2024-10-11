@@ -13,14 +13,14 @@ use crate::{
   entry::BufWriter,
   error::Error,
   iter::*,
-  sealed::{self, Constructable, Pointer, Wal, WithoutVersion},
+  sealed::{self, Constructable, Memtable, Pointer, Wal, WithoutVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Constructable
 where
-  Self::Pointer: WithoutVersion,
+  <Self::Memtable as Memtable>::Pointer: WithoutVersion,
 {
   /// Returns the reserved space in the WAL.
   ///
@@ -86,7 +86,8 @@ where
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().contains_key(None, key)
   }
@@ -97,9 +98,12 @@ where
     &self,
   ) -> Iter<
     '_,
-    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    Self::Pointer,
-  >{
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <Self::Memtable as Memtable>::Pointer,
+  >
+  where
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
+  {
     self.as_core().iter(None)
   }
 
@@ -110,17 +114,17 @@ where
     range: R,
   ) -> Range<
     '_,
-    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
     >,
-    Self::Pointer,
+    <Self::Memtable as Memtable>::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Pointer<Comparator = Self::Comparator>,
-    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
   {
     self.as_core().range(None, range)
   }
@@ -131,9 +135,12 @@ where
     &self,
   ) -> Keys<
     '_,
-    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    Self::Pointer,
-  >{
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <Self::Memtable as Memtable>::Pointer,
+  >
+  where
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
+  {
     self.as_core().keys(None)
   }
 
@@ -144,18 +151,19 @@ where
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
     >,
-    Self::Pointer,
+    <Self::Memtable as Memtable>::Pointer,
   >
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().range_keys(None, range)
   }
@@ -166,9 +174,12 @@ where
     &self,
   ) -> Values<
     '_,
-    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    Self::Pointer,
-  >{
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <Self::Memtable as Memtable>::Pointer,
+  >
+  where
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
+  {
     self.as_core().values(None)
   }
 
@@ -179,16 +190,16 @@ where
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
     >,
-    Self::Pointer,
+    <Self::Memtable as Memtable>::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q> + Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Borrow<Q> + Pointer<Comparator = Self::Comparator> + Ord,
     Q: Ord + ?Sized,
   {
     self.as_core().range_values(None, range)
@@ -198,7 +209,7 @@ where
   #[inline]
   fn first(&self) -> Option<(&[u8], &[u8])>
   where
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().first(None)
   }
@@ -207,7 +218,7 @@ where
   #[inline]
   fn last(&self) -> Option<(&[u8], &[u8])>
   where
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     Wal::last(self.as_core(), None)
   }
@@ -218,7 +229,8 @@ where
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().get(None, key)
   }
@@ -230,7 +242,8 @@ where
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().upper_bound(None, bound)
   }
@@ -242,7 +255,8 @@ where
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().lower_bound(None, bound)
   }
@@ -251,14 +265,14 @@ where
 impl<T> Reader for T
 where
   T: Constructable,
-  T::Pointer: WithoutVersion,
+  <T::Memtable as Memtable>::Pointer: WithoutVersion,
 {
 }
 
 /// An abstract layer for the write-ahead log.
 pub trait Writer: Reader
 where
-  Self::Pointer: WithoutVersion,
+  <Self::Memtable as Memtable>::Pointer: WithoutVersion,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -300,7 +314,8 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self.as_core_mut().get_or_insert(None, key, value)
   }
@@ -315,7 +330,8 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -335,7 +351,8 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -356,7 +373,8 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -375,7 +393,8 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+    <Self::Memtable as Memtable>::Pointer:
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self.as_core_mut().insert(None, kb, vb)
   }
@@ -386,7 +405,7 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self
       .as_core_mut()
@@ -406,7 +425,7 @@ where
     VB: BufWriter,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core_mut().insert_batch(batch)
   }
@@ -423,7 +442,7 @@ where
     B::Value: Borrow<[u8]>,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
       Among::Left(e) => Either::Left(e),
@@ -444,7 +463,7 @@ where
     B::Key: Borrow<[u8]>,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
       Among::Left(e) => Either::Right(e.into()),
@@ -462,7 +481,7 @@ where
     B::Value: Borrow<[u8]>,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core_mut().insert_batch(batch).map_err(Into::into)
   }
