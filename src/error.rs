@@ -1,3 +1,6 @@
+use among::Among;
+use dbutils::error::InsufficientBuffer;
+
 /// The batch error type.
 #[derive(Debug, thiserror::Error)]
 pub enum BatchError {
@@ -18,13 +21,8 @@ pub enum BatchError {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
   /// Insufficient space in the WAL
-  #[error("insufficient space in the WAL (requested: {requested}, available: {available})")]
-  InsufficientSpace {
-    /// The requested size
-    requested: u64,
-    /// The remaining size
-    available: u32,
-  },
+  #[error("insufficient space in the WAL: {0}")]
+  InsufficientSpace(#[from] InsufficientBuffer),
   /// The key is too large.
   #[error("the key size is {size} larger than the maximum key size {maximum_key_size}")]
   KeyTooLarge {
@@ -60,13 +58,24 @@ pub enum Error {
   ReadOnly,
 }
 
+impl From<Among<InsufficientBuffer, InsufficientBuffer, Error>> for Error {
+  #[inline]
+  fn from(value: Among<InsufficientBuffer, InsufficientBuffer, Error>) -> Self {
+    match value {
+      Among::Left(a) => Self::from(a),
+      Among::Middle(b) => Self::from(b),
+      Among::Right(c) => c,
+    }
+  }
+}
+
 impl Error {
   /// Create a new `Error::InsufficientSpace` instance.
   pub(crate) const fn insufficient_space(requested: u64, available: u32) -> Self {
-    Self::InsufficientSpace {
+    Self::InsufficientSpace(InsufficientBuffer::with_information(
       requested,
-      available,
-    }
+      available as u64,
+    ))
   }
 
   /// Create a new `Error::KeyTooLarge` instance.

@@ -7,19 +7,21 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, equivalent::Comparable, CheapClone};
 use rarena_allocator::{either::Either, Allocator};
 
-use crate::batch::{Batch2, BatchEntry2, BufWriter};
-
 use super::{
-  batch::{Batch, BatchWithBuilders, BatchWithKeyBuilder, BatchWithValueBuilder},
+  batch::Batch,
   checksum::BuildChecksumer,
+  entry::BufWriter,
   error::Error,
   iter::*,
-  sealed::{Base, Constructable, Core, Pointer, WithoutVersion},
+  sealed::{self, Constructable, Core, Pointer, WithoutVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
 /// An abstract layer for the immutable write-ahead log.
-pub trait Reader<C, S>: Constructable<C, S> {
+pub trait Reader: Constructable
+where
+  Self::Pointer: WithoutVersion,
+{
   /// Returns the reserved space in the WAL.
   ///
   /// ## Safety
@@ -32,7 +34,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
-  fn path(&self) -> Option<&<<Self as Constructable<C, S>>::Allocator as Allocator>::Path> {
+  fn path(&self) -> Option<&<<Self as Constructable>::Allocator as Allocator>::Path> {
     self.as_core().path()
   }
 
@@ -84,7 +86,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().contains_key(Some(version), key)
   }
@@ -96,9 +98,9 @@ pub trait Reader<C, S>: Constructable<C, S> {
     version: u64,
   ) -> Iter<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
     Self::Pointer,
-  > {
+  >{
     self.as_core().iter(Some(version))
   }
 
@@ -110,12 +112,16 @@ pub trait Reader<C, S>: Constructable<C, S> {
     range: R,
   ) -> Range<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+      '_,
+      Q,
+      R,
+    >,
     Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Pointer<Comparator = C>,
+    Self::Pointer: Pointer<Comparator = Self::Comparator>,
     Q: Ord + ?Sized + Comparable<Self::Pointer>,
   {
     self.as_core().range(Some(version), range)
@@ -128,9 +134,9 @@ pub trait Reader<C, S>: Constructable<C, S> {
     version: u64,
   ) -> Keys<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
     Self::Pointer,
-  > {
+  >{
     self.as_core().keys(Some(version))
   }
 
@@ -142,14 +148,18 @@ pub trait Reader<C, S>: Constructable<C, S> {
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+      '_,
+      Q,
+      R,
+    >,
     Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().range_keys(Some(version), range)
   }
@@ -161,9 +171,9 @@ pub trait Reader<C, S>: Constructable<C, S> {
     version: u64,
   ) -> Values<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Iterator<'_>,
+    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
     Self::Pointer,
-  > {
+  >{
     self.as_core().values(Some(version))
   }
 
@@ -175,12 +185,16 @@ pub trait Reader<C, S>: Constructable<C, S> {
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Core as Core<Self::Pointer, C, S>>::Base as Base>::Range<'_, Q, R>,
+    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+      '_,
+      Q,
+      R,
+    >,
     Self::Pointer,
   >
   where
     R: RangeBounds<Q>,
-    Self::Pointer: Borrow<Q> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Pointer<Comparator = Self::Comparator> + Ord,
     Q: Ord + ?Sized,
   {
     self.as_core().range_values(Some(version), range)
@@ -190,7 +204,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().first(Some(version))
   }
@@ -199,7 +213,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
   #[inline]
   fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
   where
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
     Core::last(self.as_core(), Some(version))
   }
@@ -210,7 +224,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().get(Some(version), key)
   }
@@ -222,7 +236,7 @@ pub trait Reader<C, S>: Constructable<C, S> {
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().upper_bound(Some(version), bound)
   }
@@ -234,27 +248,24 @@ pub trait Reader<C, S>: Constructable<C, S> {
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
-    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = C> + Ord,
+    Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
     self.as_core().lower_bound(Some(version), bound)
   }
 }
 
-impl<T, C, S> Reader<C, S> for T
+impl<T> Reader for T
 where
-  T: Constructable<C, S>,
+  T: Constructable,
   T::Pointer: WithoutVersion,
 {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Writer<C, S>: Reader<C, S> {
-  /// The read only reader type for this wal.
-  type Reader: Reader<C, S, Pointer = Self::Pointer>
-  where
-    Self::Core: Core<Self::Pointer, C, S> + 'static,
-    Self::Allocator: 'static;
-
+pub trait Writer: Reader
+where
+  Self::Pointer: WithoutVersion,
+{
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
   fn read_only(&self) -> bool {
@@ -298,9 +309,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     value: &[u8],
   ) -> Result<Option<&[u8]>, Error>
   where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self.as_core_mut().get_or_insert(Some(version), key, value)
   }
@@ -314,9 +325,9 @@ pub trait Writer<C, S>: Reader<C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
   where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
@@ -335,13 +346,14 @@ pub trait Writer<C, S>: Reader<C, S> {
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
   where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
-      .insert_with_key_builder(Some(version), kb, value)
+      .insert(Some(version), kb, value)
+      .map_err(Among::into_left_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -356,13 +368,14 @@ pub trait Writer<C, S>: Reader<C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
   where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
     self
       .as_core_mut()
-      .insert_with_value_builder(Some(version), key, vb)
+      .insert(Some(version), key, vb)
+      .map_err(Among::into_middle_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -375,54 +388,97 @@ pub trait Writer<C, S>: Reader<C, S> {
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
   where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
-    self
-      .as_core_mut()
-      .insert_with_builders(Some(version), kb, vb)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with<KB, VB, B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Among<KB::Error, VB::Error, Error>>
-  where
-    B: Batch2<Entry = BatchEntry2<KB, VB, Self::Pointer>>,
-    KB: BufWriter,
-    VB: BufWriter,
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
-  {
-    self.as_core_mut().insert_batch_with_builders_generic(batch)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
-  where
-    B: Batch<Pointer = Self::Pointer>,
-    B::Key: Borrow<[u8]>,
-    B::Value: Borrow<[u8]>,
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
-  {
-    self.as_core_mut().insert_batch(batch)
+    self.as_core_mut().insert(Some(version), kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
   #[inline]
   fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Pointer: Pointer<Comparator = C> + Ord,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    Core::insert(self.as_core_mut(), Some(version), key, value)
+    self
+      .as_core_mut()
+      .insert(Some(version), key, value)
+      .map_err(Among::unwrap_right)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with_builders<KB, VB, B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<KB::Error, VB::Error, Error>>
+  where
+    B: Batch<Self, Key = KB, Value = VB>,
+    KB: BufWriter,
+    VB: BufWriter,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+  {
+    self.as_core_mut().insert_batch(batch)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with_key_builder<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<<B::Key as BufWriter>::Error, Error>>
+  where
+    B: Batch<Self>,
+    B::Key: BufWriter,
+    B::Value: Borrow<[u8]>,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+  {
+    self.as_core_mut().insert_batch(batch).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e),
+      Among::Middle(e) => Either::Right(e.into()),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch_with_value_builder<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<<B::Value as BufWriter>::Error, Error>>
+  where
+    B: Batch<Self>,
+    B::Value: BufWriter,
+    B::Key: Borrow<[u8]>,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+  {
+    self.as_core_mut().insert_batch(batch).map_err(|e| match e {
+      Among::Left(e) => Either::Right(e.into()),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error>
+  where
+    B: Batch<Self>,
+    B::Key: Borrow<[u8]>,
+    B::Value: Borrow<[u8]>,
+    Self::Comparator: CheapClone,
+    Self::Checksumer: BuildChecksumer,
+    Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+  {
+    self.as_core_mut().insert_batch(batch).map_err(Into::into)
   }
 }

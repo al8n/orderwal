@@ -4,7 +4,7 @@ use std::rc::Rc;
 use dbutils::{checksum::Crc32, Ascend};
 use rarena_allocator::{unsync::Arena, Allocator};
 
-use crate::{pointer::{Pointer, MvccPointer}, sealed::Constructable};
+use crate::{pointer::{Pointer, VersionPointer}, sealed::Constructable};
 
 use super::c::OrderCore;
 
@@ -83,7 +83,7 @@ where
   }
 }
 
-impl<C, S> crate::mvcc::Writer<C, S> for OrderWal<MvccPointer<C>, C, S>
+impl<C, S> crate::mvcc::Writer<C, S> for OrderWal<VersionPointer<C>, C, S>
 where
   C: 'static,
   S: 'static,

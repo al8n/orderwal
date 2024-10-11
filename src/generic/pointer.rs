@@ -117,7 +117,7 @@ where
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GenericMvccPointer<K: ?Sized, V: ?Sized> {
+pub struct GenericVersionPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
   ptr: *const u8,
   /// The length of the key.
@@ -127,7 +127,7 @@ pub struct GenericMvccPointer<K: ?Sized, V: ?Sized> {
   _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericMvccPointer<K, V> {
+impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V> {
   type Comparator = GenericComparator<K>;
 
   #[inline]
@@ -164,15 +164,15 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericMvccPointer<K, V> {
   }
 }
 
-impl<K: Type + ?Sized, V: ?Sized> PartialEq for GenericMvccPointer<K, V> {
+impl<K: Type + ?Sized, V: ?Sized> PartialEq for GenericVersionPointer<K, V> {
   fn eq(&self, other: &Self) -> bool {
     self.as_key_slice() == other.as_key_slice() && self.version() == other.version()
   }
 }
 
-impl<K: Type + ?Sized, V: ?Sized> Eq for GenericMvccPointer<K, V> {}
+impl<K: Type + ?Sized, V: ?Sized> Eq for GenericVersionPointer<K, V> {}
 
-impl<K, V> PartialOrd for GenericMvccPointer<K, V>
+impl<K, V> PartialOrd for GenericVersionPointer<K, V>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -183,7 +183,7 @@ where
   }
 }
 
-impl<K, V> Ord for GenericMvccPointer<K, V>
+impl<K, V> Ord for GenericVersionPointer<K, V>
 where
   K: Type + Ord + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
@@ -198,20 +198,20 @@ where
   }
 }
 
-unsafe impl<K, V> Send for GenericMvccPointer<K, V>
+unsafe impl<K, V> Send for GenericVersionPointer<K, V>
 where
   K: ?Sized,
   V: ?Sized,
 {
 }
-unsafe impl<K, V> Sync for GenericMvccPointer<K, V>
+unsafe impl<K, V> Sync for GenericVersionPointer<K, V>
 where
   K: ?Sized,
   V: ?Sized,
 {
 }
 
-impl<K, V> GenericMvccPointer<K, V>
+impl<K, V> GenericVersionPointer<K, V>
 where
   K: ?Sized,
   V: ?Sized,
@@ -227,5 +227,7 @@ where
   }
 }
 
-impl<K: ?Sized, V: ?Sized> WithVersion for GenericMvccPointer<K, V> {}
+impl<K: ?Sized, V: ?Sized> WithVersion for GenericVersionPointer<K, V> {}
+impl<K: ?Sized, V: ?Sized> crate::sealed::GenericPointer<K, V> for GenericVersionPointer<K, V> {}
 impl<K: ?Sized, V: ?Sized> WithoutVersion for GenericPointer<K, V> {}
+impl<K: ?Sized, V: ?Sized> crate::sealed::GenericPointer<K, V> for GenericPointer<K, V> {}

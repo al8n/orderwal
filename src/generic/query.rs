@@ -12,7 +12,7 @@ use dbutils::{
 
 use crate::sealed::Pointer as _;
 
-use super::{GenericMvccPointer, GenericPointer};
+use super::{GenericPointer, GenericVersionPointer};
 
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
@@ -179,27 +179,27 @@ where
   }
 }
 
-impl<'a, 'b: 'a, K, Q, V> Equivalent<GenericMvccPointer<K, V>> for Query<'a, K, Q>
+impl<'a, 'b: 'a, K, Q, V> Equivalent<GenericVersionPointer<K, V>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   V: ?Sized,
   Q: ?Sized + Ord + Equivalent<K::Ref<'b>>,
 {
   #[inline]
-  fn equivalent(&self, p: &GenericMvccPointer<K, V>) -> bool {
+  fn equivalent(&self, p: &GenericVersionPointer<K, V>) -> bool {
     let kr = unsafe { <K::Ref<'b> as TypeRef<'b>>::from_slice(p.as_key_slice()) };
     Equivalent::equivalent(self.key, &kr)
   }
 }
 
-impl<'a, 'b: 'a, K, Q, V> Comparable<GenericMvccPointer<K, V>> for Query<'a, K, Q>
+impl<'a, 'b: 'a, K, Q, V> Comparable<GenericVersionPointer<K, V>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
 {
   #[inline]
-  fn compare(&self, p: &GenericMvccPointer<K, V>) -> cmp::Ordering {
+  fn compare(&self, p: &GenericVersionPointer<K, V>) -> cmp::Ordering {
     let kr = unsafe { <K::Ref<'b> as TypeRef<'b>>::from_slice(p.as_key_slice()) };
     Comparable::compare(self.key, &kr)
   }

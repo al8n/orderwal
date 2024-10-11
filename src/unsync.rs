@@ -45,7 +45,7 @@ pub mod base {
 
 /// A multiple version ordered write-ahead log implementation for single thread environments.
 pub mod mvcc {
-  use crate::pointer::MvccPointer;
+  use crate::pointer::VersionPointer;
 
   use super::wal;
 
@@ -66,6 +66,6 @@ pub mod mvcc {
   /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
   /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type OrderWal<C, S> =  wal::OrderWal<MvccPointer<C>, C, S>;
+  pub type OrderWal<C, S> =  wal::OrderWal<VersionPointer<C>, C, S>;
 }
 

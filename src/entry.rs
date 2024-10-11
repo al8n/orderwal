@@ -1,20 +1,14 @@
 use core::borrow::Borrow;
 
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalent::{Comparable, Equivalent},
-  traits::{KeyRef, Type, TypeRef},
-};
-use rarena_allocator::either::Either;
+use dbutils::{buffer::VacantBuffer, error::InsufficientBuffer, traits::Type};
 
-use crate::{
-  sealed::{Pointer as _, WithVersion, WithoutVersion},
-  VERSION_SIZE,
+use super::{
+  generic::Generic,
+  sealed::{Constructable, WithVersion, WithoutVersion},
+  KeyBuilder, ValueBuilder, VERSION_SIZE,
 };
 
-use super::{KeyBuilder, ValueBuilder};
-
-pub struct BatchEncodedEntryMeta {
+pub(crate) struct BatchEncodedEntryMeta {
   /// The output of `merge_lengths(klen, vlen)`
   pub(crate) kvlen: u64,
   /// the length of `encoded_u64_varint(merge_lengths(klen, vlen))`
@@ -45,76 +39,231 @@ impl BatchEncodedEntryMeta {
   }
 }
 
-/// An entry which can be inserted into the [`Wal`](crate::wal::Wal).
-pub struct Entry<K, V, P> {
+pub trait BufWriter {
+  type Error;
+
+  fn len(&self) -> usize;
+
+  fn write(&self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error>;
+}
+
+impl<A: Borrow<[u8]>> BufWriter for A {
+  type Error = InsufficientBuffer;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.borrow().len()
+  }
+
+  #[inline]
+  fn write(&self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    buf.put_slice(self.borrow())
+  }
+}
+
+impl<T: ?Sized + Type> BufWriter for Generic<'_, T>
+where
+  T: Type,
+{
+  type Error = T::Error;
+
+  #[inline]
+  fn len(&self) -> usize {
+    Generic::encoded_len(self)
+  }
+
+  #[inline]
+  fn write(&self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    Generic::encode_to_buffer(self, buf).map(|_| ())
+  }
+}
+
+impl<W, E> BufWriter for ValueBuilder<W>
+where
+  W: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
+{
+  type Error = E;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.size() as usize
+  }
+
+  #[inline]
+  fn write(&self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    self.builder()(buf)
+  }
+}
+
+impl<W, E> BufWriter for KeyBuilder<W>
+where
+  W: Fn(&mut VacantBuffer<'_>) -> Result<(), E>,
+{
+  type Error = E;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.size() as usize
+  }
+
+  #[inline]
+  fn write(&self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    self.builder()(buf)
+  }
+}
+
+pub trait BufWriterOnce {
+  type Error;
+
+  fn len(&self) -> usize;
+
+  fn write_once(self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error>;
+}
+
+impl<A: Borrow<[u8]>> BufWriterOnce for A {
+  type Error = InsufficientBuffer;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.borrow().len()
+  }
+
+  #[inline]
+  fn write_once(self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    buf.put_slice(self.borrow())
+  }
+}
+
+impl<T: ?Sized + Type> BufWriterOnce for Generic<'_, T>
+where
+  T: Type,
+{
+  type Error = T::Error;
+
+  #[inline]
+  fn len(&self) -> usize {
+    Generic::encoded_len(self)
+  }
+
+  #[inline]
+  fn write_once(self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    Generic::encode_to_buffer(&self, buf).map(|_| ())
+  }
+}
+
+impl<W, E> BufWriterOnce for ValueBuilder<W>
+where
+  W: FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>,
+{
+  type Error = E;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.size() as usize
+  }
+
+  #[inline]
+  fn write_once(self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    self.into_components().1(buf)
+  }
+}
+
+impl<W, E> BufWriterOnce for KeyBuilder<W>
+where
+  W: FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>,
+{
+  type Error = E;
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.size() as usize
+  }
+
+  #[inline]
+  fn write_once(self, buf: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
+    self.into_components().1(buf)
+  }
+}
+
+/// An entry can be inserted into the WALs through [`Batch`](super::batch::Batch).
+pub struct Entry<K, V, C: Constructable> {
   pub(crate) key: K,
   pub(crate) value: V,
-  pub(crate) pointer: Option<P>,
   pub(crate) meta: BatchEncodedEntryMeta,
-  pub(crate) version: Option<u64>,
+  pointer: Option<C::Pointer>,
+  version: Option<u64>,
 }
 
-impl<K, V, P> Entry<K, V, P>
+impl<K, V, C> Entry<K, V, C>
 where
-  K: Borrow<[u8]>,
-  V: Borrow<[u8]>,
-{
-  /// Returns the length of the value.
-  #[inline]
-  pub fn key_len(&self) -> usize {
-    self.key.borrow().len()
-  }
-
-  /// Returns the length of the value.
-  #[inline]
-  pub fn value_len(&self) -> usize {
-    self.value.borrow().len()
-  }
-
-  #[inline]
-  pub(crate) fn encoded_key_len(&self) -> usize {
-    match self.version {
-      Some(_) => self.key.borrow().len() + VERSION_SIZE,
-      None => self.key.borrow().len(),
-    }
-  }
-}
-
-impl<K, V, P> Entry<K, V, P>
-where
-  P: WithoutVersion,
+  C: Constructable,
+  C::Pointer: WithoutVersion,
 {
   /// Creates a new entry.
   #[inline]
-  pub const fn new(key: K, value: V) -> Self {
+  pub fn new(key: K, value: V) -> Self {
     Self {
       key,
       value,
-      pointer: None,
       meta: BatchEncodedEntryMeta::zero(),
+      pointer: None,
       version: None,
     }
   }
 }
 
-impl<K, V, P> Entry<K, V, P>
+impl<K, V, C> Entry<K, V, C>
 where
-  P: WithVersion,
+  C: Constructable,
+  C::Pointer: WithVersion,
 {
-  /// Creates a new versioned entry.
+  /// Creates a new entry.
   #[inline]
-  pub const fn with_version(version: u64, key: K, value: V) -> Self {
+  pub fn with_version(version: u64, key: K, value: V) -> Self {
     Self {
       key,
       value,
-      pointer: None,
       meta: BatchEncodedEntryMeta::zero(),
+      pointer: None,
       version: Some(version),
     }
   }
+
+  /// Returns the version of the entry.
+  #[inline]
+  pub const fn version(&self) -> u64 {
+    match self.version {
+      Some(version) => version,
+      None => unreachable!(),
+    }
+  }
+
+  /// Set the version of the entry.
+  #[inline]
+  pub fn set_version(&mut self, version: u64) {
+    self.version = Some(version);
+  }
 }
 
-impl<K, V, P> Entry<K, V, P> {
+impl<K, V, C: Constructable> Entry<K, V, C> {
+  /// Returns the length of the key.
+  #[inline]
+  pub fn key_len(&self) -> usize
+  where
+    K: BufWriter,
+  {
+    self.key.len()
+  }
+
+  /// Returns the length of the value.
+  #[inline]
+  pub fn value_len(&self) -> usize
+  where
+    V: BufWriter,
+  {
+    self.value.len()
+  }
+
   /// Returns the key.
   #[inline]
   pub const fn key(&self) -> &K {
@@ -134,276 +283,39 @@ impl<K, V, P> Entry<K, V, P> {
   }
 
   #[inline]
-  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
-    self.meta = meta;
-  }
-}
-
-/// An entry builder which can build an [`Entry`] to be inserted into the [`Wal`](crate::wal::Wal).
-pub struct EntryWithKeyBuilder<KB, V, P> {
-  pub(crate) kb: KeyBuilder<KB>,
-  pub(crate) value: V,
-  pub(crate) pointer: Option<P>,
-  pub(crate) meta: BatchEncodedEntryMeta,
-  pub(crate) version: Option<u64>,
-}
-
-impl<KB, V, P> EntryWithKeyBuilder<KB, V, P>
-where
-  V: Borrow<[u8]>,
-{
-  /// Returns the length of the value.
-  #[inline]
-  pub(crate) fn value_len(&self) -> usize {
-    self.value.borrow().len()
-  }
-}
-
-impl<KB, V, P> EntryWithKeyBuilder<KB, V, P>
-where
-  P: WithoutVersion,
-{
-  /// Creates a new entry.
-  #[inline]
-  pub const fn new(kb: KeyBuilder<KB>, value: V) -> Self {
-    Self {
-      kb,
-      value,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-      version: None,
-    }
-  }
-}
-
-impl<KB, V, P> EntryWithKeyBuilder<KB, V, P>
-where
-  P: WithVersion,
-{
-  /// Creates a new versioned entry.
-  #[inline]
-  pub const fn with_version(version: u64, kb: KeyBuilder<KB>, value: V) -> Self {
-    Self {
-      kb,
-      value,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-      version: Some(version),
-    }
-  }
-}
-
-impl<KB, V, P> EntryWithKeyBuilder<KB, V, P> {
-  /// Returns the key.
-  #[inline]
-  pub const fn key_builder(&self) -> &KeyBuilder<KB> {
-    &self.kb
-  }
-
-  /// Returns the value.
-  #[inline]
-  pub const fn value(&self) -> &V {
-    &self.value
-  }
-
-  /// Returns the length of the key.
-  #[inline]
-  pub const fn key_len(&self) -> usize {
-    self.kb.size() as usize
-  }
-
-  /// Consumes the entry and returns the key and value.
-  #[inline]
-  pub fn into_components(self) -> (KeyBuilder<KB>, V) {
-    (self.kb, self.value)
-  }
-
-  #[inline]
-  pub(crate) const fn encoded_key_len(&self) -> usize {
+  pub(crate) fn encoded_key_len(&self) -> usize
+  where
+    K: BufWriter,
+    V: BufWriter,
+  {
     match self.version {
-      Some(_) => self.kb.size() as usize + VERSION_SIZE,
-      None => self.kb.size() as usize,
+      Some(_) => self.key.len() + VERSION_SIZE,
+      None => self.key.len(),
     }
+  }
+
+  #[inline]
+  pub(crate) const fn internal_version(&self) -> Option<u64> {
+    self.version
+  }
+
+  #[inline]
+  pub(crate) fn take_pointer(&mut self) -> Option<C::Pointer> {
+    self.pointer.take()
+  }
+
+  #[inline]
+  pub(crate) fn set_pointer(&mut self, pointer: C::Pointer) {
+    self.pointer = Some(pointer);
   }
 
   #[inline]
   pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
     self.meta = meta;
   }
-}
-
-/// An entry builder which can build an [`Entry`] to be inserted into the [`Wal`](crate::wal::Wal).
-pub struct EntryWithValueBuilder<K, VB, P> {
-  pub(crate) key: K,
-  pub(crate) vb: ValueBuilder<VB>,
-  pub(crate) pointer: Option<P>,
-  pub(crate) meta: BatchEncodedEntryMeta,
-  pub(crate) version: Option<u64>,
-}
-
-impl<K, VB, C> EntryWithValueBuilder<K, VB, C>
-where
-  K: Borrow<[u8]>,
-{
-  /// Returns the length of the key.
-  #[inline]
-  pub(crate) fn encoded_key_len(&self) -> usize {
-    match self.version {
-      Some(_) => self.key.borrow().len() + VERSION_SIZE,
-      None => self.key.borrow().len(),
-    }
-  }
-}
-
-impl<K, VB, P> EntryWithValueBuilder<K, VB, P>
-where
-  P: WithoutVersion,
-{
-  /// Creates a new entry.
-  #[inline]
-  pub const fn new(key: K, vb: ValueBuilder<VB>) -> Self {
-    Self {
-      key,
-      vb,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-      version: None,
-    }
-  }
-}
-
-impl<K, VB, P> EntryWithValueBuilder<K, VB, P>
-where
-  P: WithVersion,
-{
-  /// Creates a new versioned entry.
-  #[inline]
-  pub const fn with_version(version: u64, key: K, vb: ValueBuilder<VB>) -> Self {
-    Self {
-      key,
-      vb,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-      version: Some(version),
-    }
-  }
-}
-
-impl<K, VB, P> EntryWithValueBuilder<K, VB, P> {
-  /// Returns the key.
-  #[inline]
-  pub const fn value_builder(&self) -> &ValueBuilder<VB> {
-    &self.vb
-  }
-
-  /// Returns the value.
-  #[inline]
-  pub const fn key(&self) -> &K {
-    &self.key
-  }
-
-  /// Returns the length of the value.
-  #[inline]
-  pub const fn value_len(&self) -> usize {
-    self.vb.size() as usize
-  }
-
-  /// Consumes the entry and returns the key and value.
-  #[inline]
-  pub fn into_components(self) -> (K, ValueBuilder<VB>) {
-    (self.key, self.vb)
-  }
 
   #[inline]
-  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
-    self.meta = meta;
-  }
-}
-
-/// An entry builder which can build an entry to be inserted into the WALs.
-pub struct EntryWithBuilders<KB, VB, P> {
-  pub(crate) kb: KeyBuilder<KB>,
-  pub(crate) vb: ValueBuilder<VB>,
-  pub(crate) pointer: Option<P>,
-  pub(crate) meta: BatchEncodedEntryMeta,
-  pub(crate) version: Option<u64>,
-}
-
-impl<KB, VB, P> EntryWithBuilders<KB, VB, P>
-where
-  P: WithoutVersion,
-{
-  /// Creates a new entry.
-  #[inline]
-  pub const fn new(kb: KeyBuilder<KB>, vb: ValueBuilder<VB>) -> Self {
-    Self {
-      kb,
-      vb,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-      version: None,
-    }
-  }
-}
-
-impl<KB, VB, P> EntryWithBuilders<KB, VB, P>
-where
-  P: WithVersion,
-{
-  /// Creates a new entry.
-  #[inline]
-  pub const fn with_version(version: u64, kb: KeyBuilder<KB>, vb: ValueBuilder<VB>) -> Self {
-    Self {
-      kb,
-      vb,
-      pointer: None,
-      meta: BatchEncodedEntryMeta::zero(),
-      version: Some(version),
-    }
-  }
-}
-
-impl<KB, VB, P> EntryWithBuilders<KB, VB, P> {
-  /// Returns the value builder.
-  #[inline]
-  pub const fn value_builder(&self) -> &ValueBuilder<VB> {
-    &self.vb
-  }
-
-  /// Returns the key builder.
-  #[inline]
-  pub const fn key_builder(&self) -> &KeyBuilder<KB> {
-    &self.kb
-  }
-
-  /// Returns the length of the key.
-  #[inline]
-  pub const fn key_len(&self) -> usize {
-    self.kb.size() as usize
-  }
-
-  /// Returns the length of the value.
-  #[inline]
-  pub const fn value_len(&self) -> usize {
-    self.vb.size() as usize
-  }
-
-  /// Consumes the entry and returns the key and value.
-  #[inline]
-  pub fn into_components(self) -> (KeyBuilder<KB>, ValueBuilder<VB>) {
-    (self.kb, self.vb)
-  }
-
-  #[inline]
-  pub(crate) const fn encoded_key_len(&self) -> usize {
-    match self.version {
-      Some(_) => self.kb.size() as usize + VERSION_SIZE,
-      None => self.kb.size() as usize,
-    }
-  }
-
-  #[inline]
-  pub(crate) fn set_encoded_meta(&mut self, meta: BatchEncodedEntryMeta) {
-    self.meta = meta;
+  pub(crate) fn encoded_meta(&self) -> &BatchEncodedEntryMeta {
+    &self.meta
   }
 }

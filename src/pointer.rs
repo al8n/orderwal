@@ -1,6 +1,6 @@
 use core::{borrow::Borrow, cmp, slice};
 
-use dbutils::{traits::KeyRef, Comparator};
+use dbutils::Comparator;
 
 use crate::{
   sealed::{Pointer as _, WithVersion, WithoutVersion},
@@ -94,7 +94,7 @@ impl<C> super::sealed::Pointer for Pointer<C> {
 }
 
 #[doc(hidden)]
-pub struct MvccPointer<C> {
+pub struct VersionPointer<C> {
   /// The pointer to the start of the entry.
   ptr: *const u8,
   /// The length of the key.
@@ -104,10 +104,10 @@ pub struct MvccPointer<C> {
   cmp: C,
 }
 
-unsafe impl<C: Send> Send for MvccPointer<C> {}
-unsafe impl<C: Sync> Sync for MvccPointer<C> {}
+unsafe impl<C: Send> Send for VersionPointer<C> {}
+unsafe impl<C: Sync> Sync for VersionPointer<C> {}
 
-impl<C> MvccPointer<C> {
+impl<C> VersionPointer<C> {
   #[inline]
   pub(crate) const fn new(key_len: usize, value_len: usize, ptr: *const u8, cmp: C) -> Self {
     Self {
@@ -119,7 +119,7 @@ impl<C> MvccPointer<C> {
   }
 }
 
-impl<C: Comparator> PartialEq for MvccPointer<C> {
+impl<C: Comparator> PartialEq for VersionPointer<C> {
   fn eq(&self, other: &Self) -> bool {
     self
       .cmp
@@ -129,15 +129,15 @@ impl<C: Comparator> PartialEq for MvccPointer<C> {
   }
 }
 
-impl<C: Comparator> Eq for MvccPointer<C> {}
+impl<C: Comparator> Eq for VersionPointer<C> {}
 
-impl<C: Comparator> PartialOrd for MvccPointer<C> {
+impl<C: Comparator> PartialOrd for VersionPointer<C> {
   fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl<C: Comparator> Ord for MvccPointer<C> {
+impl<C: Comparator> Ord for VersionPointer<C> {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
     self
       .cmp
@@ -146,7 +146,7 @@ impl<C: Comparator> Ord for MvccPointer<C> {
   }
 }
 
-impl<C, Q> Borrow<Q> for MvccPointer<C>
+impl<C, Q> Borrow<Q> for VersionPointer<C>
 where
   [u8]: Borrow<Q>,
   Q: ?Sized + Ord,
@@ -156,12 +156,12 @@ where
   }
 }
 
-impl<C> super::sealed::Pointer for MvccPointer<C> {
+impl<C> super::sealed::Pointer for VersionPointer<C> {
   type Comparator = C;
 
   #[inline]
   fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: C) -> Self {
-    MvccPointer::<C>::new(klen, vlen, ptr, cmp)
+    VersionPointer::<C>::new(klen, vlen, ptr, cmp)
   }
 
   #[inline]
@@ -193,5 +193,5 @@ impl<C> super::sealed::Pointer for MvccPointer<C> {
   }
 }
 
-impl<C> WithVersion for MvccPointer<C> {}
+impl<C> WithVersion for VersionPointer<C> {}
 impl<C> WithoutVersion for Pointer<C> {}

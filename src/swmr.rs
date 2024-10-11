@@ -1,18 +1,8 @@
-// /// The ordered write-ahead log only supports bytes.
-// pub mod wal;
-// pub use wal::{Builder, OrderWal};
-
-// /// The generic implementation of the ordered write-ahead log.
-// pub mod generic;
-// pub use generic::{GenericBuilder, GenericOrderWal};
-
 mod c;
 mod wal;
 
-/// An ordered write-ahead log implementation for single thread environments.
+/// An ordered write-ahead log implementation for multiple threads environments.
 pub mod base {
-  use core::ops::Bound;
-
   use dbutils::checksum::Crc32;
 
   use crate::pointer::Pointer;
@@ -21,7 +11,7 @@ pub mod base {
 
   pub use crate::base::{Reader, Writer};
 
-  /// An ordered write-ahead log implementation for single thread environments.
+  /// An ordered write-ahead log implementation for multiple threads environments.
   ///
   /// ```text
   /// +----------------------+-------------------------+--------------------+
@@ -39,30 +29,19 @@ pub mod base {
   /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
   /// ```
   pub type OrderWal<C, S = Crc32> = wal::OrderWal<Pointer<C>, C, S>;
-
-  #[test]
-  fn test_() {
-    let wal: OrderWal<dbutils::Ascend> = todo!();
-    let start: &[u8] = &[1, 2, 3];
-    let end: &[u8] = &[4, 5, 6];
-
-    wal.range::<[u8], _>(3, (Bound::Included(start), Bound::Excluded(end)));
-  }
 }
 
-/// A multiple version ordered write-ahead log implementation for single thread environments.
-pub mod mvcc {
-  use core::ops::Bound;
-
+/// A multiple version ordered write-ahead log implementation for multiple threads environments.
+pub mod multiple_version {
   use dbutils::checksum::Crc32;
 
-  use crate::pointer::MvccPointer;
+  use crate::pointer::VersionPointer;
 
   use super::wal;
 
   pub use crate::mvcc::{Reader, Writer};
 
-  /// A multiple versioned ordered write-ahead log implementation for single thread environments.
+  /// A multiple versioned ordered write-ahead log implementation for multiple threads environments.
   ///
   /// ```text
   /// +----------------------+-------------------------+--------------------+
@@ -77,14 +56,64 @@ pub mod mvcc {
   /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
   /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type OrderWal<C, S = Crc32> = wal::OrderWal<MvccPointer<C>, C, S>;
+  pub type OrderWal<C, S = Crc32> = wal::OrderWal<VersionPointer<C>, C, S>;
+}
 
-  #[test]
-  fn test_() {
-    let wal: OrderWal<dbutils::Ascend> = todo!();
-    let start: &[u8] = &[1, 2, 3];
-    let end: &[u8] = &[4, 5, 6];
+/// The ordered write-ahead log only supports generic.
+pub mod generic {
+  use dbutils::checksum::Crc32;
 
-    wal.range::<[u8], _>(3, (Bound::Included(start), Bound::Excluded(end)));
-  }
+  use crate::generic::GenericPointer;
+
+  use super::wal;
+
+  pub use crate::generic::base::{Reader, Writer};
+
+  /// A generic ordered write-ahead log implementation for multiple threads environments.
+  ///
+  /// ```text
+  /// +----------------------+-------------------------+--------------------+
+  /// | magic text (6 bytes) | magic version (2 bytes) |  header (8 bytes)  |
+  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
+  /// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
+  /// +----------------------+-------------------------+--------------------+---------------------+-----------------|--------------------+
+  /// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
+  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
+  /// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
+  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
+  /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
+  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
+  /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
+  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
+  /// ```
+  pub type GenericOrderWal<K, V, S = Crc32> = wal::GenericOrderWal<K, V, GenericPointer<K, V>, S>;
+}
+
+/// A multiple version ordered write-ahead log implementation for multiple threads environments.
+pub mod generic_multiple_version {
+  use dbutils::checksum::Crc32;
+
+  use crate::generic::GenericVersionPointer;
+
+  use super::wal;
+
+  pub use crate::generic::mvcc::{Reader, Writer};
+
+  /// A multiple versioned generic ordered write-ahead log implementation for multiple threads environments.
+  ///
+  /// ```text
+  /// +----------------------+-------------------------+--------------------+
+  /// | magic text (6 bytes) | magic version (2 bytes) |  header (8 bytes)  |
+  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
+  /// |     flag (1 byte)    |    version (8 bytes)    |  key len (4 bytes) |    key (n bytes)    | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
+  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
+  /// |     flag (1 byte)    |    version (8 bytes)    |  key len (4 bytes) |    key (n bytes)    | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
+  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
+  /// |     flag (1 byte)    |    version (8 bytes)    |  key len (4 bytes) |    key (n bytes)    | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
+  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
+  /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
+  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
+  /// ```
+  pub type GenericOrderWal<K, V, S = Crc32> =
+    wal::GenericOrderWal<K, V, GenericVersionPointer<K, V>, S>;
 }

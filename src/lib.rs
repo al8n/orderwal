@@ -10,7 +10,6 @@ use core::{borrow::Borrow, marker::PhantomData, mem};
 
 pub use among;
 use among::Among;
-use crossbeam_skiplist::SkipSet;
 use error::Error;
 use rarena_allocator::{either::Either, Allocator, Buffer, Freelist, Options as ArenaOptions};
 
@@ -65,11 +64,10 @@ pub mod error;
 mod buffer;
 pub use buffer::*;
 
-// mod builder;
-// pub use builder::Builder;
+mod builder;
+pub use builder::Builder;
 
 mod entry;
-pub use entry::{Entry, EntryWithBuilders, EntryWithKeyBuilder, EntryWithValueBuilder};
 
 /// Utilities.
 pub mod utils;
