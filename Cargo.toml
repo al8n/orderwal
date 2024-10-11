@@ -1,13 +1,13 @@
 [package]
 name = "orderwal"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
 documentation = "https://docs.rs/orderwal"
 description = "A generic-purpose, atomic, ordered, zero-copy, Write-Ahead Log implementation for Rust."
 license = "MIT OR Apache-2.0"
-rust-version = "1.80"
+rust-version = "1.81"
 categories = ["filesystem", "database-implementations", "development-tools", "data-structures"]
 keywords = ["wal", "write-ahead-log", "append-only", "append-only-log", "bitcask"]
 

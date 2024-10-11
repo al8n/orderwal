@@ -29,7 +29,7 @@ English | [简体中文][zh-cn-url]
 
 ```toml
 [dependencies]
-orderwal = "0.4"
+orderwal = "0.5"
 ```
 
 ## Example
@@ -40,6 +40,8 @@ See [examples](./examples/) for more information.
 
 - [`aol`](https://github.com/al8n/aol): Yet another generic purpose, append-only write-ahead log implementation based on `std::fs::File`.
 - [`skl`](https://github.com/al8n/skl): A lock-free, ARNEA based skiplist implementation, which supports in-memory and on-disk, suitable for frozen durable data file or memtable for LSM database.
+- [`valog`](https://github.com/al8n/valog): A lock-free, generic, lightweight value log for WiscKey or Bitcask architecture databases.
+- [`dtlog`](https://github.com/al8n/dtlog): A log for tracking discard stats of multi-files databases.
 
 #### License
 
