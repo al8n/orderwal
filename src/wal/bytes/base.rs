@@ -17,6 +17,8 @@ use crate::{
   KeyBuilder, Options, ValueBuilder,
 };
 
+use super::entry::Entry;
+
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Constructable
 where
@@ -207,58 +209,64 @@ where
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<(&[u8], &[u8])>
+  fn first(&self) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().first(None)
+    self.as_core().first(None).map(Entry::new)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<(&[u8], &[u8])>
+  fn last(&self) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    Wal::last(self.as_core(), None)
+    Wal::last(self.as_core(), None).map(Entry::new)
   }
 
   /// Returns the value associated with the key.
   #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<&[u8]>
+  fn get<Q>(&self, key: &Q) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     <Self::Memtable as Memtable>::Pointer:
       Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().get(None, key)
+    self.as_core().get(None, key).map(Entry::new)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  fn upper_bound<Q>(
+    &self,
+    bound: Bound<&Q>,
+  ) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     <Self::Memtable as Memtable>::Pointer:
       Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().upper_bound(None, bound)
+    self.as_core().upper_bound(None, bound).map(Entry::new)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
+  fn lower_bound<Q>(
+    &self,
+    bound: Bound<&Q>,
+  ) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     <Self::Memtable as Memtable>::Pointer:
       Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().lower_bound(None, bound)
+    self.as_core().lower_bound(None, bound).map(Entry::new)
   }
 }
 
@@ -308,36 +316,6 @@ where
   /// Returns the read-only view for the WAL.
   fn reader(&self) -> Self::Reader;
 
-  /// Get or insert a new entry into the WAL.
-  #[inline]
-  fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
-  where
-    Self::Comparator: CheapClone,
-    Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer:
-      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
-  {
-    self.as_core_mut().get_or_insert(None, key, value)
-  }
-
-  /// Get or insert a new entry into the WAL.
-  #[inline]
-  fn get_or_insert_with_value_builder<E>(
-    &mut self,
-    key: &[u8],
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-  ) -> Result<Option<&[u8]>, Either<E, Error>>
-  where
-    Self::Comparator: CheapClone,
-    Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer:
-      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
-  {
-    self
-      .as_core_mut()
-      .get_or_insert_with_value_builder(None, key, vb)
-  }
-
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
   ///
@@ -352,7 +330,7 @@ where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as Memtable>::Pointer:
-      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord + 'static,
   {
     self
       .as_core_mut()
@@ -374,7 +352,7 @@ where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as Memtable>::Pointer:
-      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord + 'static,
   {
     self
       .as_core_mut()
@@ -394,7 +372,7 @@ where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as Memtable>::Pointer:
-      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
+      Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord + 'static,
   {
     self.as_core_mut().insert(None, kb, vb)
   }
@@ -405,7 +383,7 @@ where
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self
       .as_core_mut()
@@ -425,7 +403,7 @@ where
     VB: BufWriter,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch)
   }
@@ -442,7 +420,7 @@ where
     B::Value: Borrow<[u8]>,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
       Among::Left(e) => Either::Left(e),
@@ -463,7 +441,7 @@ where
     B::Key: Borrow<[u8]>,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
       Among::Left(e) => Either::Right(e.into()),
@@ -481,7 +459,7 @@ where
     B::Value: Borrow<[u8]>,
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch).map_err(Into::into)
   }

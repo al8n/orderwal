@@ -6,7 +6,7 @@
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity)]
 
-use core::{borrow::Borrow, marker::PhantomData, mem};
+use core::{marker::PhantomData, mem};
 
 pub use among;
 use among::Among;
@@ -36,6 +36,9 @@ const MAGIC_TEXT: [u8; 6] = *b"ordwal";
 const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
+
+/// The mvcc version size.
+const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 
 // #[cfg(all(
 //   test,
@@ -90,9 +93,6 @@ pub mod iter;
 mod sealed;
 
 mod memtable;
-
-/// The mvcc version size.
-const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 
 bitflags::bitflags! {
   /// The flags of the entry.

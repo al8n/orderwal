@@ -1,16 +1,39 @@
 use core::ops::RangeBounds;
 
-use crossbeam_skiplist::SkipSet;
+use crossbeam_skiplist::{set::Entry, SkipSet};
 use dbutils::equivalent::Comparable;
 
 use crate::{error::Error, sealed};
 
+/// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
 pub struct LinkedTable<P>(SkipSet<P>);
 
 impl<P> Default for LinkedTable<P> {
   #[inline]
   fn default() -> Self {
     Self(SkipSet::new())
+  }
+}
+
+impl<'a, P> sealed::MemtableEntry<'a> for Entry<'a, P>
+where
+  P: Ord,
+{
+  type Pointer = P;
+
+  #[inline]
+  fn pointer(&self) -> &Self::Pointer {
+    self
+  }
+
+  #[inline]
+  fn next(&mut self) -> Option<Self> {
+    Entry::next(self)
+  }
+
+  #[inline]
+  fn prev(&mut self) -> Option<Self> {
+    Entry::prev(self)
   }
 }
 
@@ -21,7 +44,7 @@ where
   type Pointer = P;
 
   type Item<'a>
-    = crossbeam_skiplist::set::Entry<'a, P>
+    = Entry<'a, P>
   where
     Self::Pointer: 'a,
     Self: 'a;

@@ -34,29 +34,21 @@ pub trait WithoutVersion {}
 
 pub trait GenericPointer<K: ?Sized, V: ?Sized>: Pointer {}
 
-pub trait AsPointer<P> {
-  fn as_pointer(&self) -> &P;
-}
+pub trait MemtableEntry<'a>: Sized {
+  type Pointer;
 
-impl<P> AsPointer<P> for crossbeam_skiplist::set::Entry<'_, P> {
-  #[inline]
-  fn as_pointer(&self) -> &P {
-    self.value()
-  }
-}
+  fn pointer(&self) -> &Self::Pointer;
 
-impl<P> AsPointer<P> for &P {
-  #[inline]
-  fn as_pointer(&self) -> &P {
-    self
-  }
+  fn next(&mut self) -> Option<Self>;
+
+  fn prev(&mut self) -> Option<Self>;
 }
 
 pub trait Immutable {}
 
 pub trait Memtable: Default {
   type Pointer;
-  type Item<'a>: AsPointer<Self::Pointer> + 'a
+  type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer>
   where
     Self::Pointer: 'a,
     Self: 'a;
@@ -132,6 +124,8 @@ pub trait Wal<C, S> {
   fn options(&self) -> &Options;
 
   fn memtable(&self) -> &Self::Memtable;
+
+  fn memtable_mut(&mut self) -> &mut Self::Memtable;
 
   fn hasher(&self) -> &S;
 
@@ -352,7 +346,7 @@ pub trait Wal<C, S> {
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: Option<u64>) -> Option<(&[u8], &[u8])>
+  fn first(&self, version: Option<u64>) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
@@ -363,24 +357,21 @@ pub trait Wal<C, S> {
           return None;
         }
 
-        self.memtable().iter().find_map(|p| {
-          let p = p.as_pointer();
+        self.memtable().iter().find_map(|ent| {
+          let p = ent.pointer();
           if p.version() <= version {
-            Some((p.as_key_slice(), p.as_value_slice()))
+            Some(ent)
           } else {
             None
           }
         })
       }
-      None => self.memtable().first().map(|ent| {
-        let ent = ent.as_pointer();
-        (ent.as_key_slice(), ent.as_value_slice())
-      }),
+      None => self.memtable().first(),
     }
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(&self, version: Option<u64>) -> Option<(&[u8], &[u8])>
+  fn last(&self, version: Option<u64>) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
@@ -391,19 +382,16 @@ pub trait Wal<C, S> {
           return None;
         }
 
-        self.memtable().iter().rev().find_map(|p| {
-          let p = p.as_pointer();
+        self.memtable().iter().rev().find_map(|ent| {
+          let p = ent.pointer();
           if p.version() <= version {
-            Some((p.as_key_slice(), p.as_value_slice()))
+            Some(ent)
           } else {
             None
           }
         })
       }
-      None => self.memtable().last().map(|ent| {
-        let ent = ent.as_pointer();
-        (ent.as_key_slice(), ent.as_value_slice())
-      }),
+      None => self.memtable().last(),
     }
   }
 
@@ -421,7 +409,7 @@ pub trait Wal<C, S> {
         }
 
         self.memtable().iter().any(|p| {
-          let p = p.as_pointer();
+          let p = p.pointer();
           p.version() <= version && key.equivalent(p)
         })
       }
@@ -431,7 +419,7 @@ pub trait Wal<C, S> {
 
   /// Returns the value associated with the key.
   #[inline]
-  fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<&[u8]>
+  fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
     Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
@@ -442,146 +430,59 @@ pub trait Wal<C, S> {
         return None;
       }
 
-      self.memtable().iter().find_map(|p| {
-        let p = p.as_pointer();
+      self.memtable().iter().find_map(|ent| {
+        let p = ent.pointer();
         if p.version() <= version && Equivalent::equivalent(key, p) {
-          Some(p.as_value_slice())
+          Some(ent)
         } else {
           None
         }
       })
     } else {
-      self
-        .memtable()
-        .get(key)
-        .map(|ent| ent.as_pointer().as_value_slice())
+      self.memtable().get(key)
     }
   }
+
+  fn upper_bound<Q>(
+    &self,
+    version: Option<u64>,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as Memtable>::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
+
+  fn lower_bound<Q>(
+    &self,
+    version: Option<u64>,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as Memtable>::Item<'_>>
+  where
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
 
   #[inline]
-  fn get_entry<Q>(&self, version: Option<u64>, key: &Q) -> Option<(&[u8], &[u8])>
-  where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
-  {
-    if let Some(version) = version {
-      if !self.contains_version(version) {
-        return None;
-      }
-
-      self.memtable().iter().find_map(|p| {
-        let p = p.as_pointer();
-        if p.version() <= version && Equivalent::equivalent(key, p) {
-          Some((p.as_key_slice(), p.as_value_slice()))
-        } else {
-          None
-        }
-      })
-    } else {
-      self.memtable().get(key).map(|ent| {
-        let p = ent.as_pointer();
-        (p.as_key_slice(), p.as_value_slice())
-      })
-    }
-  }
-
-  fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
-  where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
-
-  fn lower_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
-  where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
-
-  /// Get or insert a new entry into the WAL.
-  fn get_or_insert(
-    &mut self,
-    version: Option<u64>,
-    key: &[u8],
-    value: &[u8],
-  ) -> Result<Option<&[u8]>, Error>
-  where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
-  {
-    self
-      .get_or_insert_with_value_builder::<()>(
-        version,
-        key,
-        ValueBuilder::once(value.len() as u32, |buf| {
-          buf.put_slice_unchecked(value);
-          Ok(())
-        }),
-      )
-      .map_err(|e| e.unwrap_right())
-  }
-
-  fn get_or_insert_with_value_builder<E>(
-    &mut self,
-    version: Option<u64>,
-    key: &[u8],
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-  ) -> Result<Option<&[u8]>, Either<E, Error>>
-  where
-    C: CheapClone,
-    S: BuildChecksumer,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Borrow<[u8]> + Ord,
-  {
-    let base = self.memtable();
-    match version {
-      None => {
-        if let Some(val) = base.get(key) {
-          return Ok(Some(val.as_pointer().as_value_slice()));
-        }
-
-        self
-          .insert(version, key, vb)
-          .map(|_| None)
-          .map_err(|e| e.into_middle_right())
-      }
-      Some(version) => {
-        if self.contains_version(version) {
-          let res = base.iter().find_map(|p| {
-            let p = p.as_pointer();
-            if p.version() <= version && p.as_key_slice().borrow() == key {
-              Some(p.as_value_slice())
-            } else {
-              None
-            }
-          });
-          if res.is_some() {
-            return Ok(res);
-          }
-        }
-
-        self
-          .insert(Some(version), key, vb)
-          .map(|_| None)
-          .map_err(|e| e.into_middle_right())
-      }
-    }
-  }
-
   fn insert_pointer(&mut self, ptr: <Self::Memtable as Memtable>::Pointer) -> Result<(), Error>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Ord;
+    <Self::Memtable as Memtable>::Pointer: Ord + 'static,
+  {
+    self.memtable_mut().insert(ptr)
+  }
 
+  #[inline]
   fn insert_pointers(
     &mut self,
-    ptrs: impl Iterator<Item = <Self::Memtable as Memtable>::Pointer>,
+    mut ptrs: impl Iterator<Item = <Self::Memtable as Memtable>::Pointer>,
   ) -> Result<(), Error>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Ord;
+    <Self::Memtable as Memtable>::Pointer: Ord + 'static,
+  {
+    ptrs.try_for_each(|ptr| self.insert_pointer(ptr))
+  }
 
   fn insert<KE, VE>(
     &mut self,
@@ -595,7 +496,7 @@ pub trait Wal<C, S> {
     C: CheapClone,
     S: BuildChecksumer,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -699,7 +600,7 @@ pub trait Wal<C, S> {
     S: BuildChecksumer,
     W: Constructable<Wal = Self, Memtable = Self::Memtable>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));

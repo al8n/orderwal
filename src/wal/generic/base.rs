@@ -5,7 +5,7 @@ use dbutils::{
   buffer::VacantBuffer,
   checksum::BuildChecksumer,
   equivalent::Comparable,
-  traits::{KeyRef, Type, TypeRef},
+  traits::{KeyRef, Type},
 };
 use rarena_allocator::Allocator;
 use ref_cast::RefCast;
@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-  kv_ref, ty_ref, Generic, GenericComparator, GenericIter, GenericKeys, GenericQueryRange,
+  Generic, GenericComparator, GenericEntry, GenericIter, GenericKeys, GenericQueryRange,
   GenericRange, GenericRangeKeys, GenericRangeValues, GenericValues, Query, Slice,
 };
 
@@ -213,24 +213,26 @@ where
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first_entry(&self) -> Option<(K::Ref<'_>, V::Ref<'_>)>
+  fn first_entry(
+    &self,
+  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as sealed::Memtable>::Item<'_>>>
   where
     K: Type,
     V: Type,
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self.as_core().first(None).map(kv_ref::<K, V>)
+    self.as_core().first(None).map(GenericEntry::new)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<(&[u8], &[u8])>
+  fn last(&self) -> Option<GenericEntry<'_, K, V, <Self::Memtable as sealed::Memtable>::Item<'_>>>
   where
     K: Type,
     V: Type,
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    Wal::last(self.as_core(), None)
+    Wal::last(self.as_core(), None).map(GenericEntry::new)
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -262,7 +264,10 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<V::Ref<'a>>
+  fn get<'a, Q>(
+    &'a self,
+    key: &Q,
+  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as sealed::Memtable>::Item<'a>>>
   where
     K: Type,
     V: Type,
@@ -273,26 +278,7 @@ where
     self
       .as_core()
       .get(None, &Query::new(key))
-      .map(|p| unsafe { <V::Ref<'_> as TypeRef<'_>>::from_slice(p) })
-  }
-
-  /// Returns the key-value pair corresponding to the supplied key.
-  ///
-  /// The supplied key may be any type which can compare with the WAL's [`K::Ref<'_>`](Type::Ref) type, but the ordering
-  /// on the borrowed form *must* match the ordering on the key type.
-  #[inline]
-  fn get_key_value<'a, Q>(&'a self, key: &Q) -> Option<(K::Ref<'a>, V::Ref<'a>)>
-  where
-    K: Type,
-    V: Type,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
-  {
-    self
-      .as_core()
-      .get_entry(None, &Query::new(key))
-      .map(kv_ref::<K, V>)
+      .map(GenericEntry::new)
   }
 
   /// Gets the value associated with the key.
@@ -300,7 +286,10 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<V::Ref<'_>>
+  unsafe fn get_by_bytes(
+    &self,
+    key: &[u8],
+  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as sealed::Memtable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -311,32 +300,16 @@ where
     self
       .as_core()
       .get(None, Slice::<K>::ref_cast(key))
-      .map(ty_ref::<V>)
-  }
-
-  /// Returns the key-value pair corresponding to the supplied key.
-  ///
-  /// ## Safety
-  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
-  #[inline]
-  unsafe fn get_key_value_by_bytes(&self, key: &[u8]) -> Option<(K::Ref<'_>, V::Ref<'_>)>
-  where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer>,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
-  {
-    self
-      .as_core()
-      .get_entry(None, Slice::<K>::ref_cast(key))
-      .map(kv_ref::<K, V>)
+      .map(GenericEntry::new)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn upper_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<V::Ref<'a>>
+  fn upper_bound<'a, Q>(
+    &'a self,
+    bound: Bound<&Q>,
+  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as sealed::Memtable>::Item<'a>>>
   where
     K: Type + Ord,
     V: Type,
@@ -347,7 +320,7 @@ where
     self
       .as_core()
       .upper_bound(None, bound.map(Query::ref_cast))
-      .map(ty_ref::<V>)
+      .map(GenericEntry::new)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -356,7 +329,10 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn upper_bound_by_bytes(&self, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
+  unsafe fn upper_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as sealed::Memtable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -367,13 +343,16 @@ where
     self
       .as_core()
       .upper_bound(None, bound.map(Slice::ref_cast))
-      .map(ty_ref::<V>)
+      .map(GenericEntry::new)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn lower_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<V::Ref<'a>>
+  fn lower_bound<'a, Q>(
+    &'a self,
+    bound: Bound<&Q>,
+  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as sealed::Memtable>::Item<'a>>>
   where
     K: Type + Ord,
     V: Type,
@@ -384,7 +363,7 @@ where
     self
       .as_core()
       .lower_bound(None, bound.map(Query::ref_cast))
-      .map(ty_ref::<V>)
+      .map(GenericEntry::new)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -393,7 +372,10 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn lower_bound_by_bytes(&self, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
+  unsafe fn lower_bound_by_bytes(
+    &self,
+    bound: Bound<&[u8]>,
+  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as sealed::Memtable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -404,7 +386,7 @@ where
     self
       .as_core()
       .lower_bound(None, bound.map(Slice::ref_cast))
-      .map(ty_ref::<V>)
+      .map(GenericEntry::new)
   }
 }
 
@@ -520,7 +502,8 @@ where
     K: Type,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert(None, kb, value.into())
   }
@@ -539,7 +522,8 @@ where
     K: Type + 'a,
     V: Type,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert(None, key.into(), vb)
   }
@@ -556,7 +540,8 @@ where
     K: Type,
     V: Type,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert(None, kb, vb)
   }
@@ -572,7 +557,8 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert(None, key.into(), value.into())
   }
@@ -641,7 +627,8 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
+    <Self::Memtable as sealed::Memtable>::Pointer:
+      Pointer<Comparator = GenericComparator<K>> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch)
   }

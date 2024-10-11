@@ -1,12 +1,10 @@
-use core::ops::{Bound, RangeBounds};
+use core::ops::Bound;
 
-use crossbeam_skiplist::SkipSet;
 use dbutils::equivalent::Comparable;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  error::Error,
-  sealed::{self, Memtable, Pointer, Wal},
+  sealed::{Memtable, MemtableEntry as _, Pointer, Wal},
   Options,
 };
 pub struct OrderCore<M, C, S> {
@@ -30,6 +28,11 @@ where
   #[inline]
   fn memtable(&self) -> &Self::Memtable {
     &self.map
+  }
+
+  #[inline]
+  fn memtable_mut(&mut self) -> &mut Self::Memtable {
+    &mut self.map
   }
 
   #[inline]
@@ -96,20 +99,19 @@ where
   }
 
   #[inline]
-  fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<&[u8]>
+  fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<M::Item<'_>>
   where
-    // P: Pointer<Comparator = C>,
     M::Pointer: Pointer<Comparator = C>,
     Q: Ord + ?Sized + Comparable<M::Pointer>,
   {
     match version {
-      None => self.map.upper_bound(bound).map(|ent| ent.as_key_slice()),
+      None => self.map.upper_bound(bound),
       Some(version) => {
         let mut ent = self.map.upper_bound(bound);
         loop {
           match ent {
-            Some(ent) if ent.version() <= version => return Some(ent.as_key_slice()),
-            Some(e) => ent = e.next(),
+            Some(ent) if ent.pointer().version() <= version => return Some(ent),
+            Some(mut e) => ent = e.next(),
             None => return None,
           }
         }
@@ -118,20 +120,19 @@ where
   }
 
   #[inline]
-  fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<&[u8]>
+  fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<M::Item<'_>>
   where
-    // P: Pointer<Comparator = C>,
     M::Pointer: Pointer<Comparator = C>,
     Q: Ord + ?Sized + Comparable<M::Pointer>,
   {
     match version {
-      None => self.map.lower_bound(bound).map(|ent| ent.as_key_slice()),
+      None => self.map.lower_bound(bound),
       Some(version) => {
         let mut ent = self.map.lower_bound(bound);
         loop {
           match ent {
-            Some(ent) if ent.version() <= version => return Some(ent.as_key_slice()),
-            Some(e) => ent = e.next(),
+            Some(ent) if ent.pointer().version() <= version => return Some(ent),
+            Some(mut e) => ent = e.next(),
             None => return None,
           }
         }
@@ -147,19 +148,5 @@ where
   #[inline]
   fn comparator(&self) -> &C {
     &self.cmp
-  }
-
-  #[inline]
-  fn insert_pointer(&mut self, ptr: M::Pointer) -> Result<(), Error> {
-    self.map.insert(ptr);
-    Ok(())
-  }
-
-  #[inline]
-  fn insert_pointers(&mut self, ptrs: impl Iterator<Item = M::Pointer>) -> Result<(), Error> {
-    for ptr in ptrs {
-      self.map.insert(ptr);
-    }
-    Ok(())
   }
 }
