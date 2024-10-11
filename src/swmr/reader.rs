@@ -4,12 +4,12 @@ use std::sync::Arc;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  generic::GenericComparator,
   sealed::{self, Constructable, Immutable},
-  swmr::c::OrderCore,
+  swmr::wal::OrderCore,
+  wal::generic::GenericComparator,
 };
 
-use super::{GenericOrderWal, OrderWal};
+use super::writer::{GenericOrderWal, OrderWal};
 
 /// An [`GenericOrderWal`] reader.
 pub struct GenericOrderWalReader<K: ?Sized, V: ?Sized, P, S>(GenericOrderWal<K, V, P, S>);
@@ -24,11 +24,7 @@ where
   /// Creates a new read-only WAL reader.
   #[inline]
   pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<P, GenericComparator<K>, S>>>) -> Self {
-    Self(GenericOrderWal {
-      core: wal.clone(),
-      _s: PhantomData,
-      _v: PhantomData,
-    })
+    Self(GenericOrderWal::construct(wal))
   }
 }
 
@@ -40,24 +36,24 @@ where
   P: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Core = OrderCore<Self::Pointer, Self::Comparator, Self::Checksumer>;
+  type Wal = OrderCore<Self::Pointer, Self::Comparator, Self::Checksumer>;
   type Pointer = P;
   type Checksumer = S;
   type Comparator = GenericComparator<K>;
   type Reader = GenericOrderWalReader<K, V, P, S>;
 
   #[inline]
-  fn as_core(&self) -> &Self::Core {
+  fn as_core(&self) -> &Self::Wal {
     self.0.as_core()
   }
 
   #[inline]
-  fn as_core_mut(&mut self) -> &mut Self::Core {
+  fn as_core_mut(&mut self) -> &mut Self::Wal {
     self.0.as_core_mut()
   }
 
   #[inline]
-  fn from_core(core: Self::Core) -> Self {
+  fn from_core(core: Self::Wal) -> Self {
     Self(GenericOrderWal {
       core: Arc::new(UnsafeCell::new(core)),
       _s: PhantomData,
@@ -73,10 +69,7 @@ impl<P, C, S> OrderWalReader<P, C, S> {
   /// Creates a new read-only WAL reader.
   #[inline]
   pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<P, C, S>>>) -> Self {
-    Self(OrderWal {
-      core: wal.clone(),
-      _s: PhantomData,
-    })
+    Self(OrderWal::construct(wal))
   }
 }
 
@@ -89,27 +82,24 @@ where
   P: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Core = OrderCore<P, C, S>;
+  type Wal = OrderCore<P, C, S>;
   type Pointer = P;
   type Checksumer = S;
   type Comparator = C;
   type Reader = Self;
 
   #[inline]
-  fn as_core(&self) -> &Self::Core {
+  fn as_core(&self) -> &Self::Wal {
     self.0.as_core()
   }
 
   #[inline]
-  fn as_core_mut(&mut self) -> &mut Self::Core {
+  fn as_core_mut(&mut self) -> &mut Self::Wal {
     self.0.as_core_mut()
   }
 
   #[inline]
-  fn from_core(core: Self::Core) -> Self {
-    Self(OrderWal {
-      core: Arc::new(UnsafeCell::new(core)),
-      _s: PhantomData,
-    })
+  fn from_core(core: Self::Wal) -> Self {
+    Self(OrderWal::construct(Arc::new(UnsafeCell::new(core))))
   }
 }

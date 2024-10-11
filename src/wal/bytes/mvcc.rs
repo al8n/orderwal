@@ -7,13 +7,13 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, equivalent::Comparable, CheapClone};
 use rarena_allocator::{either::Either, Allocator};
 
-use super::{
+use crate::{
   batch::Batch,
   checksum::BuildChecksumer,
   entry::BufWriter,
   error::Error,
   iter::*,
-  sealed::{self, Constructable, Core, Pointer, WithVersion},
+  sealed::{self, Constructable, Pointer, Wal, WithVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
@@ -97,7 +97,7 @@ where
     version: u64,
   ) -> Iter<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
     self.as_core().iter(Some(version))
@@ -111,7 +111,7 @@ where
     range: R,
   ) -> Range<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
@@ -133,7 +133,7 @@ where
     version: u64,
   ) -> Keys<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
     self.as_core().keys(Some(version))
@@ -147,7 +147,7 @@ where
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
@@ -169,7 +169,7 @@ where
     version: u64,
   ) -> Values<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
     self.as_core().values(Some(version))
@@ -183,7 +183,7 @@ where
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
@@ -213,7 +213,7 @@ where
   where
     Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    Core::last(self.as_core(), Some(version))
+    Wal::last(self.as_core(), Some(version))
   }
 
   /// Returns the value associated with the key.

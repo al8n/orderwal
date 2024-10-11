@@ -14,7 +14,7 @@ use crate::{
   batch::Batch,
   entry::BufWriter,
   error::Error,
-  sealed::{self, Constructable, Core, Pointer, WithVersion},
+  sealed::{self, Constructable, GenericPointer, Pointer, Wal, WithoutVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
@@ -26,7 +26,7 @@ use super::{
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<Comparator = GenericComparator<K>>
 where
-  Self::Pointer: WithVersion,
+  Self::Pointer: WithoutVersion + GenericPointer<K, V>,
 {
   /// Returns the reserved space in the WAL.
   ///
@@ -90,22 +90,20 @@ where
   #[inline]
   fn iter(
     &self,
-    version: u64,
   ) -> GenericIter<
     '_,
     K,
     V,
-    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
-    GenericIter::new(self.as_core().iter(Some(version)))
+    GenericIter::new(self.as_core().iter(None))
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
   fn range<'a, Q, R>(
     &'a self,
-    version: u64,
     range: R,
   ) -> GenericRange<
     'a,
@@ -113,7 +111,7 @@ where
     V,
     R,
     Q,
-    <Self::Core as Core<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Base,
+    <Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
     R: RangeBounds<Q>,
@@ -122,39 +120,33 @@ where
     for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    GenericRange::new(
-      self
-        .as_core()
-        .range(Some(version), GenericQueryRange::new(range)),
-    )
+    GenericRange::new(self.as_core().range(None, GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys(
     &self,
-    version: u64,
   ) -> GenericKeys<
     '_,
     K,
-    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
-    GenericKeys::new(self.as_core().keys(Some(version)))
+    GenericKeys::new(self.as_core().keys(None))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
   #[inline]
   fn range_keys<'a, Q, R>(
     &'a self,
-    version: u64,
     range: R,
   ) -> GenericRangeKeys<
     'a,
     K,
     R,
     Q,
-    <Self::Core as Core<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Base,
+    <Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
     R: RangeBounds<Q>,
@@ -166,7 +158,7 @@ where
     GenericRangeKeys::new(
       self
         .as_core()
-        .range_keys(Some(version), GenericQueryRange::new(range)),
+        .range_keys(None, GenericQueryRange::new(range)),
     )
   }
 
@@ -174,21 +166,19 @@ where
   #[inline]
   fn values(
     &self,
-    version: u64,
   ) -> GenericValues<
     '_,
     V,
-    <<Self::Core as Core<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
-    GenericValues::new(self.as_core().values(Some(version)))
+    GenericValues::new(self.as_core().values(None))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
   #[inline]
   fn range_values<'a, Q, R>(
     &'a self,
-    version: u64,
     range: R,
   ) -> GenericRangeValues<
     'a,
@@ -196,7 +186,7 @@ where
     V,
     R,
     Q,
-    <Self::Core as Core<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Base,
+    <Self::Wal as Wal<Self::Pointer, GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
     R: RangeBounds<Q>,
@@ -208,42 +198,42 @@ where
     GenericRangeValues::new(
       self
         .as_core()
-        .range_values(Some(version), GenericQueryRange::new(range)),
+        .range_values(None, GenericQueryRange::new(range)),
     )
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first_entry(&self, version: u64) -> Option<(K::Ref<'_>, V::Ref<'_>)>
+  fn first_entry(&self) -> Option<(K::Ref<'_>, V::Ref<'_>)>
   where
     K: Type,
     V: Type,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self.as_core().first(Some(version)).map(kv_ref::<K, V>)
+    self.as_core().first(None).map(kv_ref::<K, V>)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
+  fn last(&self) -> Option<(&[u8], &[u8])>
   where
     K: Type,
     V: Type,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    Core::last(self.as_core(), Some(version))
+    Wal::last(self.as_core(), None)
   }
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
+  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
     K: Type,
     Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<Self::Pointer> + Ord,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    self.as_core().contains_key(Some(version), &Query::new(key))
+    self.as_core().contains_key(None, &Query::new(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -251,21 +241,19 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn contains_key_by_bytes(&self, version: u64, key: &[u8]) -> bool
+  unsafe fn contains_key_by_bytes(&self, key: &[u8]) -> bool
   where
     K: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
     Slice<K>: Comparable<Self::Pointer>,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    self
-      .as_core()
-      .contains_key(Some(version), Slice::<K>::ref_cast(key))
+    self.as_core().contains_key(None, Slice::<K>::ref_cast(key))
   }
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<V::Ref<'a>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<V::Ref<'a>>
   where
     K: Type,
     V: Type,
@@ -275,7 +263,7 @@ where
   {
     self
       .as_core()
-      .get(Some(version), &Query::new(key))
+      .get(None, &Query::new(key))
       .map(|p| unsafe { <V::Ref<'_> as TypeRef<'_>>::from_slice(p) })
   }
 
@@ -284,7 +272,7 @@ where
   /// The supplied key may be any type which can compare with the WAL's [`K::Ref<'_>`](Type::Ref) type, but the ordering
   /// on the borrowed form *must* match the ordering on the key type.
   #[inline]
-  fn get_key_value<'a, Q>(&'a self, version: u64, key: &Q) -> Option<(K::Ref<'a>, V::Ref<'a>)>
+  fn get_key_value<'a, Q>(&'a self, key: &Q) -> Option<(K::Ref<'a>, V::Ref<'a>)>
   where
     K: Type,
     V: Type,
@@ -294,7 +282,7 @@ where
   {
     self
       .as_core()
-      .get_entry(Some(version), &Query::new(key))
+      .get_entry(None, &Query::new(key))
       .map(kv_ref::<K, V>)
   }
 
@@ -303,7 +291,7 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_by_bytes(&self, version: u64, key: &[u8]) -> Option<V::Ref<'_>>
+  unsafe fn get_by_bytes(&self, key: &[u8]) -> Option<V::Ref<'_>>
   where
     K: Type,
     V: Type,
@@ -313,7 +301,7 @@ where
   {
     self
       .as_core()
-      .get(Some(version), Slice::<K>::ref_cast(key))
+      .get(None, Slice::<K>::ref_cast(key))
       .map(ty_ref::<V>)
   }
 
@@ -322,11 +310,7 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_key_value_by_bytes(
-    &self,
-    version: u64,
-    key: &[u8],
-  ) -> Option<(K::Ref<'_>, V::Ref<'_>)>
+  unsafe fn get_key_value_by_bytes(&self, key: &[u8]) -> Option<(K::Ref<'_>, V::Ref<'_>)>
   where
     K: Type,
     V: Type,
@@ -336,14 +320,14 @@ where
   {
     self
       .as_core()
-      .get_entry(Some(version), Slice::<K>::ref_cast(key))
+      .get_entry(None, Slice::<K>::ref_cast(key))
       .map(kv_ref::<K, V>)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn upper_bound<'a, Q>(&'a self, version: u64, bound: Bound<&Q>) -> Option<V::Ref<'a>>
+  fn upper_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<V::Ref<'a>>
   where
     K: Type + Ord,
     V: Type,
@@ -353,7 +337,7 @@ where
   {
     self
       .as_core()
-      .upper_bound(Some(version), bound.map(Query::ref_cast))
+      .upper_bound(None, bound.map(Query::ref_cast))
       .map(ty_ref::<V>)
   }
 
@@ -363,7 +347,7 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn upper_bound_by_bytes(&self, version: u64, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
+  unsafe fn upper_bound_by_bytes(&self, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
   where
     K: Type,
     V: Type,
@@ -373,14 +357,14 @@ where
   {
     self
       .as_core()
-      .upper_bound(Some(version), bound.map(Slice::ref_cast))
+      .upper_bound(None, bound.map(Slice::ref_cast))
       .map(ty_ref::<V>)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn lower_bound<'a, Q>(&'a self, version: u64, bound: Bound<&Q>) -> Option<V::Ref<'a>>
+  fn lower_bound<'a, Q>(&'a self, bound: Bound<&Q>) -> Option<V::Ref<'a>>
   where
     K: Type + Ord,
     V: Type,
@@ -390,7 +374,7 @@ where
   {
     self
       .as_core()
-      .lower_bound(Some(version), bound.map(Query::ref_cast))
+      .lower_bound(None, bound.map(Query::ref_cast))
       .map(ty_ref::<V>)
   }
 
@@ -400,7 +384,7 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn lower_bound_by_bytes(&self, version: u64, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
+  unsafe fn lower_bound_by_bytes(&self, bound: Bound<&[u8]>) -> Option<V::Ref<'_>>
   where
     K: Type,
     V: Type,
@@ -410,7 +394,7 @@ where
   {
     self
       .as_core()
-      .lower_bound(Some(version), bound.map(Slice::ref_cast))
+      .lower_bound(None, bound.map(Slice::ref_cast))
       .map(ty_ref::<V>)
   }
 }
@@ -418,7 +402,7 @@ where
 impl<T, K, V> Reader<K, V> for T
 where
   T: Constructable<Comparator = GenericComparator<K>>,
-  T::Pointer: WithVersion,
+  T::Pointer: WithoutVersion + GenericPointer<K, V>,
   K: ?Sized,
   V: ?Sized,
 {
@@ -427,9 +411,15 @@ where
 /// An abstract layer for the write-ahead log.
 pub trait Writer<K: ?Sized, V: ?Sized>: Reader<K, V>
 where
-  Self::Pointer: WithVersion,
+  Self::Pointer: WithoutVersion + GenericPointer<K, V>,
   Self::Reader: Reader<K, V, Pointer = Self::Pointer>,
 {
+  // /// The read only reader type for this wal.
+  // type Reader: Reader<K, V, Pointer = Self::Pointer>
+  // where
+  //   Self::Wal: Core<Self::Pointer, GenericComparator<K>, Self::Checksumer> + 'static,
+  //   Self::Allocator: 'static;
+
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
   fn read_only(&self) -> bool {
@@ -486,7 +476,7 @@ where
   //   let vb = ValueBuilder::once(val.encoded_len() as u32, |buf| {
   //     val.encode_to_buffer(buf).map(|_| ())
   //   });
-  //   self.as_core_mut().get_or_insert_with_value_builder(Some(version), &key, vb)
+  //   self.as_core_mut().get_or_insert_with_value_builder(None, &key, vb)
   //     .map(|res| res.map(ty_ref::<V>))
   // }
 
@@ -514,7 +504,6 @@ where
   #[inline]
   fn insert_with_key_builder<'a, E>(
     &'a mut self,
-    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: impl Into<Generic<'a, V>>,
   ) -> Result<(), Among<E, V::Error, Error>>
@@ -524,7 +513,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self.as_core_mut().insert(Some(version), kb, value.into())
+    self.as_core_mut().insert(None, kb, value.into())
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -534,7 +523,6 @@ where
   #[inline]
   fn insert_with_value_builder<'a, E>(
     &'a mut self,
-    version: u64,
     key: impl Into<Generic<'a, K>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Among<K::Error, E, Error>>
@@ -544,7 +532,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self.as_core_mut().insert(Some(version), key.into(), vb)
+    self.as_core_mut().insert(None, key.into(), vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -552,7 +540,6 @@ where
   #[inline]
   fn insert_with_builders<KE, VE>(
     &mut self,
-    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
@@ -562,14 +549,13 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self.as_core_mut().insert(Some(version), kb, vb)
+    self.as_core_mut().insert(None, kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
   #[inline]
   fn insert<'a>(
     &mut self,
-    version: u64,
     key: impl Into<Generic<'a, K>>,
     value: impl Into<Generic<'a, V>>,
   ) -> Result<(), Among<K::Error, V::Error, Error>>
@@ -579,9 +565,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    self
-      .as_core_mut()
-      .insert(Some(version), key.into(), value.into())
+    self.as_core_mut().insert(None, key.into(), value.into())
   }
 
   /// Inserts a batch of key-value pairs into the WAL.

@@ -54,7 +54,7 @@ where
   }
 }
 
-impl<C> super::sealed::Pointer for Pointer<C> {
+impl<C> crate::sealed::Pointer for Pointer<C> {
   type Comparator = C;
 
   #[inline]
@@ -156,7 +156,7 @@ where
   }
 }
 
-impl<C> super::sealed::Pointer for VersionPointer<C> {
+impl<C> crate::sealed::Pointer for VersionPointer<C> {
   type Comparator = C;
 
   #[inline]

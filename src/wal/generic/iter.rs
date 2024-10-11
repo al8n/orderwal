@@ -3,9 +3,9 @@ use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 use dbutils::{equivalent::Comparable, traits::Type};
 
 use super::{
-  super::{
+  super::super::{
     iter::*,
-    sealed::{Base, Pointer},
+    sealed::{Memtable, Pointer},
   },
   kv_ref, ty_ref, GenericComparator, GenericQueryRange, Query,
 };
@@ -171,7 +171,7 @@ where
   V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
   iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
@@ -185,7 +185,7 @@ where
   V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
   #[inline]
@@ -206,7 +206,7 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
@@ -225,7 +225,7 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
@@ -243,7 +243,7 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
@@ -257,7 +257,7 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
   iter: RangeKeys<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
@@ -269,7 +269,7 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
   #[inline]
@@ -286,7 +286,7 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
@@ -304,7 +304,7 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
@@ -321,7 +321,7 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
@@ -336,7 +336,7 @@ where
   V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
   iter: RangeValues<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
@@ -350,7 +350,7 @@ where
   V: ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
   #[inline]
@@ -375,7 +375,7 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
@@ -394,7 +394,7 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
@@ -412,7 +412,7 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Base + 'a,
+  B: Memtable + 'a,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = &'a B::Pointer>,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,

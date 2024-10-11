@@ -37,26 +37,26 @@ const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 
-#[cfg(all(
-  test,
-  any(
-    all_tests,
-    test_unsync_constructor,
-    test_unsync_insert,
-    test_unsync_get,
-    test_unsync_iters,
-    test_swmr_constructor,
-    test_swmr_insert,
-    test_swmr_get,
-    test_swmr_iters,
-    test_swmr_generic_constructor,
-    test_swmr_generic_insert,
-    test_swmr_generic_get,
-    test_swmr_generic_iters,
-  )
-))]
-#[macro_use]
-mod tests;
+// #[cfg(all(
+//   test,
+//   // any(
+//   //   all_tests,
+//   //   test_unsync_constructor,
+//   //   test_unsync_insert,
+//   //   test_unsync_get,
+//   //   test_unsync_iters,
+//   //   test_swmr_constructor,
+//   //   test_swmr_insert,
+//   //   test_swmr_get,
+//   //   test_swmr_iters,
+//   //   test_swmr_generic_constructor,
+//   //   test_swmr_generic_insert,
+//   //   test_swmr_generic_get,
+//   //   test_swmr_generic_iters,
+//   // )
+// ))]
+// #[macro_use]
+// mod tests;
 
 /// Error types.
 pub mod error;
@@ -73,30 +73,19 @@ mod entry;
 pub mod utils;
 use utils::*;
 
-// mod wal;
-// pub use wal::{Reader, Wal};
-
 mod options;
 pub use options::Options;
 
-mod batch;
-
-mod base;
-
-mod mvcc;
-
-mod generic;
+/// Batch insertions related traits and structs.
+pub mod batch;
 
 /// A single writer multiple readers ordered write-ahead Log implementation.
-pub mod swmr;
-
-// /// An ordered write-ahead Log implementation.
-// pub mod unsync;
+mod swmr;
+mod wal;
+pub use swmr::*;
 
 /// Iterators for the WALs.
 pub mod iter;
-
-mod pointer;
 
 mod sealed;
 

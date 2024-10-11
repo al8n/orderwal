@@ -7,13 +7,13 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, equivalent::Comparable, CheapClone};
 use rarena_allocator::{either::Either, Allocator};
 
-use super::{
+use crate::{
   batch::Batch,
   checksum::BuildChecksumer,
   entry::BufWriter,
   error::Error,
   iter::*,
-  sealed::{self, Constructable, Core, Pointer, WithoutVersion},
+  sealed::{self, Constructable, Pointer, Wal, WithoutVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
@@ -82,37 +82,35 @@ where
 
   /// Returns `true` if the WAL contains the specified key.
   #[inline]
-  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key<Q>(&self, key: &Q) -> bool
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().contains_key(Some(version), key)
+    self.as_core().contains_key(None, key)
   }
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   fn iter(
     &self,
-    version: u64,
   ) -> Iter<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
-    self.as_core().iter(Some(version))
+    self.as_core().iter(None)
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
   fn range<Q, R>(
     &self,
-    version: u64,
     range: R,
   ) -> Range<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
@@ -124,31 +122,29 @@ where
     Self::Pointer: Pointer<Comparator = Self::Comparator>,
     Q: Ord + ?Sized + Comparable<Self::Pointer>,
   {
-    self.as_core().range(Some(version), range)
+    self.as_core().range(None, range)
   }
 
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys(
     &self,
-    version: u64,
   ) -> Keys<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
-    self.as_core().keys(Some(version))
+    self.as_core().keys(None)
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
   #[inline]
   fn range_keys<Q, R>(
     &self,
-    version: u64,
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
@@ -161,31 +157,29 @@ where
     Q: ?Sized + Ord,
     Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().range_keys(Some(version), range)
+    self.as_core().range_keys(None, range)
   }
 
   /// Returns an iterator over the values in the WAL.
   #[inline]
   fn values(
     &self,
-    version: u64,
   ) -> Values<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
     Self::Pointer,
   >{
-    self.as_core().values(Some(version))
+    self.as_core().values(None)
   }
 
   /// Returns an iterator over a subset of values in the WAL.
   #[inline]
   fn range_values<Q, R>(
     &self,
-    version: u64,
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Core as Core<Self::Pointer, Self::Comparator, Self::Checksumer>>::Base as sealed::Base>::Range<
+    <<Self::Wal as Wal<Self::Pointer, Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
       '_,
       Q,
       R,
@@ -197,60 +191,60 @@ where
     Self::Pointer: Borrow<Q> + Pointer<Comparator = Self::Comparator> + Ord,
     Q: Ord + ?Sized,
   {
-    self.as_core().range_values(Some(version), range)
+    self.as_core().range_values(None, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<(&[u8], &[u8])>
+  fn first(&self) -> Option<(&[u8], &[u8])>
   where
     Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().first(Some(version))
+    self.as_core().first(None)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self, version: u64) -> Option<(&[u8], &[u8])>
+  fn last(&self) -> Option<(&[u8], &[u8])>
   where
     Self::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    Core::last(self.as_core(), Some(version))
+    Wal::last(self.as_core(), None)
   }
 
   /// Returns the value associated with the key.
   #[inline]
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<&[u8]>
+  fn get<Q>(&self, key: &Q) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().get(Some(version), key)
+    self.as_core().get(None, key)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
-  /// If no such element is found then `Some(version)` is returned.
+  /// If no such element is found then `None` is returned.
   #[inline]
-  fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().upper_bound(Some(version), bound)
+    self.as_core().upper_bound(None, bound)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
-  /// If no such element is found then `Some(version)` is returned.
+  /// If no such element is found then `None` is returned.
   #[inline]
-  fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<&[u8]>
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<&[u8]>
   where
     [u8]: Borrow<Q>,
     Q: ?Sized + Ord,
     Self::Pointer: Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().lower_bound(Some(version), bound)
+    self.as_core().lower_bound(None, bound)
   }
 }
 
@@ -302,25 +296,19 @@ where
 
   /// Get or insert a new entry into the WAL.
   #[inline]
-  fn get_or_insert(
-    &mut self,
-    version: u64,
-    key: &[u8],
-    value: &[u8],
-  ) -> Result<Option<&[u8]>, Error>
+  fn get_or_insert(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&[u8]>, Error>
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
-    self.as_core_mut().get_or_insert(Some(version), key, value)
+    self.as_core_mut().get_or_insert(None, key, value)
   }
 
   /// Get or insert a new entry into the WAL.
   #[inline]
   fn get_or_insert_with_value_builder<E>(
     &mut self,
-    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<Option<&[u8]>, Either<E, Error>>
@@ -331,7 +319,7 @@ where
   {
     self
       .as_core_mut()
-      .get_or_insert_with_value_builder(Some(version), key, vb)
+      .get_or_insert_with_value_builder(None, key, vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -341,7 +329,6 @@ where
   #[inline]
   fn insert_with_key_builder<E>(
     &mut self,
-    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: &[u8],
   ) -> Result<(), Either<E, Error>>
@@ -352,7 +339,7 @@ where
   {
     self
       .as_core_mut()
-      .insert(Some(version), kb, value)
+      .insert(None, kb, value)
       .map_err(Among::into_left_right)
   }
 
@@ -363,7 +350,6 @@ where
   #[inline]
   fn insert_with_value_builder<E>(
     &mut self,
-    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>>
@@ -374,7 +360,7 @@ where
   {
     self
       .as_core_mut()
-      .insert(Some(version), key, vb)
+      .insert(None, key, vb)
       .map_err(Among::into_middle_right)
   }
 
@@ -383,7 +369,6 @@ where
   #[inline]
   fn insert_with_builders<KE, VE>(
     &mut self,
-    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
   ) -> Result<(), Among<KE, VE, Error>>
@@ -392,12 +377,12 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Pointer: Pointer<Comparator = Self::Comparator> + Borrow<[u8]> + Ord,
   {
-    self.as_core_mut().insert(Some(version), kb, vb)
+    self.as_core_mut().insert(None, kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
   #[inline]
-  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error>
+  fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
@@ -405,7 +390,7 @@ where
   {
     self
       .as_core_mut()
-      .insert(Some(version), key, value)
+      .insert(None, key, value)
       .map_err(Among::unwrap_right)
   }
 
