@@ -18,10 +18,7 @@ use crate::{
   KeyBuilder, Options, ValueBuilder,
 };
 
-use super::{
-  Generic, GenericComparator, GenericEntry, GenericIter, GenericKeys, GenericQueryRange,
-  GenericRange, GenericRangeKeys, GenericRangeValues, GenericValues, Query, Slice,
-};
+use super::{iter::*, entry::*, GenericComparator, GenericQueryRange, Query, Slice};
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<Comparator = GenericComparator<K>>

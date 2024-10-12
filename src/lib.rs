@@ -87,12 +87,21 @@ mod swmr;
 mod wal;
 pub use swmr::*;
 
-/// Iterators for the WALs.
-pub mod iter;
+/// Iterators.
+pub mod iter {
+  pub use super::wal::bytes::iter::*;
+  pub use super::wal::generic::iter::*;
+}
 
-mod sealed;
+/// Types
+pub mod types {
+  pub use super::wal::bytes::entry::*;
+  pub use super::wal::generic::entry::*;
+}
 
+mod internal_iter;
 mod memtable;
+mod sealed;
 
 bitflags::bitflags! {
   /// The flags of the entry.

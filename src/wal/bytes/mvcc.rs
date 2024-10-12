@@ -12,7 +12,7 @@ use crate::{
   checksum::BuildChecksumer,
   entry::BufWriter,
   error::Error,
-  iter::*,
+  internal_iter::*,
   sealed::{self, Constructable, Memtable, Pointer, Wal, WithVersion},
   KeyBuilder, Options, ValueBuilder,
 };

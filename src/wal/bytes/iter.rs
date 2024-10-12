@@ -3,7 +3,7 @@ use core::iter::FusedIterator;
 use dbutils::CheapClone;
 
 use crate::{
-  iter::{Iter as BaseIter, Range as BaseRange},
+  internal_iter::{Iter as BaseIter, Range as BaseRange},
   sealed::{Memtable, Pointer, WithVersion},
 };
 

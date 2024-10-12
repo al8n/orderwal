@@ -10,7 +10,7 @@ use super::{
   batch::{Batch, EncodedBatchEntryMeta},
   checksum::{BuildChecksumer, Checksumer},
   entry::BufWriter,
-  iter::*,
+  internal_iter::*,
   *,
 };
 

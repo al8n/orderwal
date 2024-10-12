@@ -6,10 +6,11 @@ use crate::sealed::WithVersion;
 
 use super::{
   super::super::{
-    iter::*,
+    internal_iter::*,
     sealed::{Memtable, Pointer},
   },
-  GenericComparator, GenericEntry, GenericKey, GenericQueryRange, GenericValue, Query,
+  entry::*,
+  GenericComparator, GenericQueryRange, Query,
 };
 
 /// Iterator over the entries in the WAL.
