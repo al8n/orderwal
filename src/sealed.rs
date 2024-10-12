@@ -258,7 +258,7 @@ pub trait Wal<C, S> {
   fn iter(
     &self,
     version: Option<u64>,
-  ) -> Iter<'_, <Self::Memtable as Memtable>::Iterator<'_>, <Self::Memtable as Memtable>::Pointer>
+  ) -> Iter<'_, <Self::Memtable as Memtable>::Iterator<'_>, Self::Memtable>
   where
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
@@ -271,7 +271,7 @@ pub trait Wal<C, S> {
     &self,
     version: Option<u64>,
     range: R,
-  ) -> Range<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, <Self::Memtable as Memtable>::Pointer>
+  ) -> Range<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, Self::Memtable>
   where
     R: RangeBounds<Q>,
     Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
@@ -279,69 +279,6 @@ pub trait Wal<C, S> {
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
     Range::new(version, self.memtable().range(range))
-  }
-
-  #[inline]
-  fn keys(
-    &self,
-    version: Option<u64>,
-  ) -> Keys<'_, <Self::Memtable as Memtable>::Iterator<'_>, <Self::Memtable as Memtable>::Pointer>
-  where
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
-  {
-    Keys::new(version, self.memtable().iter())
-  }
-
-  /// Returns an iterator over a subset of keys in the WAL.
-  #[inline]
-  fn range_keys<Q, R>(
-    &self,
-    version: Option<u64>,
-    range: R,
-  ) -> RangeKeys<
-    '_,
-    <Self::Memtable as Memtable>::Range<'_, Q, R>,
-    <Self::Memtable as Memtable>::Pointer,
-  >
-  where
-    R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
-  {
-    RangeKeys::new(version, self.memtable().range(range))
-  }
-
-  #[inline]
-  fn values(
-    &self,
-    version: Option<u64>,
-  ) -> Values<'_, <Self::Memtable as Memtable>::Iterator<'_>, <Self::Memtable as Memtable>::Pointer>
-  where
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
-  {
-    Values::new(version, self.memtable().iter())
-  }
-
-  #[inline]
-  fn range_values<Q, R>(
-    &self,
-    version: Option<u64>,
-    range: R,
-  ) -> RangeValues<
-    '_,
-    <Self::Memtable as Memtable>::Range<'_, Q, R>,
-    <Self::Memtable as Memtable>::Pointer,
-  >
-  where
-    R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
-  {
-    RangeValues::new(version, self.memtable().range(range))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.

@@ -215,7 +215,10 @@ where
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    self.as_core().first(Some(version)).map(Entry::with_version)
+    self
+      .as_core()
+      .first(Some(version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -224,7 +227,7 @@ where
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord,
   {
-    Wal::last(self.as_core(), Some(version)).map(Entry::with_version)
+    Wal::last(self.as_core(), Some(version)).map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns the value associated with the key.
@@ -241,7 +244,7 @@ where
     self
       .as_core()
       .get(Some(version), key)
-      .map(Entry::with_version)
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -259,7 +262,7 @@ where
     self
       .as_core()
       .upper_bound(Some(version), bound)
-      .map(Entry::with_version)
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -277,7 +280,7 @@ where
     self
       .as_core()
       .lower_bound(Some(version), bound)
-      .map(Entry::with_version)
+      .map(|ent| Entry::with_version(ent, version))
   }
 }
 

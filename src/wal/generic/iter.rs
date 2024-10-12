@@ -1,165 +1,227 @@
 use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 
-use dbutils::{equivalent::Comparable, traits::Type};
+use dbutils::{equivalent::Comparable, traits::Type, CheapClone};
+
+use crate::sealed::WithVersion;
 
 use super::{
   super::super::{
     iter::*,
     sealed::{Memtable, Pointer},
   },
-  kv_ref, ty_ref, GenericComparator, GenericQueryRange, Query,
+  GenericComparator, GenericEntry, GenericKey, GenericQueryRange, GenericValue, Query,
 };
 
 /// Iterator over the entries in the WAL.
-pub struct GenericIter<'a, K: ?Sized, V: ?Sized, I, P> {
-  iter: Iter<'a, I, P>,
+pub struct GenericIter<'a, K: ?Sized, V: ?Sized, I, M: Memtable> {
+  iter: Iter<'a, I, M>,
+  version: Option<u64>,
   _m: PhantomData<(&'a K, &'a V)>,
 }
 
-impl<'a, K: ?Sized, V: ?Sized, I, P> GenericIter<'a, K, V, I, P> {
+impl<'a, K: ?Sized, V: ?Sized, I, M: Memtable> GenericIter<'a, K, V, I, M> {
   #[inline]
-  pub(super) fn new(iter: Iter<'a, I, P>) -> Self {
+  pub(super) fn new(iter: Iter<'a, I, M>) -> Self {
     Self {
+      version: iter.version(),
       iter,
       _m: PhantomData,
     }
   }
+
+  /// Returns the query version of the entries in the iterator.
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    M::Pointer: WithVersion,
+  {
+    self.version.unwrap()
+  }
 }
 
-impl<'a, K, V, I, P> Iterator for GenericIter<'a, K, V, I, P>
+impl<'a, K, V, I, M> Iterator for GenericIter<'a, K, V, I, M>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  P: Pointer,
-  I: Iterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = (K::Ref<'a>, V::Ref<'a>);
+  type Item = GenericEntry<'a, K, V, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(kv_ref::<K, V>)
+    self
+      .iter
+      .next()
+      .map(|ent| GenericEntry::with_version_in(ent, self.version))
   }
 }
 
-impl<'a, K, V, I, P> DoubleEndedIterator for GenericIter<'a, K, V, I, P>
+impl<'a, K, V, I, M> DoubleEndedIterator for GenericIter<'a, K, V, I, M>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  P: Pointer,
-  I: DoubleEndedIterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(kv_ref::<K, V>)
+    self
+      .iter
+      .next_back()
+      .map(|ent| GenericEntry::with_version_in(ent, self.version))
   }
 }
 
-impl<'a, K, V, I, P> FusedIterator for GenericIter<'a, K, V, I, P>
+impl<'a, K, V, I, M> FusedIterator for GenericIter<'a, K, V, I, M>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  P: Pointer,
-  I: FusedIterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// Iterator over the keys in the WAL.
-pub struct GenericKeys<'a, K: ?Sized, I, P> {
-  iter: Keys<'a, I, P>,
+pub struct GenericKeys<'a, K: ?Sized, I, M: Memtable> {
+  iter: Iter<'a, I, M>,
+  version: Option<u64>,
   _m: PhantomData<&'a K>,
 }
 
-impl<'a, K: ?Sized, I, P> GenericKeys<'a, K, I, P> {
+impl<'a, K: ?Sized, I, M: Memtable> GenericKeys<'a, K, I, M> {
   #[inline]
-  pub(super) fn new(iter: Keys<'a, I, P>) -> Self {
+  pub(super) fn new(iter: Iter<'a, I, M>) -> Self {
     Self {
+      version: iter.version(),
       iter,
       _m: PhantomData,
     }
   }
+
+  /// Returns the query version of the keys in the iterator.
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    M::Pointer: WithVersion,
+  {
+    self.version.unwrap()
+  }
 }
 
-impl<'a, K, I, P> Iterator for GenericKeys<'a, K, I, P>
+impl<'a, K, I, M> Iterator for GenericKeys<'a, K, I, M>
 where
   K: ?Sized + Type,
-  P: Pointer,
-  I: Iterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = K::Ref<'a>;
+  type Item = GenericKey<'a, K, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(ty_ref::<K>)
+    self
+      .iter
+      .next()
+      .map(|ent| GenericKey::with_version_in(ent, self.version))
   }
 }
 
-impl<'a, K, I, P> DoubleEndedIterator for GenericKeys<'a, K, I, P>
+impl<'a, K, I, M> DoubleEndedIterator for GenericKeys<'a, K, I, M>
 where
   K: ?Sized + Type,
-  P: Pointer,
-  I: DoubleEndedIterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(ty_ref::<K>)
+    self
+      .iter
+      .next_back()
+      .map(|ent| GenericKey::with_version_in(ent, self.version))
   }
 }
 
-impl<'a, K, I, P> FusedIterator for GenericKeys<'a, K, I, P>
+impl<'a, K, I, M> FusedIterator for GenericKeys<'a, K, I, M>
 where
   K: ?Sized + Type,
-  P: Pointer,
-  I: FusedIterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// Iterator over the values in the WAL.
-pub struct GenericValues<'a, V: ?Sized, I, P> {
-  iter: Values<'a, I, P>,
+pub struct GenericValues<'a, V: ?Sized, I, M: Memtable> {
+  iter: Iter<'a, I, M>,
+  version: Option<u64>,
   _m: PhantomData<&'a V>,
 }
 
-impl<'a, V: ?Sized, I, P> GenericValues<'a, V, I, P> {
+impl<'a, V: ?Sized, I, M: Memtable> GenericValues<'a, V, I, M> {
   #[inline]
-  pub(super) fn new(iter: Values<'a, I, P>) -> Self {
+  pub(super) fn new(iter: Iter<'a, I, M>) -> Self {
     Self {
+      version: iter.version(),
       iter,
       _m: PhantomData,
     }
   }
+
+  /// Returns the query version of the values in the iterator.
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    M::Pointer: WithVersion,
+  {
+    self.version.unwrap()
+  }
 }
 
-impl<'a, V, I, P> Iterator for GenericValues<'a, V, I, P>
+impl<'a, V, I, M> Iterator for GenericValues<'a, V, I, M>
 where
   V: ?Sized + Type,
-  P: Pointer,
-  I: Iterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = V::Ref<'a>;
+  type Item = GenericValue<'a, V, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(ty_ref::<V>)
+    self
+      .iter
+      .next()
+      .map(|ent| GenericValue::with_version_in(ent, self.version))
   }
 }
 
-impl<'a, V, I, P> DoubleEndedIterator for GenericValues<'a, V, I, P>
+impl<'a, V, I, M> DoubleEndedIterator for GenericValues<'a, V, I, M>
 where
   V: ?Sized + Type,
-  P: Pointer,
-  I: DoubleEndedIterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(ty_ref::<V>)
+    self
+      .iter
+      .next_back()
+      .map(|ent| GenericValue::with_version_in(ent, self.version))
   }
 }
 
-impl<'a, V, I, P> FusedIterator for GenericValues<'a, V, I, P>
+impl<'a, V, I, M> FusedIterator for GenericValues<'a, V, I, M>
 where
   V: ?Sized + Type,
-  P: Pointer,
-  I: FusedIterator<Item = &'a P>,
+  M: Memtable + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
+  I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
@@ -174,7 +236,8 @@ where
   B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
-  iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
+  iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+  version: Option<u64>,
   _m: PhantomData<&'a V>,
 }
 
@@ -190,12 +253,22 @@ where
 {
   #[inline]
   pub(super) fn new(
-    iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
+    iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
   ) -> Self {
     Self {
+      version: iter.version(),
       iter,
       _m: PhantomData,
     }
+  }
+
+  /// Returns the query version of the entries in the iterator.
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    B::Pointer: WithVersion,
+  {
+    self.version.unwrap()
   }
 }
 
@@ -206,15 +279,18 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+  B: Memtable + 'static,
+  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
-  type Item = (K::Ref<'a>, V::Ref<'a>);
+  type Item = GenericEntry<'a, K, V, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(kv_ref::<K, V>)
+    self
+      .iter
+      .next()
+      .map(|ent| GenericEntry::with_version_in(ent, self.version))
   }
 }
 
@@ -225,14 +301,17 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
+  B: Memtable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
-    DoubleEndedIterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+    DoubleEndedIterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(kv_ref::<K, V>)
+    self
+      .iter
+      .next_back()
+      .map(|ent| GenericEntry::with_version_in(ent, self.version))
   }
 }
 
@@ -243,10 +322,9 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
-    DoubleEndedIterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+  B: Memtable + 'static,
+  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
 }
 
@@ -260,7 +338,8 @@ where
   B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
-  iter: RangeKeys<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
+  iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+  version: Option<u64>,
 }
 
 impl<'a, K, R, Q, B> GenericRangeKeys<'a, K, R, Q, B>
@@ -274,9 +353,21 @@ where
 {
   #[inline]
   pub(super) fn new(
-    iter: RangeKeys<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
+    iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
   ) -> Self {
-    Self { iter }
+    Self {
+      version: iter.version(),
+      iter,
+    }
+  }
+
+  /// Returns the query version of the keys in the iterator.
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    B::Pointer: WithVersion,
+  {
+    self.version.unwrap()
   }
 }
 
@@ -286,15 +377,18 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+  B: Memtable + 'static,
+  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
-  type Item = K::Ref<'a>;
+  type Item = GenericKey<'a, K, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(ty_ref::<K>)
+    self
+      .iter
+      .next()
+      .map(|ent| GenericKey::with_version_in(ent, self.version))
   }
 }
 
@@ -304,14 +398,17 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
+  B: Memtable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
-    DoubleEndedIterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+    DoubleEndedIterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(ty_ref::<K>)
+    self
+      .iter
+      .next_back()
+      .map(|ent| GenericKey::with_version_in(ent, self.version))
   }
 }
 
@@ -321,10 +418,9 @@ where
   K: Type + Ord + ?Sized,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
-    DoubleEndedIterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+  B: Memtable + 'static,
+  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
 }
 
@@ -339,7 +435,8 @@ where
   B: Memtable + 'a,
   B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
 {
-  iter: RangeValues<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B::Pointer>,
+  iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+  version: Option<u64>,
   _m: PhantomData<&'a V>,
 }
 
@@ -355,16 +452,22 @@ where
 {
   #[inline]
   pub(super) fn new(
-    iter: RangeValues<
-      'a,
-      B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>,
-      B::Pointer,
-    >,
+    iter: Range<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
   ) -> Self {
     Self {
+      version: iter.version(),
       iter,
       _m: PhantomData,
     }
+  }
+
+  /// Returns the query version of the iterator.
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    B::Pointer: WithVersion,
+  {
+    self.version.unwrap()
   }
 }
 
@@ -375,15 +478,18 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+  B: Memtable + 'static,
+  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
-  type Item = V::Ref<'a>;
+  type Item = GenericValue<'a, V, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(ty_ref::<V>)
+    self
+      .iter
+      .next()
+      .map(|ent| GenericValue::with_version_in(ent, self.version))
   }
 }
 
@@ -394,14 +500,17 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
+  B: Memtable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
-    DoubleEndedIterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+    DoubleEndedIterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(ty_ref::<V>)
+    self
+      .iter
+      .next_back()
+      .map(|ent| GenericValue::with_version_in(ent, self.version))
   }
 }
 
@@ -412,9 +521,8 @@ where
   V: ?Sized + Type,
   Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
-  B: Memtable + 'a,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
-    DoubleEndedIterator<Item = &'a B::Pointer>,
-  B::Pointer: Pointer<Comparator = GenericComparator<K>> + 'a,
+  B: Memtable + 'static,
+  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
+  B::Pointer: Pointer<Comparator = GenericComparator<K>> + CheapClone + 'static,
 {
 }

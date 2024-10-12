@@ -1,6 +1,6 @@
 use core::{borrow::Borrow, cmp, slice};
 
-use dbutils::Comparator;
+use dbutils::{CheapClone, Comparator};
 
 use crate::{
   sealed::{Pointer as _, WithVersion, WithoutVersion},
@@ -17,6 +17,22 @@ pub struct Pointer<C> {
   value_len: usize,
   cmp: C,
 }
+
+impl<C: Clone> Clone for Pointer<C> {
+  #[inline]
+  fn clone(&self) -> Self {
+    Self {
+      ptr: self.ptr,
+      key_len: self.key_len,
+      value_len: self.value_len,
+      cmp: self.cmp.clone(),
+    }
+  }
+}
+
+impl<C: Copy> Copy for Pointer<C> {}
+
+impl<C: CheapClone> CheapClone for Pointer<C> {}
 
 unsafe impl<C: Send> Send for Pointer<C> {}
 unsafe impl<C: Sync> Sync for Pointer<C> {}
@@ -103,6 +119,22 @@ pub struct VersionPointer<C> {
   value_len: usize,
   cmp: C,
 }
+
+impl<C: Clone> Clone for VersionPointer<C> {
+  #[inline]
+  fn clone(&self) -> Self {
+    Self {
+      ptr: self.ptr,
+      key_len: self.key_len,
+      value_len: self.value_len,
+      cmp: self.cmp.clone(),
+    }
+  }
+}
+
+impl<C: Copy> Copy for VersionPointer<C> {}
+
+impl<C: CheapClone> CheapClone for VersionPointer<C> {}
 
 unsafe impl<C: Send> Send for VersionPointer<C> {}
 unsafe impl<C: Sync> Sync for VersionPointer<C> {}

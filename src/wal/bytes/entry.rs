@@ -5,6 +5,7 @@ pub struct Entry<'a, E> {
   ent: E,
   key: &'a [u8],
   value: &'a [u8],
+  query_version: Option<u64>,
   version: Option<u64>,
 }
 
@@ -13,10 +14,18 @@ where
   E: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("Entry")
-      .field("key", &self.key())
-      .field("value", &self.value())
-      .finish()
+    if let Some(version) = self.version {
+      f.debug_struct("Entry")
+        .field("key", &self.key())
+        .field("value", &self.value())
+        .field("version", &version)
+        .finish()
+    } else {
+      f.debug_struct("Entry")
+        .field("key", &self.key())
+        .field("value", &self.value())
+        .finish()
+    }
   }
 }
 
@@ -31,6 +40,7 @@ where
       key: self.key,
       value: self.value,
       version: self.version,
+      query_version: self.query_version,
     }
   }
 }
@@ -42,7 +52,7 @@ where
 {
   #[inline]
   pub(super) fn new(ent: E) -> Self {
-    Self::with_version_in(ent, false)
+    Self::with_version_in(ent, None)
   }
 }
 
@@ -52,8 +62,8 @@ where
   E::Pointer: Pointer + WithVersion,
 {
   #[inline]
-  pub(super) fn with_version(ent: E) -> Self {
-    Self::with_version_in(ent, true)
+  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+    Self::with_version_in(ent, Some(query_version))
   }
 }
 
@@ -63,12 +73,18 @@ where
   E::Pointer: Pointer,
 {
   #[inline]
-  fn with_version_in(ent: E, version: bool) -> Self {
+  fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
     let ptr = ent.pointer();
+
     Self {
       key: ptr.as_key_slice(),
       value: ptr.as_value_slice(),
-      version: if version { Some(ptr.version()) } else { None },
+      version: if query_version.is_some() {
+        Some(ptr.version())
+      } else {
+        None
+      },
+      query_version,
       ent,
     }
   }
@@ -85,10 +101,35 @@ where
   #[inline]
   #[allow(clippy::should_implement_trait)]
   pub fn next(&mut self) -> Option<Self> {
-    self
-      .ent
-      .next()
-      .map(|ent| Self::with_version_in(ent, self.version.is_some()))
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.next();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let k = p.as_key_slice();
+
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && k != self.key {
+          return Some(Self {
+            key: k,
+            value: p.as_value_slice(),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.next();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .next()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
   }
 
   /// Returns the previous entry in the WALs.
@@ -96,10 +137,35 @@ where
   /// This does not move the cursor.
   #[inline]
   pub fn prev(&mut self) -> Option<Self> {
-    self
-      .ent
-      .prev()
-      .map(|ent| Self::with_version_in(ent, self.version.is_some()))
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.prev();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let k = p.as_key_slice();
+
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && k != self.key {
+          return Some(Self {
+            key: k,
+            value: p.as_value_slice(),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.prev();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .prev()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
   }
 }
 

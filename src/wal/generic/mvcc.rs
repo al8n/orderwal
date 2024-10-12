@@ -96,7 +96,7 @@ where
     K,
     V,
     <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as sealed::Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
@@ -141,12 +141,12 @@ where
     '_,
     K,
     <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as sealed::Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    GenericKeys::new(self.as_core().keys(Some(version)))
+    GenericKeys::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
@@ -172,7 +172,7 @@ where
     GenericRangeKeys::new(
       self
         .as_core()
-        .range_keys(Some(version), GenericQueryRange::new(range)),
+        .range(Some(version), GenericQueryRange::new(range)),
     )
   }
 
@@ -185,12 +185,12 @@ where
     '_,
     V,
     <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as sealed::Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    GenericValues::new(self.as_core().values(Some(version)))
+    GenericValues::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
@@ -217,7 +217,7 @@ where
     GenericRangeValues::new(
       self
         .as_core()
-        .range_values(Some(version), GenericQueryRange::new(range)),
+        .range(Some(version), GenericQueryRange::new(range)),
     )
   }
 
@@ -235,7 +235,7 @@ where
     self
       .as_core()
       .first(Some(version))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -249,7 +249,7 @@ where
     V: Type,
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>> + Ord,
   {
-    Wal::last(self.as_core(), Some(version)).map(GenericEntry::with_version)
+    Wal::last(self.as_core(), Some(version)).map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -298,7 +298,7 @@ where
     self
       .as_core()
       .get(Some(version), &Query::new(key))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Gets the value associated with the key.
@@ -321,7 +321,7 @@ where
     self
       .as_core()
       .get(Some(version), Slice::<K>::ref_cast(key))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -342,7 +342,7 @@ where
     self
       .as_core()
       .upper_bound(Some(version), bound.map(Query::ref_cast))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -366,7 +366,7 @@ where
     self
       .as_core()
       .upper_bound(Some(version), bound.map(Slice::ref_cast))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -387,7 +387,7 @@ where
     self
       .as_core()
       .lower_bound(Some(version), bound.map(Query::ref_cast))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -411,7 +411,7 @@ where
     self
       .as_core()
       .lower_bound(Some(version), bound.map(Slice::ref_cast))
-      .map(GenericEntry::with_version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 }
 

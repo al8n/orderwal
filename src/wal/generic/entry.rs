@@ -9,7 +9,7 @@ use crate::sealed::{MemtableEntry, Pointer, WithVersion, WithoutVersion};
 
 use super::ty_ref;
 
-/// A wrapper around a generic type that can be used to construct a [`GenericEntry`].
+/// A wrapper around a generic type that can be used to construct for insertion.
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct Generic<'a, T: ?Sized> {
@@ -177,16 +177,18 @@ impl<'a, T: 'a + ?Sized> From<&'a T> for Generic<'a, T> {
   }
 }
 
-/// The reference to an entry in the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
+/// The reference to an entry in the generic WALs.
 pub struct GenericEntry<'a, K, V, E>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
 {
   ent: E,
+  raw_key: &'a [u8],
   key: K::Ref<'a>,
   value: V::Ref<'a>,
   version: Option<u64>,
+  query_version: Option<u64>,
 }
 
 impl<'a, K, V, E> core::fmt::Debug for GenericEntry<'a, K, V, E>
@@ -198,10 +200,18 @@ where
   E: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("GenericEntry")
-      .field("key", &self.key())
-      .field("value", &self.value())
-      .finish()
+    if let Some(version) = self.version {
+      f.debug_struct("GenericEntry")
+        .field("key", &self.key())
+        .field("value", &self.value())
+        .field("version", &version)
+        .finish()
+    } else {
+      f.debug_struct("GenericEntry")
+        .field("key", &self.key())
+        .field("value", &self.value())
+        .finish()
+    }
   }
 }
 
@@ -217,9 +227,11 @@ where
   fn clone(&self) -> Self {
     Self {
       ent: self.ent.clone(),
+      raw_key: self.raw_key,
       key: self.key.clone(),
       value: self.value.clone(),
       version: self.version,
+      query_version: self.query_version,
     }
   }
 }
@@ -233,7 +245,7 @@ where
 {
   #[inline]
   pub(super) fn new(ent: E) -> Self {
-    Self::with_version_in(ent, false)
+    Self::with_version_in(ent, None)
   }
 }
 
@@ -245,8 +257,8 @@ where
   E::Pointer: Pointer + WithVersion,
 {
   #[inline]
-  pub(super) fn with_version(ent: E) -> Self {
-    Self::with_version_in(ent, true)
+  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+    Self::with_version_in(ent, Some(query_version))
   }
 }
 
@@ -258,12 +270,19 @@ where
   E::Pointer: Pointer,
 {
   #[inline]
-  fn with_version_in(ent: E, version: bool) -> Self {
+  pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
     let ptr = ent.pointer();
+    let raw_key = ptr.as_key_slice();
     Self {
-      key: ty_ref::<K>(ptr.as_key_slice()),
+      raw_key,
+      key: ty_ref::<K>(raw_key),
       value: ty_ref::<V>(ptr.as_value_slice()),
-      version: if version { Some(ptr.version()) } else { None },
+      version: if query_version.is_some() {
+        Some(ptr.version())
+      } else {
+        None
+      },
+      query_version,
       ent,
     }
   }
@@ -277,27 +296,77 @@ where
   E: MemtableEntry<'a>,
   E::Pointer: Pointer,
 {
-  /// Returns the next entry in the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
+  /// Returns the next entry in the generic WALs.
   ///
   /// This does not move the cursor.
   #[inline]
   #[allow(clippy::should_implement_trait)]
   pub fn next(&mut self) -> Option<Self> {
-    self
-      .ent
-      .next()
-      .map(|ent| Self::with_version_in(ent, self.version.is_some()))
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.next();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let raw_key = p.as_key_slice();
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && raw_key != self.raw_key {
+          return Some(Self {
+            raw_key,
+            key: ty_ref::<K>(raw_key),
+            value: ty_ref::<V>(p.as_value_slice()),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.next();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .next()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
   }
 
-  /// Returns the previous entry in the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
+  /// Returns the previous entry in the generic WALs.
   ///
   /// This does not move the cursor.
   #[inline]
   pub fn prev(&mut self) -> Option<Self> {
-    self
-      .ent
-      .prev()
-      .map(|ent| Self::with_version_in(ent, self.version.is_some()))
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.prev();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let raw_key = p.as_key_slice();
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && raw_key != self.raw_key {
+          return Some(Self {
+            raw_key,
+            key: ty_ref::<K>(raw_key),
+            value: ty_ref::<V>(p.as_value_slice()),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.prev();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .prev()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
   }
 }
 
@@ -336,5 +405,406 @@ where
   #[inline]
   pub const fn key(&self) -> &K::Ref<'a> {
     &self.key
+  }
+}
+
+/// The reference to a key of the entry in the generic WALs.
+pub struct GenericKey<'a, K, E>
+where
+  K: ?Sized + Type,
+{
+  ent: E,
+  raw_key: &'a [u8],
+  key: K::Ref<'a>,
+  version: Option<u64>,
+  query_version: Option<u64>,
+}
+
+impl<'a, K, E> core::fmt::Debug for GenericKey<'a, K, E>
+where
+  K: Type + ?Sized,
+  K::Ref<'a>: core::fmt::Debug,
+  E: core::fmt::Debug,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    if let Some(version) = self.version {
+      f.debug_struct("GenericKey")
+        .field("key", &self.key())
+        .field("version", &version)
+        .finish()
+    } else {
+      f.debug_struct("GenericKey")
+        .field("key", &self.key())
+        .finish()
+    }
+  }
+}
+
+impl<'a, K, E> Clone for GenericKey<'a, K, E>
+where
+  K: ?Sized + Type,
+  K::Ref<'a>: Clone,
+  E: Clone,
+{
+  #[inline]
+  fn clone(&self) -> Self {
+    Self {
+      ent: self.ent.clone(),
+      raw_key: self.raw_key,
+      key: self.key.clone(),
+      version: self.version,
+      query_version: self.query_version,
+    }
+  }
+}
+
+impl<'a, K, E> GenericKey<'a, K, E>
+where
+  K: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer + WithoutVersion,
+{
+  #[inline]
+  pub(super) fn new(ent: E) -> Self {
+    Self::with_version_in(ent, None)
+  }
+}
+
+impl<'a, K, E> GenericKey<'a, K, E>
+where
+  K: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer + WithVersion,
+{
+  #[inline]
+  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+    Self::with_version_in(ent, Some(query_version))
+  }
+}
+
+impl<'a, K, E> GenericKey<'a, K, E>
+where
+  K: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer,
+{
+  #[inline]
+  pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
+    let ptr = ent.pointer();
+    let raw_key = ptr.as_key_slice();
+    Self {
+      raw_key,
+      key: ty_ref::<K>(raw_key),
+      version: if query_version.is_some() {
+        Some(ptr.version())
+      } else {
+        None
+      },
+      query_version,
+      ent,
+    }
+  }
+}
+
+impl<'a, K, E> GenericKey<'a, K, E>
+where
+  K: Type + Ord + ?Sized,
+  for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer,
+{
+  /// Returns the next entry in the generic WALs.
+  ///
+  /// This does not move the cursor.
+  #[inline]
+  #[allow(clippy::should_implement_trait)]
+  pub fn next(&mut self) -> Option<Self> {
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.next();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let raw_key = p.as_key_slice();
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && raw_key != self.raw_key {
+          return Some(Self {
+            raw_key,
+            key: ty_ref::<K>(raw_key),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.next();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .next()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
+  }
+
+  /// Returns the previous entry in the generic WALs.
+  ///
+  /// This does not move the cursor.
+  #[inline]
+  pub fn prev(&mut self) -> Option<Self> {
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.prev();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let raw_key = p.as_key_slice();
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && raw_key != self.raw_key {
+          return Some(Self {
+            raw_key,
+            key: ty_ref::<K>(raw_key),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.prev();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .prev()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
+  }
+}
+
+impl<'a, K, E> GenericKey<'a, K, E>
+where
+  K: Type + ?Sized,
+  E: MemtableEntry<'a>,
+  E::Pointer: WithVersion,
+{
+  /// Returns the version of the entry.
+  #[inline]
+  pub fn version(&self) -> u64 {
+    self.version.expect("version must be set")
+  }
+}
+
+impl<'a, K, E> GenericKey<'a, K, E>
+where
+  K: Type + ?Sized,
+{
+  /// Returns the key of the entry.
+  #[inline]
+  pub const fn key(&self) -> &K::Ref<'a> {
+    &self.key
+  }
+}
+
+/// The reference to a value of the entry in the generic WALs.
+pub struct GenericValue<'a, V, E>
+where
+  V: ?Sized + Type,
+{
+  ent: E,
+  raw_key: &'a [u8],
+  value: V::Ref<'a>,
+  version: Option<u64>,
+  query_version: Option<u64>,
+}
+
+impl<'a, V, E> core::fmt::Debug for GenericValue<'a, V, E>
+where
+  V: Type + ?Sized,
+  V::Ref<'a>: core::fmt::Debug,
+  E: core::fmt::Debug,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    if let Some(version) = self.version {
+      f.debug_struct("GenericValue")
+        .field("value", &self.value())
+        .field("version", &version)
+        .finish()
+    } else {
+      f.debug_struct("GenericValue")
+        .field("value", &self.value())
+        .finish()
+    }
+  }
+}
+
+impl<'a, V, E> Clone for GenericValue<'a, V, E>
+where
+  V: ?Sized + Type,
+  V::Ref<'a>: Clone,
+  E: Clone,
+{
+  #[inline]
+  fn clone(&self) -> Self {
+    Self {
+      ent: self.ent.clone(),
+      raw_key: self.raw_key,
+      value: self.value.clone(),
+      version: self.version,
+      query_version: self.query_version,
+    }
+  }
+}
+
+impl<'a, K, E> GenericValue<'a, K, E>
+where
+  K: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer + WithoutVersion,
+{
+  #[inline]
+  pub(super) fn new(ent: E) -> Self {
+    Self::with_version_in(ent, None)
+  }
+}
+
+impl<'a, K, E> GenericValue<'a, K, E>
+where
+  K: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer + WithVersion,
+{
+  #[inline]
+  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+    Self::with_version_in(ent, Some(query_version))
+  }
+}
+
+impl<'a, V, E> GenericValue<'a, V, E>
+where
+  V: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer,
+{
+  #[inline]
+  pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
+    let ptr = ent.pointer();
+    let raw_key = ptr.as_key_slice();
+    Self {
+      raw_key,
+      value: ty_ref::<V>(ptr.as_value_slice()),
+      version: if query_version.is_some() {
+        Some(ptr.version())
+      } else {
+        None
+      },
+      query_version,
+      ent,
+    }
+  }
+}
+
+impl<'a, V, E> GenericValue<'a, V, E>
+where
+  V: Type + ?Sized,
+  E: MemtableEntry<'a>,
+  E::Pointer: Pointer,
+{
+  /// Returns the next entry in the generic WALs.
+  ///
+  /// This does not move the cursor.
+  #[inline]
+  #[allow(clippy::should_implement_trait)]
+  pub fn next(&mut self) -> Option<Self> {
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.next();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let raw_key = p.as_key_slice();
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && raw_key != self.raw_key {
+          return Some(Self {
+            raw_key,
+            value: ty_ref::<V>(p.as_value_slice()),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.next();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .next()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
+  }
+
+  /// Returns the previous entry in the generic WALs.
+  ///
+  /// This does not move the cursor.
+  #[inline]
+  pub fn prev(&mut self) -> Option<Self> {
+    if let Some(query_version) = self.query_version {
+      let mut curr = self.ent.prev();
+
+      while let Some(mut ent) = curr {
+        let p = ent.pointer();
+        let version = p.version();
+        let raw_key = p.as_key_slice();
+        // Do not yield the same key twice and check if the version is less than or equal to the query version.
+        if version <= query_version && raw_key != self.raw_key {
+          return Some(Self {
+            raw_key,
+            value: ty_ref::<V>(p.as_value_slice()),
+            version: Some(version),
+            query_version: self.query_version,
+            ent,
+          });
+        }
+
+        curr = ent.prev();
+      }
+
+      None
+    } else {
+      self
+        .ent
+        .prev()
+        .map(|ent| Self::with_version_in(ent, self.query_version))
+    }
+  }
+}
+
+impl<'a, V, E> GenericValue<'a, V, E>
+where
+  V: Type + ?Sized,
+  E: MemtableEntry<'a>,
+  E::Pointer: WithVersion,
+{
+  /// Returns the version of the entry.
+  #[inline]
+  pub fn version(&self) -> u64 {
+    self.version.expect("version must be set")
+  }
+}
+
+impl<'a, V, E> GenericValue<'a, V, E>
+where
+  V: Type + ?Sized,
+{
+  /// Returns the value of the entry.
+  #[inline]
+  pub const fn value(&self) -> &V::Ref<'a> {
+    &self.value
   }
 }

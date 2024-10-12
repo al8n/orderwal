@@ -1,6 +1,9 @@
 use core::{cmp, marker::PhantomData, slice};
 
-use dbutils::traits::{KeyRef, Type};
+use dbutils::{
+  traits::{KeyRef, Type},
+  CheapClone,
+};
 
 use crate::{
   sealed::{Pointer, WithVersion, WithoutVersion},
@@ -19,6 +22,21 @@ pub struct GenericPointer<K: ?Sized, V: ?Sized> {
   /// The length of the value.
   value_len: usize,
   _m: PhantomData<(fn() -> K, fn() -> V)>,
+}
+
+impl<K: ?Sized, V: ?Sized> Clone for GenericPointer<K, V> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<K: ?Sized, V: ?Sized> Copy for GenericPointer<K, V> {}
+
+impl<K: ?Sized, V: ?Sized> CheapClone for GenericPointer<K, V> {
+  #[inline]
+  fn cheap_clone(&self) -> Self {
+    *self
+  }
 }
 
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
@@ -125,6 +143,22 @@ pub struct GenericVersionPointer<K: ?Sized, V: ?Sized> {
   /// The length of the value.
   value_len: usize,
   _m: PhantomData<(fn() -> K, fn() -> V)>,
+}
+
+impl<K: ?Sized, V: ?Sized> Clone for GenericVersionPointer<K, V> {
+  #[inline]
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<K: ?Sized, V: ?Sized> Copy for GenericVersionPointer<K, V> {}
+
+impl<K: ?Sized, V: ?Sized> CheapClone for GenericVersionPointer<K, V> {
+  #[inline]
+  fn cheap_clone(&self) -> Self {
+    *self
+  }
 }
 
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V> {

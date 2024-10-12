@@ -95,7 +95,7 @@ where
     K,
     V,
     <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as sealed::Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
@@ -134,12 +134,12 @@ where
     '_,
     K,
     <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as sealed::Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    GenericKeys::new(self.as_core().keys(None))
+    GenericKeys::new(self.as_core().iter(None))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
@@ -161,11 +161,7 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    GenericRangeKeys::new(
-      self
-        .as_core()
-        .range_keys(None, GenericQueryRange::new(range)),
-    )
+    GenericRangeKeys::new(self.as_core().range(None, GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the values in the WAL.
@@ -176,12 +172,12 @@ where
     '_,
     V,
     <<Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as sealed::Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    GenericValues::new(self.as_core().values(None))
+    GenericValues::new(self.as_core().iter(None))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
@@ -204,11 +200,7 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as sealed::Memtable>::Pointer> + Ord,
     <Self::Memtable as sealed::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
-    GenericRangeValues::new(
-      self
-        .as_core()
-        .range_values(None, GenericQueryRange::new(range)),
-    )
+    GenericRangeValues::new(self.as_core().range(None, GenericQueryRange::new(range)))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
