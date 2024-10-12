@@ -13,8 +13,10 @@ use crate::{
   entry::BufWriter,
   error::Error,
   internal_iter::*,
-  sealed::{self, Constructable, Memtable, Pointer, Wal, WithVersion},
-  KeyBuilder, Options, ValueBuilder,
+  memtable::{self, Memtable},
+  sealed::{Constructable, Pointer, Wal, WithVersion},
+  types::{KeyBuilder, ValueBuilder},
+  Options,
 };
 
 use super::{
@@ -102,7 +104,7 @@ where
     version: u64,
   ) -> Iter<
     '_,
-    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as memtable::Memtable>::Iterator<'_>,
      Self::Memtable,
   >
   where
@@ -119,7 +121,7 @@ where
     range: R,
   ) -> Range<
     '_,
-    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as memtable::Memtable>::Range<
       '_,
       Q,
       R,
@@ -141,7 +143,7 @@ where
     version: u64,
   ) -> Keys<
     '_,
-    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as memtable::Memtable>::Iterator<'_>,
      Self::Memtable,
   >
   where
@@ -158,7 +160,7 @@ where
     range: R,
   ) -> RangeKeys<
     '_,
-    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as memtable::Memtable>::Range<
       '_,
       Q,
       R,
@@ -180,7 +182,7 @@ where
     version: u64,
   ) -> Values<
     '_,
-    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as memtable::Memtable>::Iterator<'_>,
      Self::Memtable,
   >
   where
@@ -197,7 +199,7 @@ where
     range: R,
   ) -> RangeValues<
     '_,
-    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Range<
+    <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as memtable::Memtable>::Range<
       '_,
       Q,
       R,

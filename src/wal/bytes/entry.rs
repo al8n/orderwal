@@ -1,4 +1,7 @@
-use crate::sealed::{MemtableEntry, Pointer, WithVersion, WithoutVersion};
+use crate::{
+  memtable::MemtableEntry,
+  sealed::{Pointer, WithVersion, WithoutVersion},
+};
 
 /// The reference to an entry in the WALs.
 pub struct Entry<'a, E> {

@@ -6,12 +6,9 @@
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity)]
 
-use core::{marker::PhantomData, mem};
+use core::mem;
 
 pub use among;
-use among::Among;
-use error::Error;
-use rarena_allocator::{either::Either, Allocator, Buffer, Freelist, Options as ArenaOptions};
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -64,17 +61,10 @@ const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 /// Error types.
 pub mod error;
 
-mod buffer;
-pub use buffer::*;
-
 mod builder;
 pub use builder::Builder;
 
 mod entry;
-
-/// Utilities.
-pub mod utils;
-use utils::*;
 
 mod options;
 pub use options::Options;
@@ -97,6 +87,34 @@ pub mod iter {
 pub mod types {
   pub use super::wal::bytes::entry::*;
   pub use super::wal::generic::entry::*;
+
+  macro_rules! builder_ext {
+    ($($name:ident),+ $(,)?) => {
+      $(
+        paste::paste! {
+          impl<F> $name<F> {
+            #[doc = "Creates a new `" $name "` with the given size and builder closure which requires `FnOnce`."]
+            #[inline]
+            pub const fn once<E>(size: u32, f: F) -> Self
+            where
+              F: for<'a> FnOnce(&mut dbutils::buffer::VacantBuffer<'a>) -> Result<(), E>,
+            {
+              Self { size, f }
+            }
+          }
+        }
+      )*
+    };
+  }
+
+  dbutils::builder!(
+    /// A value builder for the wal, which requires the value size for accurate allocation and a closure to build the value.
+    pub ValueBuilder(u32);
+    /// A key builder for the wal, which requires the key size for accurate allocation and a closure to build the key.
+    pub KeyBuilder(u32);
+  );
+
+  builder_ext!(ValueBuilder, KeyBuilder,);
 }
 
 mod internal_iter;

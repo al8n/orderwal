@@ -32,7 +32,7 @@ dbutils = { version = "0.7", default-features = false, features = ["crc32fast"] 
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false, features = ["memmap"] }
 crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132" }
-skl = { version = "0.16", default-features = false, features = ["alloc"] }
+skl = { version = "0.16", path = "../skl-rs", default-features = false, features = ["alloc"] }
 paste = "1"
 thiserror = "1"
 

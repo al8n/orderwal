@@ -4,7 +4,8 @@ use dbutils::CheapClone;
 
 use crate::{
   internal_iter::{Iter as BaseIter, Range as BaseRange},
-  sealed::{Memtable, Pointer, WithVersion},
+  memtable::Memtable,
+  sealed::{Pointer, WithVersion},
 };
 
 use super::entry::{Entry, Key, Value};

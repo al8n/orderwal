@@ -4,7 +4,8 @@ use std::sync::Arc;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  sealed::{self, Constructable, Immutable, Memtable},
+  memtable::Memtable,
+  sealed::{self, Constructable, Immutable},
   swmr::wal::OrderCore,
   wal::generic::GenericComparator,
 };

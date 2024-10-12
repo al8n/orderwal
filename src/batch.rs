@@ -1,9 +1,10 @@
 use crate::{
-  sealed::{Memtable, WithVersion, WithoutVersion},
+  memtable::Memtable,
+  sealed::{WithVersion, WithoutVersion},
   VERSION_SIZE,
 };
 
-use super::{entry::*, sealed::Constructable};
+use super::{entry::BufWriter, sealed::Constructable};
 
 pub(crate) struct EncodedBatchEntryMeta {
   /// The output of `merge_lengths(klen, vlen)`

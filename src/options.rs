@@ -1,3 +1,7 @@
+use rarena_allocator::{Freelist, Options as ArenaOptions};
+
+use super::{CURRENT_VERSION, HEADER_SIZE};
+
 /// Options for the WAL.
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -692,7 +696,7 @@ pub(crate) trait ArenaOptionsExt {
   fn merge(self, opts: &Options) -> Self;
 }
 
-impl ArenaOptionsExt for super::ArenaOptions {
+impl ArenaOptionsExt for ArenaOptions {
   #[inline]
   fn merge(self, opts: &Options) -> Self {
     let new = self
@@ -713,4 +717,13 @@ impl ArenaOptionsExt for super::ArenaOptions {
       new
     }
   }
+}
+
+#[inline]
+pub(crate) const fn arena_options(reserved: u32) -> ArenaOptions {
+  ArenaOptions::new()
+    .with_magic_version(CURRENT_VERSION)
+    .with_freelist(Freelist::None)
+    .with_reserved((HEADER_SIZE + reserved as usize) as u32)
+    .with_unify(true)
 }

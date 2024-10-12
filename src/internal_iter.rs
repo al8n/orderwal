@@ -1,8 +1,11 @@
-use core::iter::FusedIterator;
+use core::{iter::FusedIterator, marker::PhantomData};
 
-use sealed::{Memtable, MemtableEntry, Pointer as _};
+use dbutils::CheapClone;
 
-use super::*;
+use super::{
+  memtable::{Memtable, MemtableEntry},
+  sealed::Pointer,
+};
 
 /// Iterator over the entries in the WAL.
 pub struct Iter<'a, I, M: Memtable> {
@@ -33,7 +36,7 @@ impl<I, M: Memtable> Iter<'_, I, M> {
 impl<'a, I, M> Iterator for Iter<'a, I, M>
 where
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer + CheapClone + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
   type Item = M::Item<'a>;
@@ -71,7 +74,7 @@ where
 impl<'a, I, M> DoubleEndedIterator for Iter<'a, I, M>
 where
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer + CheapClone + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -107,7 +110,7 @@ where
 impl<'a, I, M> FusedIterator for Iter<'a, I, M>
 where
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer + CheapClone + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
@@ -141,7 +144,7 @@ impl<R, M: Memtable> Range<'_, R, M> {
 impl<'a, R, M> Iterator for Range<'a, R, M>
 where
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer + CheapClone + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
   R: Iterator<Item = M::Item<'a>>,
 {
   type Item = M::Item<'a>;
@@ -179,7 +182,7 @@ where
 impl<'a, R, M> DoubleEndedIterator for Range<'a, R, M>
 where
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer + CheapClone + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
   R: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -214,7 +217,7 @@ where
 impl<'a, R, M> FusedIterator for Range<'a, R, M>
 where
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer + CheapClone + 'static,
+  M::Pointer: Pointer + CheapClone + 'static,
   R: FusedIterator<Item = M::Item<'a>>,
 {
 }

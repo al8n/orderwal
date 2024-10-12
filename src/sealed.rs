@@ -3,15 +3,24 @@ use core::{
   ptr::NonNull,
 };
 
-use dbutils::equivalent::{Comparable, Equivalent};
-use rarena_allocator::ArenaPosition;
+use among::Among;
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalent::{Comparable, Equivalent},
+  leb128::{decode_u64_varint, encoded_u64_varint_len},
+  CheapClone,
+};
+use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
 use super::{
   batch::{Batch, EncodedBatchEntryMeta},
   checksum::{BuildChecksumer, Checksumer},
   entry::BufWriter,
+  error::Error,
   internal_iter::*,
-  *,
+  memtable::{Memtable, MemtableEntry},
+  options::Options,
+  Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, STATUS_SIZE, VERSION_SIZE,
 };
 
 pub trait Pointer: Sized {
@@ -34,76 +43,7 @@ pub trait WithoutVersion {}
 
 pub trait GenericPointer<K: ?Sized, V: ?Sized>: Pointer {}
 
-pub trait MemtableEntry<'a>: Sized {
-  type Pointer;
-
-  fn pointer(&self) -> &Self::Pointer;
-
-  fn next(&mut self) -> Option<Self>;
-
-  fn prev(&mut self) -> Option<Self>;
-}
-
 pub trait Immutable {}
-
-pub trait Memtable: Default {
-  type Pointer;
-  type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-  type Iterator<'a>: DoubleEndedIterator<Item = Self::Item<'a>>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-  type Range<'a, Q, R>: Iterator<Item = Self::Item<'a>>
-  where
-    Self::Pointer: 'a,
-    Self: 'a,
-    R: RangeBounds<Q>,
-    Q: ?Sized + Ord + Comparable<Self::Pointer>;
-
-  fn len(&self) -> usize;
-
-  fn is_empty(&self) -> bool {
-    self.len() == 0
-  }
-
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
-
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
-
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
-  where
-    Self::Pointer: Ord + 'static;
-
-  fn first(&self) -> Option<Self::Item<'_>>
-  where
-    Self::Pointer: Ord;
-
-  fn last(&self) -> Option<Self::Item<'_>>
-  where
-    Self::Pointer: Ord;
-
-  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
-  where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
-
-  fn contains<Q>(&self, key: &Q) -> bool
-  where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
-
-  fn iter(&self) -> Self::Iterator<'_>;
-
-  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
-}
 
 pub trait Wal<C, S> {
   type Allocator: Allocator;
@@ -687,7 +627,7 @@ pub trait Wal<C, S> {
     max_value_size: u32,
     ro: bool,
   ) -> Result<(), Error> {
-    crate::check(klen, vlen, max_key_size, max_value_size, ro)
+    check(klen, vlen, max_key_size, max_value_size, ro)
   }
 
   #[inline]
@@ -696,7 +636,7 @@ pub trait Wal<C, S> {
     let max_key_size = opts.maximum_key_size();
     let max_value_size = opts.maximum_value_size();
 
-    crate::utils::check_batch_entry(klen, vlen, max_key_size, max_value_size)
+    check_batch_entry(klen, vlen, max_key_size, max_value_size)
   }
 }
 
@@ -940,4 +880,96 @@ pub trait Constructable: Sized {
   }
 
   fn from_core(core: Self::Wal) -> Self;
+}
+
+/// Merge two `u32` into a `u64`.
+///
+/// - high 32 bits: `a`
+/// - low 32 bits: `b`
+#[inline]
+pub(crate) const fn merge_lengths(a: u32, b: u32) -> u64 {
+  (a as u64) << 32 | b as u64
+}
+
+/// Split a `u64` into two `u32`.
+///
+/// - high 32 bits: the first `u32`
+/// - low 32 bits: the second `u32`
+#[inline]
+pub(crate) const fn split_lengths(len: u64) -> (u32, u32) {
+  ((len >> 32) as u32, len as u32)
+}
+
+/// - The first `usize` is the length of the encoded `klen + vlen`
+/// - The second `u64` is encoded `klen + vlen`
+/// - The third `u32` is the full entry size
+#[inline]
+pub(crate) const fn entry_size(key_len: u32, value_len: u32) -> (usize, u64, u32) {
+  let len = merge_lengths(key_len, value_len);
+  let len_size = encoded_u64_varint_len(len);
+  let elen = STATUS_SIZE as u32 + len_size as u32 + key_len + value_len + CHECKSUM_SIZE as u32;
+
+  (len_size, len, elen)
+}
+
+#[inline]
+pub(crate) const fn min_u64(a: u64, b: u64) -> u64 {
+  if a < b {
+    a
+  } else {
+    b
+  }
+}
+
+#[inline]
+pub(crate) const fn check(
+  klen: usize,
+  vlen: usize,
+  max_key_size: u32,
+  max_value_size: u32,
+  ro: bool,
+) -> Result<(), Error> {
+  if ro {
+    return Err(Error::read_only());
+  }
+
+  let max_ksize = min_u64(max_key_size as u64, u32::MAX as u64);
+  let max_vsize = min_u64(max_value_size as u64, u32::MAX as u64);
+
+  if max_ksize < klen as u64 {
+    return Err(Error::key_too_large(klen as u64, max_key_size));
+  }
+
+  if max_vsize < vlen as u64 {
+    return Err(Error::value_too_large(vlen as u64, max_value_size));
+  }
+
+  let (_, _, elen) = entry_size(klen as u32, vlen as u32);
+
+  if elen == u32::MAX {
+    return Err(Error::entry_too_large(
+      elen as u64,
+      min_u64(max_key_size as u64 + max_value_size as u64, u32::MAX as u64),
+    ));
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub(crate) fn check_batch_entry(
+  klen: usize,
+  vlen: usize,
+  max_key_size: u32,
+  max_value_size: u32,
+) -> Result<(), Error> {
+  if klen > max_key_size as usize {
+    return Err(Error::key_too_large(klen as u64, max_key_size));
+  }
+
+  if vlen > max_value_size as usize {
+    return Err(Error::value_too_large(vlen as u64, max_value_size));
+  }
+
+  Ok(())
 }

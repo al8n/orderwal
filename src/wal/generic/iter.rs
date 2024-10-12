@@ -5,10 +5,7 @@ use dbutils::{equivalent::Comparable, traits::Type, CheapClone};
 use crate::sealed::WithVersion;
 
 use super::{
-  super::super::{
-    internal_iter::*,
-    sealed::{Memtable, Pointer},
-  },
+  super::super::{internal_iter::*, memtable::Memtable, sealed::Pointer},
   entry::*,
   GenericComparator, GenericQueryRange, Query,
 };

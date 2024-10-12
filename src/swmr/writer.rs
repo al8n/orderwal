@@ -1,5 +1,6 @@
 use crate::{
-  sealed::{self, Constructable, Memtable},
+  memtable::Memtable,
+  sealed::{self, Constructable},
   wal::{
     bytes::pointer::{Pointer, VersionPointer},
     generic::{GenericComparator, GenericPointer, GenericVersionPointer},

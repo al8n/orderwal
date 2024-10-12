@@ -5,7 +5,10 @@ use dbutils::{
 };
 use rarena_allocator::either::Either;
 
-use crate::sealed::{MemtableEntry, Pointer, WithVersion, WithoutVersion};
+use crate::{
+  memtable::MemtableEntry,
+  sealed::{Pointer, WithVersion, WithoutVersion},
+};
 
 use super::ty_ref;
 

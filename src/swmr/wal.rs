@@ -4,7 +4,8 @@ use dbutils::equivalent::Comparable;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  sealed::{Memtable, MemtableEntry as _, Pointer, Wal},
+  memtable::{Memtable, MemtableEntry as _},
+  sealed::{Pointer, Wal},
   Options,
 };
 pub struct OrderCore<M, C, S> {

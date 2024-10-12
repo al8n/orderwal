@@ -2,7 +2,10 @@ use core::borrow::Borrow;
 
 use dbutils::{buffer::VacantBuffer, error::InsufficientBuffer, traits::Type};
 
-use super::{wal::generic::entry::Generic, KeyBuilder, ValueBuilder};
+use super::{
+  types::{KeyBuilder, ValueBuilder},
+  wal::generic::entry::Generic,
+};
 
 /// Writing self to the [`VacantBuffer`] in bytes format.
 pub trait BufWriter {
