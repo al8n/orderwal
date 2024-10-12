@@ -22,7 +22,7 @@ where
   type Pointer = P;
 
   #[inline]
-  fn pointer(&'a self) -> &'a Self::Pointer {
+  fn pointer(&self) -> &Self::Pointer {
     self
   }
 

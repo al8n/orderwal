@@ -462,30 +462,6 @@ impl<'a, K, E> GenericKey<'a, K, E>
 where
   K: ?Sized + Type,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer + WithoutVersion,
-{
-  #[inline]
-  pub(super) fn new(ent: E) -> Self {
-    Self::with_version_in(ent, None)
-  }
-}
-
-impl<'a, K, E> GenericKey<'a, K, E>
-where
-  K: ?Sized + Type,
-  E: MemtableEntry<'a>,
-  E::Pointer: Pointer + WithVersion,
-{
-  #[inline]
-  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
-    Self::with_version_in(ent, Some(query_version))
-  }
-}
-
-impl<'a, K, E> GenericKey<'a, K, E>
-where
-  K: ?Sized + Type,
-  E: MemtableEntry<'a>,
   E::Pointer: Pointer,
 {
   #[inline]
@@ -656,30 +632,6 @@ where
       version: self.version,
       query_version: self.query_version,
     }
-  }
-}
-
-impl<'a, K, E> GenericValue<'a, K, E>
-where
-  K: ?Sized + Type,
-  E: MemtableEntry<'a>,
-  E::Pointer: Pointer + WithoutVersion,
-{
-  #[inline]
-  pub(super) fn new(ent: E) -> Self {
-    Self::with_version_in(ent, None)
-  }
-}
-
-impl<'a, K, E> GenericValue<'a, K, E>
-where
-  K: ?Sized + Type,
-  E: MemtableEntry<'a>,
-  E::Pointer: Pointer + WithVersion,
-{
-  #[inline]
-  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
-    Self::with_version_in(ent, Some(query_version))
   }
 }
 

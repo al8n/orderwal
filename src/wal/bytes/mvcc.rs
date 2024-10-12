@@ -17,7 +17,10 @@ use crate::{
   KeyBuilder, Options, ValueBuilder,
 };
 
-use super::entry::Entry;
+use super::{
+  entry::Entry,
+  iter::{Keys, RangeKeys, RangeValues, Values},
+};
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Constructable
@@ -100,7 +103,7 @@ where
   ) -> Iter<
     '_,
     <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as Memtable>::Pointer,
+     Self::Memtable,
   >
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
@@ -121,7 +124,7 @@ where
       Q,
       R,
     >,
-    <Self::Memtable as Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
@@ -139,12 +142,12 @@ where
   ) -> Keys<
     '_,
     <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as Memtable>::Pointer,
+     Self::Memtable,
   >
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    self.as_core().keys(Some(version))
+    Keys::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
@@ -160,14 +163,14 @@ where
       Q,
       R,
     >,
-    <Self::Memtable as Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
     Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
-    self.as_core().range_keys(Some(version), range)
+    RangeKeys::new(self.as_core().range(Some(version), range))
   }
 
   /// Returns an iterator over the values in the WAL.
@@ -178,12 +181,12 @@ where
   ) -> Values<
     '_,
     <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as Memtable>::Pointer,
+     Self::Memtable,
   >
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    self.as_core().values(Some(version))
+    Values::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
@@ -199,14 +202,14 @@ where
       Q,
       R,
     >,
-    <Self::Memtable as Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
     Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
-    self.as_core().range_values(Some(version), range)
+    RangeValues::new(self.as_core().range(Some(version), range))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.

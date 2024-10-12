@@ -41,10 +41,9 @@ where
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     match self.version {
-      None => self.iter.next().map(|ent| {
+      None => self.iter.next().inspect(|ent| {
         let ptr = ent.pointer();
         self.pointer = Some(ptr.cheap_clone());
-        ent
       }),
       Some(version) => loop {
         match self.iter.next() {
@@ -78,10 +77,9 @@ where
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     match self.version {
-      None => self.iter.next_back().map(|ent| {
+      None => self.iter.next_back().inspect(|ent| {
         let ptr = ent.pointer();
         self.pointer = Some(ptr.cheap_clone());
-        ent
       }),
       Some(version) => loop {
         match self.iter.next_back() {
@@ -151,10 +149,9 @@ where
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     match self.version {
-      None => self.iter.next().map(|ent| {
+      None => self.iter.next().inspect(|ent| {
         let ptr = ent.pointer();
         self.pointer = Some(ptr.cheap_clone());
-        ent
       }),
       Some(version) => loop {
         match self.iter.next() {
@@ -187,10 +184,9 @@ where
 {
   fn next_back(&mut self) -> Option<Self::Item> {
     match self.version {
-      None => self.iter.next_back().map(|ent| {
+      None => self.iter.next_back().inspect(|ent| {
         let ptr = ent.pointer();
         self.pointer = Some(ptr.cheap_clone());
-        ent
       }),
       Some(version) => loop {
         match self.iter.next_back() {

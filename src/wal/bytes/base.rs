@@ -12,12 +12,14 @@ use crate::{
   checksum::BuildChecksumer,
   entry::BufWriter,
   error::Error,
-  iter::*,
   sealed::{self, Constructable, Memtable, Pointer, Wal, WithoutVersion},
   KeyBuilder, Options, ValueBuilder,
 };
 
-use super::entry::Entry;
+use super::{
+  entry::Entry,
+  iter::{Iter, Keys, Range, RangeKeys, RangeValues, Values},
+};
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Constructable
@@ -98,21 +100,23 @@ where
   #[inline]
   fn iter(
     &self,
+    version: u64,
   ) -> Iter<
     '_,
     <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as Memtable>::Pointer,
+     Self::Memtable,
   >
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    self.as_core().iter(None)
+    Iter::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
   fn range<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> Range<
     '_,
@@ -121,35 +125,37 @@ where
       Q,
       R,
     >,
-    <Self::Memtable as Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
     Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
-    self.as_core().range(None, range)
+    Range::new(self.as_core().range(Some(version), range))
   }
 
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys(
     &self,
+    version: u64,
   ) -> Keys<
     '_,
     <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as Memtable>::Pointer,
+     Self::Memtable,
   >
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    self.as_core().keys(None)
+    Keys::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
   #[inline]
   fn range_keys<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> RangeKeys<
     '_,
@@ -158,37 +164,37 @@ where
       Q,
       R,
     >,
-    <Self::Memtable as Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
-    [u8]: Borrow<Q>,
-    Q: ?Sized + Ord,
-    <Self::Memtable as Memtable>::Pointer:
-      Borrow<Q> + Borrow<[u8]> + Pointer<Comparator = Self::Comparator> + Ord,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
-    self.as_core().range_keys(None, range)
+    RangeKeys::new(self.as_core().range(Some(version), range))
   }
 
   /// Returns an iterator over the values in the WAL.
   #[inline]
   fn values(
     &self,
+    version: u64,
   ) -> Values<
     '_,
     <<Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable as sealed::Memtable>::Iterator<'_>,
-    <Self::Memtable as Memtable>::Pointer,
+     Self::Memtable,
   >
   where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>
   {
-    self.as_core().values(None)
+    Values::new(self.as_core().iter(Some(version)))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
   #[inline]
   fn range_values<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> RangeValues<
     '_,
@@ -197,14 +203,14 @@ where
       Q,
       R,
     >,
-    <Self::Memtable as Memtable>::Pointer,
+    Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
-    <Self::Memtable as Memtable>::Pointer: Borrow<Q> + Pointer<Comparator = Self::Comparator> + Ord,
-    Q: Ord + ?Sized,
+    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
-    self.as_core().range_values(None, range)
+    RangeValues::new(self.as_core().range(Some(version), range))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
