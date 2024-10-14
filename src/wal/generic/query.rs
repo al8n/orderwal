@@ -157,7 +157,7 @@ impl<'a, 'b: 'a, K, Q, V> Equivalent<GenericPointer<K, V>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   V: ?Sized,
-  Q: ?Sized + Ord + Equivalent<K::Ref<'b>>,
+  Q: ?Sized + Equivalent<K::Ref<'b>>,
 {
   #[inline]
   fn equivalent(&self, p: &GenericPointer<K, V>) -> bool {
@@ -170,7 +170,7 @@ impl<'a, 'b: 'a, K, Q, V> Comparable<GenericPointer<K, V>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   V: ?Sized,
-  Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
+  Q: ?Sized + Comparable<K::Ref<'b>>,
 {
   #[inline]
   fn compare(&self, p: &GenericPointer<K, V>) -> cmp::Ordering {
@@ -183,7 +183,7 @@ impl<'a, 'b: 'a, K, Q, V> Equivalent<GenericVersionPointer<K, V>> for Query<'a, 
 where
   K: Type + ?Sized,
   V: ?Sized,
-  Q: ?Sized + Ord + Equivalent<K::Ref<'b>>,
+  Q: ?Sized + Equivalent<K::Ref<'b>>,
 {
   #[inline]
   fn equivalent(&self, p: &GenericVersionPointer<K, V>) -> bool {
@@ -196,7 +196,7 @@ impl<'a, 'b: 'a, K, Q, V> Comparable<GenericVersionPointer<K, V>> for Query<'a, 
 where
   K: Type + ?Sized,
   V: ?Sized,
-  Q: ?Sized + Ord + Comparable<K::Ref<'b>>,
+  Q: ?Sized + Comparable<K::Ref<'b>>,
 {
   #[inline]
   fn compare(&self, p: &GenericVersionPointer<K, V>) -> cmp::Ordering {

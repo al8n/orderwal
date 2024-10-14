@@ -131,7 +131,7 @@ where
   >
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     Range::new(self.as_core().range(Some(version), range))
@@ -170,7 +170,7 @@ where
   >
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     RangeKeys::new(self.as_core().range(Some(version), range))
@@ -209,7 +209,7 @@ where
   >
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     RangeValues::new(self.as_core().range(Some(version), range))

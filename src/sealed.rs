@@ -214,7 +214,7 @@ pub trait Wal<C, S> {
   ) -> Range<'_, <Self::Memtable as Memtable>::Range<'_, Q, R>, Self::Memtable>
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
@@ -275,7 +275,7 @@ pub trait Wal<C, S> {
   /// Returns `true` if the WAL contains the specified key.
   fn contains_key<Q>(&self, version: Option<u64>, key: &Q) -> bool
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
@@ -298,7 +298,7 @@ pub trait Wal<C, S> {
   #[inline]
   fn get<Q>(&self, version: Option<u64>, key: &Q) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
   {
@@ -326,7 +326,7 @@ pub trait Wal<C, S> {
     bound: Bound<&Q>,
   ) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
 
@@ -336,7 +336,7 @@ pub trait Wal<C, S> {
     bound: Bound<&Q>,
   ) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
 

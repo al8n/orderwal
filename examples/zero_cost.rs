@@ -79,7 +79,7 @@
 // impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
 //   fn compare<Q>(&self, a: &Q) -> cmp::Ordering
 //   where
-//     Q: ?Sized + Ord + Comparable<Self>,
+//     Q: ?Sized + Comparable<Self>,
 //   {
 //     Comparable::compare(a, self).reverse()
 //   }

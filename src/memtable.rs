@@ -44,7 +44,7 @@ pub trait Memtable: Default {
     Self::Pointer: 'a,
     Self: 'a,
     R: RangeBounds<Q>,
-    Q: ?Sized + Ord + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   /// Returns the number of entries in the memtable.
   fn len(&self) -> usize;
@@ -57,12 +57,12 @@ pub trait Memtable: Default {
   /// Returns the upper bound of the memtable.
   fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   /// Returns the lower bound of the memtable.
   fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   /// Inserts a pointer into the memtable.
   fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
@@ -82,12 +82,12 @@ pub trait Memtable: Default {
   /// Returns the pointer associated with the key.
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   /// Returns an iterator over the memtable.
   fn iter(&self) -> Self::Iterator<'_>;
@@ -96,5 +96,5 @@ pub trait Memtable: Default {
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 }

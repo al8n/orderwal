@@ -91,7 +91,7 @@ where
   #[inline]
   fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     self.as_core().contains_key(Some(version), key)
@@ -130,7 +130,7 @@ where
   >
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     self.as_core().range(Some(version), range)
@@ -169,7 +169,7 @@ where
   >
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     RangeKeys::new(self.as_core().range(Some(version), range))
@@ -208,7 +208,7 @@ where
   >
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     RangeValues::new(self.as_core().range(Some(version), range))
@@ -243,7 +243,7 @@ where
     key: &Q,
   ) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     self
@@ -261,7 +261,7 @@ where
     bound: Bound<&Q>,
   ) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     self
@@ -279,7 +279,7 @@ where
     bound: Bound<&Q>,
   ) -> Option<Entry<'_, <Self::Memtable as Memtable>::Item<'_>>>
   where
-    Q: Ord + ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
+    Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator>,
   {
     self

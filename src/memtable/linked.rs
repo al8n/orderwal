@@ -61,7 +61,7 @@ where
     Self::Pointer: 'a,
     Self: 'a,
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   #[inline]
   fn len(&self) -> usize {
@@ -71,7 +71,7 @@ where
   #[inline]
   fn upper_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.0.upper_bound(bound)
   }
@@ -79,7 +79,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.0.lower_bound(bound)
   }
@@ -106,7 +106,7 @@ where
   #[inline]
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: ?Sized + Comparable<P>,
   {
     self.0.get(key)
   }
@@ -114,7 +114,7 @@ where
   #[inline]
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: ?Sized + Comparable<P>,
   {
     self.0.contains(key)
   }
@@ -128,7 +128,7 @@ where
   fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
-    Q: Ord + ?Sized + Comparable<P>,
+    Q: ?Sized + Comparable<P>,
   {
     self.0.range(range)
   }

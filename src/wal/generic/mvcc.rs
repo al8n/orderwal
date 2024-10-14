@@ -120,7 +120,7 @@ where
   where
     R: RangeBounds<Q>,
     K: Type + Ord,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
@@ -164,7 +164,7 @@ where
   where
     R: RangeBounds<Q>,
     K: Type + Ord,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
@@ -209,7 +209,7 @@ where
   where
     R: RangeBounds<Q>,
     K: Type + Ord,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
@@ -258,7 +258,7 @@ where
   fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     K: Type,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
@@ -292,7 +292,7 @@ where
   where
     K: Type,
     V: Type,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
@@ -336,7 +336,7 @@ where
   where
     K: Type + Ord,
     V: Type,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {
@@ -381,7 +381,7 @@ where
   where
     K: Type + Ord,
     V: Type,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
     <Self::Memtable as memtable::Memtable>::Pointer: Pointer<Comparator = GenericComparator<K>>,
   {

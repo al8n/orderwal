@@ -103,7 +103,7 @@ where
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<M::Item<'_>>
   where
     M::Pointer: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<M::Pointer>,
+    Q: ?Sized + Comparable<M::Pointer>,
   {
     match version {
       None => self.map.upper_bound(bound),
@@ -124,7 +124,7 @@ where
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<M::Item<'_>>
   where
     M::Pointer: Pointer<Comparator = C>,
-    Q: Ord + ?Sized + Comparable<M::Pointer>,
+    Q: ?Sized + Comparable<M::Pointer>,
   {
     match version {
       None => self.map.lower_bound(bound),
