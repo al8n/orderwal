@@ -231,8 +231,8 @@ where
     Self {
       ent: self.ent.clone(),
       raw_key: self.raw_key,
-      key: self.key.clone(),
-      value: self.value.clone(),
+      key: self.key,
+      value: self.value,
       version: self.version,
       query_version: self.query_version,
     }
@@ -454,7 +454,7 @@ where
     Self {
       ent: self.ent.clone(),
       raw_key: self.raw_key,
-      key: self.key.clone(),
+      key: self.key,
       version: self.version,
       query_version: self.query_version,
     }
@@ -631,7 +631,7 @@ where
     Self {
       ent: self.ent.clone(),
       raw_key: self.raw_key,
-      value: self.value.clone(),
+      value: self.value,
       version: self.version,
       query_version: self.query_version,
     }

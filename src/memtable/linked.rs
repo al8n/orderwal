@@ -60,8 +60,14 @@ where
   where
     Self::Pointer: 'a,
     Self: 'a,
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
+
+  type Options = ();
+
+  fn new(_: Self::Options) -> Result<Self, Error> where Self: Sized {
+    Ok(Self(SkipSet::new()))
+  }
 
   #[inline]
   fn len(&self) -> usize {
@@ -125,9 +131,9 @@ where
   }
 
   #[inline]
-  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<P>,
   {
     self.0.range(range)

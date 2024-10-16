@@ -25,7 +25,7 @@ pub trait MemtableEntry<'a>: Sized {
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait Memtable: Default {
+pub trait Memtable {
   /// The pointer type.
   type Pointer;
   /// The item returned by the iterator or query methods.
@@ -43,8 +43,14 @@ pub trait Memtable: Default {
   where
     Self::Pointer: 'a,
     Self: 'a,
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
+  
+  /// The configuration options for the memtable.
+  type Options;
+  
+  /// Creates a new memtable with the specified options.
+  fn new(opts: Self::Options) -> Result<Self, Error> where Self: Sized;
 
   /// Returns the number of entries in the memtable.
   fn len(&self) -> usize;
@@ -93,8 +99,8 @@ pub trait Memtable: Default {
   fn iter(&self) -> Self::Iterator<'_>;
 
   /// Returns an iterator over a subset of the memtable.
-  fn range<Q, R>(&self, range: R) -> Self::Range<'_, Q, R>
+  fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
 }

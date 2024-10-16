@@ -226,7 +226,7 @@ where
 /// An iterator over a subset of the entries in the WAL.
 pub struct GenericRange<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -241,7 +241,7 @@ where
 
 impl<'a, K, V, R, Q, B> GenericRange<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -272,7 +272,7 @@ where
 
 impl<'a, K, V, R, Q, B> Iterator for GenericRange<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -294,7 +294,7 @@ where
 
 impl<'a, K, V, R, Q, B> DoubleEndedIterator for GenericRange<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -315,7 +315,7 @@ where
 
 impl<'a, K, V, R, Q, B> FusedIterator for GenericRange<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -329,7 +329,7 @@ where
 /// An iterator over the keys in a subset of the entries in the WAL.
 pub struct GenericRangeKeys<'a, K, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
@@ -342,7 +342,7 @@ where
 
 impl<'a, K, R, Q, B> GenericRangeKeys<'a, K, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
@@ -371,7 +371,7 @@ where
 
 impl<'a, K, R, Q, B> Iterator for GenericRangeKeys<'a, K, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
@@ -392,7 +392,7 @@ where
 
 impl<'a, K, R, Q, B> DoubleEndedIterator for GenericRangeKeys<'a, K, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
@@ -412,7 +412,7 @@ where
 
 impl<'a, K, R, Q, B> FusedIterator for GenericRangeKeys<'a, K, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
@@ -425,7 +425,7 @@ where
 /// An iterator over the values in a subset of the entries in the WAL.
 pub struct GenericRangeValues<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -440,7 +440,7 @@ where
 
 impl<'a, K, V, R, Q, B> GenericRangeValues<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -471,7 +471,7 @@ where
 
 impl<'a, K, V, R, Q, B> Iterator for GenericRangeValues<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -493,7 +493,7 @@ where
 
 impl<'a, K, V, R, Q, B> DoubleEndedIterator for GenericRangeValues<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -514,7 +514,7 @@ where
 
 impl<'a, K, V, R, Q, B> FusedIterator for GenericRangeValues<'a, K, V, R, Q, B>
 where
-  R: RangeBounds<Q>,
+  R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,

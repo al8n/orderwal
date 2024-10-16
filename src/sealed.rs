@@ -666,6 +666,7 @@ pub trait Constructable: Sized {
   fn new_in(
     arena: Self::Allocator,
     opts: Options,
+    memtable_opts: <Self::Memtable as Memtable>::Options,
     cmp: Self::Comparator,
     cks: Self::Checksumer,
   ) -> Result<Self::Wal, Error> {
@@ -677,23 +678,24 @@ pub trait Constructable: Sized {
 
     arena
       .flush_range(0, HEADER_SIZE)
-      .map(|_| {
-        <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
+      .map_err(Into::into)
+      .and_then(|_| {
+        Self::Memtable::new(memtable_opts).map(|memtable| <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
           arena,
-          Default::default(),
+          memtable,
           opts,
           cmp,
           cks,
           0,
           0,
-        )
+        ))
       })
-      .map_err(Into::into)
   }
 
   fn replay(
     arena: Self::Allocator,
     opts: Options,
+    memtable_opts: <Self::Memtable as Memtable>::Options,
     ro: bool,
     cmp: Self::Comparator,
     checksumer: Self::Checksumer,
@@ -715,7 +717,7 @@ pub trait Constructable: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let mut set = <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable::default();
+    let mut set = <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable::new(memtable_opts)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();

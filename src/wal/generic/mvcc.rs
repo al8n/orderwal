@@ -118,7 +118,7 @@ where
     <Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
@@ -162,7 +162,7 @@ where
     <Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,
@@ -207,7 +207,7 @@ where
     <Self::Wal as Wal<GenericComparator<K>, Self::Checksumer>>::Memtable,
   >
   where
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::Memtable>::Pointer> + Ord,

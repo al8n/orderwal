@@ -11,20 +11,32 @@ use super::{
 };
 
 /// A write-ahead log builder.
-pub struct Builder<C = Ascend, S = Crc32> {
+pub struct Builder<M, C = Ascend, S = Crc32>
+where
+  M: Memtable,
+{
   pub(super) opts: Options,
   pub(super) cmp: C,
   pub(super) cks: S,
+  pub(super) memtable_opts: M::Options,
 }
 
-impl Default for Builder {
+impl<M> Default for Builder<M>
+where
+  M: Memtable,
+  M::Options: Default,
+{
   #[inline]
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl Builder {
+impl<M> Builder<M>
+where
+  M: Memtable,
+  M::Options: Default,
+{
   /// Returns a new write-ahead log builder with the given options.
   #[inline]
   pub fn new() -> Self {
@@ -32,11 +44,15 @@ impl Builder {
       opts: Options::default(),
       cmp: Ascend,
       cks: Crc32::default(),
+      memtable_opts: M::Options::default(),
     }
   }
 }
 
-impl<C, S> Builder<C, S> {
+impl<M, C, S> Builder<M, C, S>
+where
+  M: Memtable,
+{
   /// Returns a new write-ahead log builder with the new comparator
   ///
   /// ## Example
@@ -47,11 +63,12 @@ impl<C, S> Builder<C, S> {
   /// let opts = Builder::new().with_comparator(Ascend);
   /// ```
   #[inline]
-  pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC, S> {
+  pub fn with_comparator<NC>(self, cmp: NC) -> Builder<M, NC, S> {
     Builder {
       opts: self.opts,
       cmp,
       cks: self.cks,
+      memtable_opts: self.memtable_opts,
     }
   }
 
@@ -65,11 +82,12 @@ impl<C, S> Builder<C, S> {
   /// let opts = Builder::new().with_checksumer(Crc32::new());
   /// ```
   #[inline]
-  pub fn with_checksumer<NS>(self, cks: NS) -> Builder<C, NS> {
+  pub fn with_checksumer<NS>(self, cks: NS) -> Builder<M, C, NS> {
     Builder {
       opts: self.opts,
       cmp: self.cmp,
       cks,
+      memtable_opts: self.memtable_opts,
     }
   }
 
@@ -88,6 +106,71 @@ impl<C, S> Builder<C, S> {
       opts,
       cmp: self.cmp,
       cks: self.cks,
+      memtable_opts: self.memtable_opts,
+    }
+  }
+
+  /// Returns a new write-ahead log builder with the new options
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{Builder, Options};
+  ///
+  /// let opts = Builder::new().with_options(Options::default());
+  /// ```
+  #[inline]
+  pub fn with_memtable_options(self, opts: M::Options) -> Self {
+    Self {
+      opts: self.opts,
+      cmp: self.cmp,
+      cks: self.cks,
+      memtable_opts: opts,
+    }
+  }
+
+  /// Returns a new write-ahead log builder with the new options
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{Builder, Options};
+  ///
+  /// let opts = Builder::new().with_options(Options::default());
+  /// ```
+  #[inline]
+  pub fn change_memtable<NM>(self) -> Builder<NM, C, S>
+  where
+    NM: Memtable,
+    NM::Options: Default,
+  {
+    Builder {
+      opts: self.opts,
+      cmp: self.cmp,
+      cks: self.cks,
+      memtable_opts: NM::Options::default(),
+    }
+  }
+
+  /// Returns a new write-ahead log builder with the new options
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use orderwal::{Builder, Options};
+  ///
+  /// let opts = Builder::new().with_options(Options::default());
+  /// ```
+  #[inline]
+  pub fn change_with_memtable_options<NM>(self, opts: NM::Options) -> Builder<NM, C, S>
+  where
+    NM: Memtable,
+  {
+    Builder {
+      opts: self.opts,
+      cmp: self.cmp,
+      cks: self.cks,
+      memtable_opts: opts,
     }
   }
 
@@ -350,7 +433,10 @@ impl<C, S> Builder<C, S> {
   }
 }
 
-impl<C, S> Builder<C, S> {
+impl<M, C, S> Builder<M, C, S>
+where
+  M: Memtable,
+{
   /// Sets the option for read access.
   ///
   /// This option, when true, will indicate that the file should be
@@ -576,7 +662,10 @@ impl<C, S> Builder<C, S> {
   }
 }
 
-impl<C, S> Builder<C, S> {
+impl<M, C, S> Builder<M, C, S>
+where
+  M: Memtable,
+{
   /// Returns `true` if the file should be opened with read access.
   ///
   /// ## Examples
@@ -713,7 +802,10 @@ impl<C, S> Builder<C, S> {
   }
 }
 
-impl<C, S> Builder<C, S> {
+impl<M, C, S> Builder<M, C, S>
+where
+  M: Memtable,
+{
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///
   /// ## Example
@@ -728,14 +820,14 @@ impl<C, S> Builder<C, S> {
   /// ```
   pub fn alloc<W>(self) -> Result<W, Error>
   where
-    W: Constructable<Comparator = C, Checksumer = S>,
+    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
   {
-    let Self { opts, cmp, cks } = self;
+    let Self { opts, cmp, cks, memtable_opts } = self;
     arena_options(opts.reserved())
       .with_capacity(opts.capacity())
       .alloc()
       .map_err(Error::from_insufficient_space)
-      .and_then(|arena| <W as Constructable>::new_in(arena, opts, cmp, cks).map(W::from_core))
+      .and_then(|arena| <W as Constructable>::new_in(arena, opts, memtable_opts, cmp, cks).map(W::from_core))
   }
 
   /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
@@ -752,14 +844,14 @@ impl<C, S> Builder<C, S> {
   /// ```
   pub fn map_anon<W>(self) -> Result<W, Error>
   where
-    W: Constructable<Comparator = C, Checksumer = S>,
+    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
   {
-    let Self { opts, cmp, cks } = self;
+    let Self { opts, cmp, cks, memtable_opts } = self;
     arena_options(opts.reserved())
       .merge(&opts)
       .map_anon()
       .map_err(Into::into)
-      .and_then(|arena| <W as Constructable>::new_in(arena, opts, cmp, cks).map(W::from_core))
+      .and_then(|arena| <W as Constructable>::new_in(arena, opts, memtable_opts, cmp, cks).map(W::from_core))
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
@@ -797,8 +889,7 @@ impl<C, S> Builder<C, S> {
     C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<Comparator = C, Checksumer = S> + Immutable,
-    W::Memtable: Memtable,
+    W: Constructable<Memtable = M, Comparator = C, Checksumer = S> + Immutable,
     <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     self
@@ -844,11 +935,10 @@ impl<C, S> Builder<C, S> {
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
-    W: Constructable<Comparator = C, Checksumer = S> + Immutable,
-    W::Memtable: Memtable,
+    W: Constructable<Memtable = M, Comparator = C, Checksumer = S> + Immutable,
     <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
-    let Self { opts, cmp, cks } = self;
+    let Self { opts, cmp, cks, memtable_opts } = self;
 
     arena_options(opts.reserved())
       .merge(&opts)
@@ -856,7 +946,7 @@ impl<C, S> Builder<C, S> {
       .map_with_path_builder(path_builder)
       .map_err(|e| e.map_right(Into::into))
       .and_then(|arena| {
-        W::replay(arena, Options::new(), true, cmp, cks)
+        W::replay(arena, Options::new(), memtable_opts, true, cmp, cks)
           .map(Constructable::from_core)
           .map_err(Either::Right)
       })
@@ -895,8 +985,7 @@ impl<C, S> Builder<C, S> {
     C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<Comparator = C, Checksumer = S>,
-    W::Memtable: Memtable,
+    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
     <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     self
@@ -941,13 +1030,12 @@ impl<C, S> Builder<C, S> {
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     C: Comparator + CheapClone + 'static,
     S: BuildChecksumer,
-    W: Constructable<Comparator = C, Checksumer = S>,
-    W::Memtable: Memtable,
+    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
     <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
-    let Self { opts, cmp, cks } = self;
+    let Self { opts, cmp, cks, memtable_opts } = self;
 
     arena_options(opts.reserved())
       .merge(&opts)
@@ -955,9 +1043,9 @@ impl<C, S> Builder<C, S> {
       .map_err(Into::into)
       .and_then(|arena| {
         if !exist {
-          <W as Constructable>::new_in(arena, opts, cmp, cks).map(W::from_core)
+          <W as Constructable>::new_in(arena, opts, memtable_opts, cmp, cks).map(W::from_core)
         } else {
-          <W as Constructable>::replay(arena, opts, false, cmp, cks).map(W::from_core)
+          <W as Constructable>::replay(arena, opts, memtable_opts, false, cmp, cks).map(W::from_core)
         }
       })
       .map_err(Either::Right)
