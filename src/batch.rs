@@ -1,6 +1,5 @@
 use crate::{
-  sealed::{WithVersion, WithoutVersion},
-  VERSION_SIZE,
+  sealed::{WithVersion, WithoutVersion, EntryFlags}, VERSION_SIZE
 };
 
 use super::entry::BufWriter;
@@ -40,7 +39,8 @@ impl EncodedBatchEntryMeta {
 /// An entry can be inserted into the WALs through [`Batch`](super::batch::Batch).
 pub struct BatchEntry<K, V, P> {
   pub(crate) key: K,
-  pub(crate) value: V,
+  pub(crate) value: Option<V>,
+  pub(crate) flag: EntryFlags,
   pub(crate) meta: EncodedBatchEntryMeta,
   pointer: Option<P>,
   version: Option<u64>,
@@ -52,10 +52,24 @@ where
 {
   /// Creates a new entry.
   #[inline]
-  pub fn new(key: K, value: V) -> Self {
+  pub const fn new(key: K, value: V) -> Self {
     Self {
       key,
-      value,
+      value: Some(value),
+      flag: EntryFlags::empty(),
+      meta: EncodedBatchEntryMeta::zero(),
+      pointer: None,
+      version: None,
+    }
+  }
+
+  /// Creates a tombstone entry.
+  #[inline]
+  pub const fn tombstone(key: K) -> Self {
+    Self {
+      key,
+      value: None,
+      flag: EntryFlags::REMOVED,
       meta: EncodedBatchEntryMeta::zero(),
       pointer: None,
       version: None,
@@ -67,12 +81,26 @@ impl<K, V, P> BatchEntry<K, V, P>
 where
   P: WithVersion,
 {
-  /// Creates a new entry.
+  /// Creates a new entry with version.
   #[inline]
   pub fn with_version(version: u64, key: K, value: V) -> Self {
     Self {
       key,
-      value,
+      value: Some(value),
+      flag: EntryFlags::empty(),
+      meta: EncodedBatchEntryMeta::zero(),
+      pointer: None,
+      version: Some(version),
+    }
+  }
+
+  /// Creates a tombstone entry with version.
+  #[inline]
+  pub fn tombstone_with_version(version: u64, key: K) -> Self {
+    Self {
+      key,
+      value: None,
+      flag: EntryFlags::REMOVED,
       meta: EncodedBatchEntryMeta::zero(),
       pointer: None,
       version: Some(version),
@@ -111,7 +139,7 @@ impl<K, V, P> BatchEntry<K, V, P> {
   where
     V: BufWriter,
   {
-    self.value.len()
+    self.value.as_ref().map_or(0, |v| v.len())
   }
 
   /// Returns the key.
@@ -122,13 +150,13 @@ impl<K, V, P> BatchEntry<K, V, P> {
 
   /// Returns the value.
   #[inline]
-  pub const fn value(&self) -> &V {
-    &self.value
+  pub const fn value(&self) -> Option<&V> {
+    self.value.as_ref()
   }
 
   /// Consumes the entry and returns the key and value.
   #[inline]
-  pub fn into_components(self) -> (K, V) {
+  pub fn into_components(self) -> (K, Option<V>) {
     (self.key, self.value)
   }
 
@@ -138,7 +166,8 @@ impl<K, V, P> BatchEntry<K, V, P> {
     K: BufWriter,
     V: BufWriter,
   {
-    match self.version {
+    // 1 for entry flag
+    1 + match self.version {
       Some(_) => self.key.len() + VERSION_SIZE,
       None => self.key.len(),
     }

@@ -86,10 +86,10 @@ where
 
     if opts.map_anon() {
       arena_opts
-        .map_anon::<P, (), SkipMap<_, _>>()
+        .map_anon::<Self::Pointer, (), SkipMap<_, _>>()
         .map_err(skl::Error::IO)
     } else {
-      arena_opts.alloc::<P, (), SkipMap<_, _>>()
+      arena_opts.alloc::<Self::Pointer, (), SkipMap<_, _>>()
     }
     .map(|map| Self { map })
   }
@@ -169,5 +169,12 @@ where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.map.range(range)
+  }
+
+  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Ord + 'static
+  {
+    self.map.get_or_remove(&key)
   }
 }

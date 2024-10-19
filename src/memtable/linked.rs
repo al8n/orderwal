@@ -76,7 +76,7 @@ where
   #[inline]
   fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
   where
-    P: Ord + 'static,
+    Self::Pointer: Ord + 'static,
   {
     self.0.insert(ele);
     Ok(())
@@ -146,5 +146,13 @@ where
     Q: ?Sized + Comparable<P>,
   {
     self.0.range(range)
+  }
+
+  #[inline]
+  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: crate::sealed::Pointer + Ord + 'static
+  {
+    self.0.remove(&key)
   }
 }

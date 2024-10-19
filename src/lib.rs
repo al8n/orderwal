@@ -131,10 +131,3 @@ bitflags::bitflags! {
   }
 }
 
-bitflags::bitflags! {
-  /// The flags for each entry.
-  struct EntryFlags: u8 {
-    /// First bit: 1 indicates removed
-    const REMOVED = 0b00000001;
-  }
-}

@@ -6,19 +6,25 @@ use dbutils::{
 };
 
 use crate::{
-  sealed::{Pointer, WithVersion, WithoutVersion},
-  VERSION_SIZE,
+  sealed::{Pointer, WithVersion, WithoutVersion, EntryFlags}, VERSION_SIZE
 };
 
 const PTR_SIZE: usize = mem::size_of::<usize>();
 const U32_SIZE: usize = mem::size_of::<u32>();
+const ENTRY_FLAGS_SIZE: usize = mem::size_of::<EntryFlags>();
+
 
 #[doc(hidden)]
 pub struct GenericPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
+  /// 
+  /// | flag (1 byte) | version (8 bytes, optional) | key | value (optional) |
   ptr: *const u8,
+  flag: EntryFlags,
+  key_ptr: *const u8,
   /// The length of the key.
   key_len: usize,
+  value_ptr: *const u8,
   /// The length of the value.
   value_len: usize,
   _m: PhantomData<(fn() -> K, fn() -> V)>,
@@ -51,8 +57,8 @@ impl<K: ?Sized, V: ?Sized> CheapClone for GenericPointer<K, V> {
 
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   #[inline]
-  fn new(klen: usize, vlen: usize, ptr: *const u8) -> Self {
-    Self::new(klen, vlen, ptr)
+  fn new(flag: EntryFlags, klen: usize, vlen: usize, ptr: *const u8) -> Self {
+    Self::new(flag, klen, vlen, ptr)
   }
 
   #[inline]
@@ -62,17 +68,21 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr, self.key_len) }
+    unsafe { slice::from_raw_parts(self.key_ptr, self.key_len) }
   }
 
   #[inline]
-  fn as_value_slice<'a>(&self) -> &'a [u8] {
+  fn as_value_slice<'a>(&self) -> Option<&'a [u8]> {
+    if self.flag.contains(EntryFlags::REMOVED) {
+      return None;
+    }
+
     if self.value_len == 0 {
-      return &[];
+      return Some(&[]);
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(self.key_len), self.value_len) }
+    Some(unsafe { slice::from_raw_parts(self.value_ptr, self.value_len) })
   }
 
   #[inline]
@@ -131,11 +141,14 @@ where
   V: ?Sized,
 {
   #[inline]
-  pub(crate) const fn new(key_len: usize, value_len: usize, ptr: *const u8) -> Self {
+  pub(crate) const fn new(flag: EntryFlags, key_len: usize, value_len: usize, ptr: *const u8) -> Self {
     Self {
+      key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE) },
+      value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + key_len) },
       ptr,
       key_len,
       value_len,
+      flag,
       _m: PhantomData,
     }
   }
@@ -152,7 +165,7 @@ where
 
   #[inline]
   fn encoded_len(&self) -> usize {
-    const SIZE: usize = PTR_SIZE + 2 * U32_SIZE;
+    const SIZE: usize = PTR_SIZE + 2 * U32_SIZE + mem::size_of::<EntryFlags>();
     SIZE
   }
 
@@ -164,10 +177,11 @@ where
     let ptr = self.ptr as usize;
 
     buf.set_len(self.encoded_len());
-
     buf[0..PTR_SIZE].copy_from_slice(&ptr.to_le_bytes());
 
     let mut offset = PTR_SIZE;
+    buf[offset] = self.flag.bits();
+    offset += 1;
     buf[offset..offset + U32_SIZE].copy_from_slice(&key_len.to_le_bytes());
     offset += U32_SIZE;
     buf[offset..offset + U32_SIZE].copy_from_slice(&value_len.to_le_bytes());
@@ -180,27 +194,30 @@ impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericPointer<K, V> {
   unsafe fn from_slice(src: &'a [u8]) -> Self {
     let ptr = usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()) as *const u8;
     let mut offset = PTR_SIZE;
+    let flag = EntryFlags::from_bits_retain(src[offset]);
+    offset += 1;
     let key_len =
       u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
     offset += U32_SIZE;
     let value_len =
       u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
 
-    Self {
-      ptr,
-      key_len,
-      value_len,
-      _m: PhantomData,
-    }
+    Self::new(flag, key_len, value_len, ptr)
   }
 }
 
 #[doc(hidden)]
 pub struct GenericVersionPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
+  /// 
+  /// | flag (1 byte) | version (8 bytes, optional) | key | value (optional) |
   ptr: *const u8,
+  flag: EntryFlags,
+  version: u64,
+  key_ptr: *const u8,
   /// The length of the key.
   key_len: usize,
+  value_ptr: *const u8,
   /// The length of the value.
   value_len: usize,
   _m: PhantomData<(fn() -> K, fn() -> V)>,
@@ -234,8 +251,8 @@ impl<K: ?Sized, V: ?Sized> CheapClone for GenericVersionPointer<K, V> {
 
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V> {
   #[inline]
-  fn new(klen: usize, vlen: usize, ptr: *const u8) -> Self {
-    Self::new(klen, vlen, ptr)
+  fn new(flag: EntryFlags, klen: usize, vlen: usize, ptr: *const u8) -> Self {
+    Self::new(flag, klen, vlen, ptr)
   }
 
   #[inline]
@@ -245,25 +262,26 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(VERSION_SIZE), self.key_len) }
+    unsafe { slice::from_raw_parts(self.key_ptr, self.key_len) }
   }
 
   #[inline]
-  fn as_value_slice<'a>(&self) -> &'a [u8] {
+  fn as_value_slice<'a>(&self) -> Option<&'a [u8]> {
+    if self.flag.contains(EntryFlags::REMOVED) {
+      return None;
+    }
+
     if self.value_len == 0 {
-      return &[];
+      return Some(&[]);
     }
 
     // SAFETY: `ptr` is a valid pointer to `len` bytes.
-    unsafe { slice::from_raw_parts(self.ptr.add(VERSION_SIZE + self.key_len), self.value_len) }
+    Some(unsafe { slice::from_raw_parts(self.value_ptr, self.value_len) })
   }
 
   #[inline]
   fn version(&self) -> u64 {
-    unsafe {
-      let slice = slice::from_raw_parts(self.ptr, VERSION_SIZE);
-      u64::from_le_bytes(slice.try_into().unwrap())
-    }
+    self.version
   }
 }
 
@@ -320,8 +338,15 @@ where
   V: ?Sized,
 {
   #[inline]
-  pub(crate) const fn new(key_len: usize, value_len: usize, ptr: *const u8) -> Self {
+  pub(crate) fn new(flag: EntryFlags, key_len: usize, value_len: usize, ptr: *const u8) -> Self {
     Self {
+      flag,
+      key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + VERSION_SIZE) },
+      value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + VERSION_SIZE + key_len) },
+      version: unsafe {
+        let slice = slice::from_raw_parts(ptr.add(ENTRY_FLAGS_SIZE), VERSION_SIZE);
+        u64::from_le_bytes(slice.try_into().unwrap())
+      },
       ptr,
       key_len: key_len - VERSION_SIZE,
       value_len,
@@ -341,7 +366,7 @@ where
 
   #[inline]
   fn encoded_len(&self) -> usize {
-    const SIZE: usize = PTR_SIZE + 2 * U32_SIZE;
+    const SIZE: usize = PTR_SIZE + 2 * U32_SIZE + mem::size_of::<EntryFlags>();
     SIZE
   }
 
@@ -355,8 +380,9 @@ where
     buf.set_len(self.encoded_len());
 
     buf[0..PTR_SIZE].copy_from_slice(&ptr.to_le_bytes());
-
     let mut offset = PTR_SIZE;
+    buf[offset] = self.flag.bits();
+    offset += 1;
     buf[offset..offset + U32_SIZE].copy_from_slice(&key_len.to_le_bytes());
     offset += U32_SIZE;
     buf[offset..offset + U32_SIZE].copy_from_slice(&value_len.to_le_bytes());
@@ -369,18 +395,15 @@ impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericVersionPointer<K, V> {
   unsafe fn from_slice(src: &'a [u8]) -> Self {
     let ptr = usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()) as *const u8;
     let mut offset = PTR_SIZE;
+    let flag = EntryFlags::from_bits_retain(src[offset]);
+    offset += 1;
     let key_len =
       u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
     offset += U32_SIZE;
     let value_len =
       u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
 
-    Self {
-      ptr,
-      key_len,
-      value_len,
-      _m: PhantomData,
-    }
+    Self::new(flag, key_len, value_len, ptr)
   }
 }
 

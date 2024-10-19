@@ -2,6 +2,8 @@ use rarena_allocator::{Freelist, Options as ArenaOptions};
 
 use super::{CURRENT_VERSION, HEADER_SIZE};
 
+
+
 /// Options for the WAL.
 #[derive(Debug, Clone)]
 pub struct Options {

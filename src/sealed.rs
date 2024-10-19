@@ -24,14 +24,30 @@ use super::{
   Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, STATUS_SIZE, VERSION_SIZE,
 };
 
+bitflags::bitflags! {
+  /// The flags for each entry.
+  #[derive(Debug, Copy, Clone)]
+  pub struct EntryFlags: u8 {
+    /// First bit: 1 indicates removed
+    const REMOVED = 0b00000001;
+    /// Second bit: 1 indicates the key is pointer
+    const POINTER = 0b00000010;
+  }
+}
+
 pub trait Pointer: Sized {
-  fn new(klen: usize, vlen: usize, ptr: *const u8) -> Self;
+  fn new(flag: EntryFlags, klen: usize, vlen: usize, ptr: *const u8) -> Self;
 
   fn as_key_slice<'a>(&self) -> &'a [u8];
 
-  fn as_value_slice<'a>(&self) -> &'a [u8];
+  fn as_value_slice<'a>(&self) -> Option<&'a [u8]>;
 
   fn version(&self) -> u64;
+
+  #[inline]
+  fn is_removed(&self) -> bool {
+    self.as_value_slice().is_none()
+  }
 }
 
 /// A marker trait which indicates that such pointer has a version.
@@ -463,7 +479,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     }
 
     let res = {
-      let klen = if version.is_some() {
+      // 1 byte for entry flag
+      let klen = 1 + if version.is_some() {
         kb.len() + VERSION_SIZE
       } else {
         kb.len()
@@ -503,6 +520,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
             );
 
             let ko = STATUS_SIZE + written;
+            buf.put_u8_unchecked(EntryFlags::empty().bits());
             let ptr = if let Some(version) = version {
               buf.put_u64_le_unchecked(version);
               buf.as_mut_ptr().add(ko + VERSION_SIZE)
@@ -538,7 +556,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
             buf.detach();
             let ptr = buf.as_ptr().add(ko);
-            Ok(Pointer::new(klen, vlen, ptr))
+            Ok(Pointer::new(EntryFlags::empty(), klen, vlen, ptr))
           }
         }
       }
@@ -627,6 +645,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
         let ent_len_size = buf.put_u64_varint_unchecked(merged_kv_len);
         let ptr = buf.as_mut_ptr().add(cursor + ent_len_size);
+        buf.put_u8_unchecked(ent.flag.bits());
         let (key_ptr, val_ptr) = if let Some(version) = ent.internal_version() {
           buf.put_u64_le_unchecked(version);
           let kptr = ptr.add(VERSION_SIZE);
@@ -652,14 +671,18 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
         .map_err(Among::Left)?;
         cursor += ent_len_size + klen;
         buf.set_len(cursor + vlen);
-        vb.write(&mut VacantBuffer::new(
-          klen,
-          NonNull::new_unchecked(val_ptr),
-        ))
-        .map_err(Among::Middle)?;
-        cursor += vlen;
+
+        if let Some(vb) = vb {
+          vb.write(&mut VacantBuffer::new(
+            klen,
+            NonNull::new_unchecked(val_ptr),
+          ))
+          .map_err(Among::Middle)?;
+          cursor += vlen;
+        }
+        
         ent.set_pointer(<<Self::Memtable as BaseTable>::Pointer as Pointer>::new(
-          klen, vlen, ptr,
+          ent.flag, klen, vlen, ptr,
         ));
       }
 
@@ -900,10 +923,14 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
             break;
           }
 
+          let ptr = arena.get_pointer(cursor + STATUS_SIZE + readed);
+
+          let flag = EntryFlags::from_bits_retain(*ptr);
           let pointer: <Self::Memtable as BaseTable>::Pointer = Pointer::new(
+            flag,
             key_len,
             value_len,
-            arena.get_pointer(cursor + STATUS_SIZE + readed),
+            ptr,
           );
 
           let version = pointer.version();
@@ -963,10 +990,13 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
             let klen = klen as usize;
             let vlen = vlen as usize;
 
+            let ptr = arena.get_pointer(cursor + STATUS_SIZE + readed + sub_cursor + kvlen);
+            let flag = EntryFlags::from_bits_retain(*ptr);
             let ptr: <Self::Memtable as BaseTable>::Pointer = Pointer::new(
+              flag,
               klen,
               vlen,
-              arena.get_pointer(cursor + STATUS_SIZE + readed + sub_cursor + kvlen),
+              ptr,
             );
 
             let version = ptr.version();

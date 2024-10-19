@@ -279,7 +279,7 @@ where
     Self {
       raw_key,
       key: ty_ref::<K>(raw_key),
-      value: ty_ref::<V>(ptr.as_value_slice()),
+      value: ty_ref::<V>(ptr.as_value_slice().unwrap()),
       version: if query_version.is_some() {
         Some(ptr.version())
       } else {
@@ -317,7 +317,7 @@ where
           return Some(Self {
             raw_key,
             key: ty_ref::<K>(raw_key),
-            value: ty_ref::<V>(p.as_value_slice()),
+            value: ty_ref::<V>(p.as_value_slice().unwrap()),
             version: Some(version),
             query_version: self.query_version,
             ent,
@@ -353,7 +353,7 @@ where
           return Some(Self {
             raw_key,
             key: ty_ref::<K>(raw_key),
-            value: ty_ref::<V>(p.as_value_slice()),
+            value: ty_ref::<V>(p.as_value_slice().unwrap()),
             version: Some(version),
             query_version: self.query_version,
             ent,
@@ -650,7 +650,7 @@ where
     let raw_key = ptr.as_key_slice();
     Self {
       raw_key,
-      value: ty_ref::<V>(ptr.as_value_slice()),
+      value: ty_ref::<V>(ptr.as_value_slice().unwrap()),
       version: if query_version.is_some() {
         Some(ptr.version())
       } else {
@@ -685,7 +685,7 @@ where
         if version <= query_version && raw_key != self.raw_key {
           return Some(Self {
             raw_key,
-            value: ty_ref::<V>(p.as_value_slice()),
+            value: ty_ref::<V>(p.as_value_slice().unwrap()),
             version: Some(version),
             query_version: self.query_version,
             ent,
@@ -720,7 +720,7 @@ where
         if version <= query_version && raw_key != self.raw_key {
           return Some(Self {
             raw_key,
-            value: ty_ref::<V>(p.as_value_slice()),
+            value: ty_ref::<V>(p.as_value_slice().unwrap()),
             version: Some(version),
             query_version: self.query_version,
             ent,

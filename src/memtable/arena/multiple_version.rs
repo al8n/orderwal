@@ -1,4 +1,4 @@
-use core::ops::{Bound, RangeBounds};
+use core::{ops::{Bound, RangeBounds}, sync::atomic::Ordering};
 
 use among::Among;
 use dbutils::{traits::{KeyRef, Type}, equivalent::Comparable};
@@ -107,10 +107,10 @@ where
 
     if opts.map_anon() {
       arena_opts
-        .map_anon::<P, (), SkipMap<_, _>>()
+        .map_anon::<Self::Pointer, (), SkipMap<_, _>>()
         .map_err(skl::Error::IO)
     } else {
-      arena_opts.alloc::<P, (), SkipMap<_, _>>()
+      arena_opts.alloc::<Self::Pointer, (), SkipMap<_, _>>()
     }
     .map(|map| Self { map })
   }
@@ -217,5 +217,11 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer> {
     self.map.range_all_versions(version, range)
+  }
+
+  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Pointer + Ord + 'static {
+    self.map.get_or_remove(key.version(), key, Ordering::AcqRel, Ordering::Relaxed)
   }
 }

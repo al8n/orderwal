@@ -123,6 +123,11 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
+  
+  /// Removes the pointer associated with the key.
+  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Pointer + Ord + 'static;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -197,4 +202,9 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
+  
+  /// Removes the pointer associated with the key.
+  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Pointer + Ord + 'static;
 }
