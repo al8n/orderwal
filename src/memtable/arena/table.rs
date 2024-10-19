@@ -13,7 +13,7 @@ use skl::{
   Arena as _, Container as _, Options,
 };
 
-use crate::error::Error;
+use crate::{error::Error, memtable::BaseTable, sealed::WithoutVersion};
 
 use super::{
   super::{Memtable, MemtableEntry},
@@ -47,7 +47,7 @@ pub struct ArenaTable<P> {
   map: SkipMap<P, ()>,
 }
 
-impl<P> Memtable for ArenaTable<P>
+impl<P> BaseTable for ArenaTable<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static,
 {
@@ -94,6 +94,24 @@ where
     .map(|map| Self { map })
   }
 
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  where
+    Self::Pointer: Ord + 'static,
+  {
+    self.map.insert(&ele, &()).map(|_| ()).map_err(|e| match e {
+      Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
+        requested,
+        available,
+      })) => Error::memtable_insufficient_space(requested as u64, available),
+      _ => unreachable!(),
+    })
+  }
+}
+
+impl<P> Memtable for ArenaTable<P>
+where
+  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithoutVersion + 'static,
+{
   #[inline]
   fn len(&self) -> usize {
     self.map.len()
@@ -111,19 +129,6 @@ where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.map.lower_bound(bound)
-  }
-
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
-  where
-    Self::Pointer: Ord + 'static,
-  {
-    self.map.insert(&ele, &()).map(|_| ()).map_err(|e| match e {
-      Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
-        requested,
-        available,
-      })) => Error::memtable_insufficient_space(requested as u64, available),
-      _ => unreachable!(),
-    })
   }
 
   fn first(&self) -> Option<Self::Item<'_>>

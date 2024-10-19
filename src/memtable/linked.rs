@@ -3,7 +3,7 @@ use core::ops::RangeBounds;
 use crossbeam_skiplist::{set::Entry, SkipSet};
 use dbutils::equivalent::Comparable;
 
-use crate::{error::Error, memtable};
+use crate::{error::Error, memtable, sealed::WithoutVersion};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
 pub struct LinkedTable<P>(SkipSet<P>);
@@ -37,7 +37,7 @@ where
   }
 }
 
-impl<P> memtable::Memtable for LinkedTable<P>
+impl<P> memtable::BaseTable for LinkedTable<P>
 where
   P: Send + Ord,
 {
@@ -74,6 +74,20 @@ where
   }
 
   #[inline]
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  where
+    P: Ord + 'static,
+  {
+    self.0.insert(ele);
+    Ok(())
+  }
+}
+
+impl<P> memtable::Memtable for LinkedTable<P>
+where
+  P: Send + Ord + WithoutVersion,
+{
+  #[inline]
   fn len(&self) -> usize {
     self.0.len()
   }
@@ -92,15 +106,6 @@ where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.0.lower_bound(bound)
-  }
-
-  #[inline]
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
-  where
-    P: Ord + 'static,
-  {
-    self.0.insert(ele);
-    Ok(())
   }
 
   #[inline]

@@ -44,18 +44,6 @@ where
     self.as_core().path()
   }
 
-  /// Returns the number of entries in the WAL.
-  #[inline]
-  fn len(&self, version: u64) -> usize {
-    self.as_core().len(version)
-  }
-
-  /// Returns `true` if the WAL is empty.
-  #[inline]
-  fn is_empty(&self, version: u64) -> bool {
-    self.as_core().is_empty(version)
-  }
-
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
   fn maximum_key_size(&self) -> u32 {

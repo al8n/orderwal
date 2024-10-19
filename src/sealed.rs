@@ -165,25 +165,6 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
 
   fn memtable(&self) -> &Self::Memtable;
 
-  /// Returns the number of entries in the WAL.
-  fn len(&self, version: u64) -> usize
-  where
-    Self::Memtable: VersionedMemtable,
-    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
-  {
-    self.memtable().len(version)
-  }
-
-  /// Returns `true` if the WAL is empty.
-  #[inline]
-  fn is_empty(&self, version: u64) -> bool
-  where
-    Self::Memtable: VersionedMemtable,
-    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
-  {
-    self.memtable().is_empty(version)
-  }
-
   #[inline]
   fn iter(
     &self,

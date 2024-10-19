@@ -150,15 +150,6 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
 
-  /// Returns the number of entries in the memtable.
-  fn len(&self, version: u64) -> usize;
-
-  /// Returns `true` if the memtable is empty.
-  #[inline]
-  fn is_empty(&self, version: u64) -> bool {
-    self.len(version) == 0
-  }
-
   /// Returns the upper bound of the memtable.
   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where

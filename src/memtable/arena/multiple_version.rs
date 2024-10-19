@@ -2,9 +2,9 @@ use core::ops::{Bound, RangeBounds};
 
 use among::Among;
 use dbutils::{traits::{KeyRef, Type}, equivalent::Comparable};
-use skl::{versioned::{sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry}, VersionedMap as _}, Arena as _, Options, VersionedContainer as _};
+use skl::{versioned::{sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry}, VersionedMap as _}, Options, VersionedContainer as _};
 
-use crate::{error::Error, memtable::{MemtableEntry, VersionedMemtable, VersionedMemtableEntry}, sealed::{Pointer, WithVersion}};
+use crate::{error::Error, memtable::{BaseTable, MemtableEntry, VersionedMemtable, VersionedMemtableEntry}, sealed::{Pointer, WithVersion}};
 
 use super::ArenaTableOptions;
 
@@ -67,7 +67,7 @@ pub struct VersionedArenaTable<P> {
   map: SkipMap<P, ()>,
 }
 
-impl<P> VersionedMemtable for VersionedArenaTable<P>
+impl<P> BaseTable for VersionedArenaTable<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
 {
@@ -78,40 +78,21 @@ where
   where
     Self::Pointer: 'a,
     Self: 'a;
-
-  type VersionedItem<'a>
-    = VersionedEntry<'a, Self::Pointer, ()>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
+  
   type Iterator<'a>
-    = Iter<'a, P, ()>
+    = Iter<'a, Self::Pointer, ()>
   where
     Self::Pointer: 'a,
     Self: 'a;
-
-  type AllIterator<'a>
-    = AllVersionsIter<'a, P, ()>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
+  
   type Range<'a, Q, R>
-    = Range<'a, P, (), Q, R>
+    = Range<'a, Self::Pointer, (), Q, R>
   where
     Self::Pointer: 'a,
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  type AllRange<'a, Q, R>
-    = AllVersionsRange<'a, P, (), Q, R>
-  where
-    Self::Pointer: 'a,
-    Self: 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
-
+  
   type Options = ArenaTableOptions;
 
   type ConstructionError = skl::Error;
@@ -134,10 +115,44 @@ where
     .map(|map| Self { map })
   }
 
-  #[inline]
-  fn len(&self) -> usize {
-    self.map.len()
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  where
+    Self::Pointer: Pointer + Ord + 'static,
+  {
+    self.map.insert(ele.version(), &ele, &()).map(|_| ()).map_err(|e| match e {
+      Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
+        requested,
+        available,
+      })) => Error::memtable_insufficient_space(requested as u64, available),
+      _ => unreachable!(),
+    })
   }
+}
+
+
+impl<P> VersionedMemtable for VersionedArenaTable<P>
+where
+  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
+{
+  type VersionedItem<'a>
+    = VersionedEntry<'a, Self::Pointer, ()>
+  where
+    Self::Pointer: 'a,
+    Self: 'a;
+
+  type AllIterator<'a>
+    = AllVersionsIter<'a, Self::Pointer, ()>
+  where
+    Self::Pointer: 'a,
+    Self: 'a;
+
+  type AllRange<'a, Q, R>
+    = AllVersionsRange<'a, Self::Pointer, (), Q, R>
+  where
+    Self::Pointer: 'a,
+    Self: 'a,
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Comparable<Self::Pointer>;
 
   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
@@ -151,19 +166,6 @@ where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.map.lower_bound(version, bound)
-  }
-
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
-  where
-    Self::Pointer: Pointer + Ord + 'static,
-  {
-    self.map.insert(ele.version(), &ele, &()).map(|_| ()).map_err(|e| match e {
-      Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
-        requested,
-        available,
-      })) => Error::memtable_insufficient_space(requested as u64, available),
-      _ => unreachable!(),
-    })
   }
 
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
