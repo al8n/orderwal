@@ -2,92 +2,6 @@ mod reader;
 mod wal;
 mod writer;
 
-/// An ordered write-ahead log implementation for multiple threads environments.
-pub mod base {
-  use dbutils::checksum::Crc32;
-
-  use super::{reader, writer};
-
-  use crate::memtable::{
-    arena::ArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
-  };
-
-  pub use crate::wal::bytes::{
-    base::{Reader, Writer},
-    pointer::Pointer,
-  };
-
-  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`LinkedTable`](BaseLinkedTable).
-  pub type LinkedTable<C> = BaseLinkedTable<Pointer<C>>;
-
-  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`ArenaTable`](BaseArenaTable).
-  pub type ArenaTable<C> = BaseArenaTable<Pointer<C>>;
-
-  /// An ordered write-ahead log implementation for multiple threads environments.
-  ///
-  /// ```text
-  /// +----------------------+-------------------------+--------------------+
-  /// | magic text (6 bytes) | magic version (2 bytes) |  header (8 bytes)  |
-  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-  /// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-  /// +----------------------+-------------------------+--------------------+---------------------+-----------------|--------------------+
-  /// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-  /// |     flag (1 byte)    |    key len (4 bytes)    |    key (n bytes)   | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-  /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
-  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-  /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
-  /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
-  /// ```
-  pub type OrderWal<M, C, S = Crc32> = writer::OrderWal<M, C, S>;
-
-  /// Immutable reader for the ordered write-ahead log [`OrderWal`].
-  pub type OrderWalReader<M, C, S = Crc32> = reader::OrderWalReader<M, C, S>;
-}
-
-/// A multiple version ordered write-ahead log implementation for multiple threads environments.
-pub mod multiple_version {
-  use dbutils::checksum::Crc32;
-
-  use super::{reader, writer};
-
-  use crate::memtable::{
-    arena::VersionedArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
-  };
-
-  pub use crate::wal::bytes::{
-    mvcc::{Reader, Writer},
-    pointer::VersionPointer,
-  };
-
-  /// A memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`LinkedTable`](BaseLinkedTable).
-  pub type LinkedTable<C> = BaseLinkedTable<VersionPointer<C>>;
-
-  /// A memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`VersionedArenaTable`](BaseArenaTable).
-  pub type ArenaTable<C> = BaseArenaTable<VersionPointer<C>>;
-
-  /// A multiple versioned ordered write-ahead log implementation for multiple threads environments.
-  ///
-  /// ```text
-  /// +----------------------+-------------------------+--------------------+
-  /// | magic text (6 bytes) | magic version (2 bytes) |  header (8 bytes)  |
-  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
-  /// |     flag (1 byte)    |    version (8 bytes)    |  key len (4 bytes) |    key (n bytes)    | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
-  /// |     flag (1 byte)    |    version (8 bytes)    |  key len (4 bytes) |    key (n bytes)    | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
-  /// |     flag (1 byte)    |    version (8 bytes)    |  key len (4 bytes) |    key (n bytes)    | value len (4 bytes) | value (n bytes) | checksum (8 bytes) |
-  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
-  /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
-  /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
-  /// ```
-  pub type OrderWal<M, C, S = Crc32> = writer::OrderWal<M, C, S>;
-
-  /// Immutable reader for the multiple versioned ordered write-ahead log [`OrderWal`].
-  pub type OrderWalReader<M, C, S = Crc32> = reader::OrderWalReader<M, C, S>;
-}
-
 /// The ordered write-ahead log only supports generic.
 pub mod generic {
   use dbutils::checksum::Crc32;
@@ -97,7 +11,7 @@ pub mod generic {
     arena::ArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
   };
 
-  pub use crate::wal::generic::{
+  pub use crate::wal::{
     base::{Reader, Writer},
     GenericPointer,
   };
@@ -140,8 +54,8 @@ pub mod generic_multiple_version {
     arena::VersionedArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
   };
 
-  pub use crate::wal::generic::{
-    mvcc::{Reader, Writer},
+  pub use crate::wal::{
+    multiple_version::{Reader, Writer},
     GenericVersionPointer,
   };
 

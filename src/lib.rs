@@ -79,14 +79,12 @@ pub use swmr::*;
 
 /// Iterators.
 pub mod iter {
-  pub use super::wal::bytes::iter::*;
-  pub use super::wal::generic::iter::*;
+  pub use super::wal::iter::*;
 }
 
 /// Types
 pub mod types {
-  pub use super::wal::bytes::entry::*;
-  pub use super::wal::generic::entry::*;
+  pub use super::wal::entry::*;
 
   macro_rules! builder_ext {
     ($($name:ident),+ $(,)?) => {

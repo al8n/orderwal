@@ -7,7 +7,6 @@ use core::{
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   traits::{KeyRef, Type, TypeRef},
-  CheapClone, Comparator,
 };
 
 use crate::sealed::Pointer as _;
@@ -21,34 +20,6 @@ pub struct Slice<K: ?Sized> {
   data: [u8],
 }
 
-impl<K: Type + ?Sized> PartialEq for Slice<K> {
-  fn eq(&self, other: &Self) -> bool {
-    self.data == other.data
-  }
-}
-
-impl<K: Type + ?Sized> Eq for Slice<K> {}
-
-impl<K> PartialOrd for Slice<K>
-where
-  K: Type + ?Sized,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
-{
-  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl<K> Ord for Slice<K>
-where
-  K: Type + ?Sized,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
-{
-  fn cmp(&self, other: &Self) -> cmp::Ordering {
-    unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(&self.data, &other.data) }
-  }
-}
-
 impl<K, V> Equivalent<GenericPointer<K, V>> for Slice<K>
 where
   K: Type + ?Sized,
@@ -56,7 +27,7 @@ where
   V: ?Sized,
 {
   fn equivalent(&self, key: &GenericPointer<K, V>) -> bool {
-    self.compare(key).is_eq()
+    self.data.eq(key.as_key_slice())
   }
 }
 
@@ -107,7 +78,6 @@ where
   }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Query<'a, K, Q>
 where
@@ -202,45 +172,5 @@ where
   fn compare(&self, p: &GenericVersionPointer<K, V>) -> cmp::Ordering {
     let kr = unsafe { <K::Ref<'b> as TypeRef<'b>>::from_slice(p.as_key_slice()) };
     Comparable::compare(self.key, &kr)
-  }
-}
-
-pub struct GenericComparator<K: ?Sized> {
-  _k: PhantomData<K>,
-}
-
-impl<K: ?Sized> CheapClone for GenericComparator<K> {}
-
-impl<K: ?Sized> Clone for GenericComparator<K> {
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-
-impl<K: ?Sized> Copy for GenericComparator<K> {}
-
-impl<K: ?Sized> core::fmt::Debug for GenericComparator<K> {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("GenericComparator").finish()
-  }
-}
-
-impl<K> Comparator for GenericComparator<K>
-where
-  K: ?Sized + Type,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
-{
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
-    unsafe { <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(a, b) }
-  }
-
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    unsafe {
-      let start = start_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
-      let end = end_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
-      let key = <K::Ref<'_> as TypeRef<'_>>::from_slice(key);
-
-      (start, end).contains(&key)
-    }
   }
 }

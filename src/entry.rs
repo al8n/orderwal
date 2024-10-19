@@ -4,7 +4,7 @@ use dbutils::{buffer::VacantBuffer, error::InsufficientBuffer, traits::Type};
 
 use super::{
   types::{KeyBuilder, ValueBuilder},
-  wal::generic::entry::Generic,
+  wal::entry::Generic,
 };
 
 /// Writing self to the [`VacantBuffer`] in bytes format.

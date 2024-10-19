@@ -8,7 +8,6 @@ use dbutils::{
   buffer::VacantBuffer,
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encoded_u64_varint_len},
-  CheapClone,
 };
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
@@ -24,9 +23,7 @@ use super::{
 };
 
 pub trait Pointer: Sized {
-  type Comparator;
-
-  fn new(klen: usize, vlen: usize, ptr: *const u8, cmp: Self::Comparator) -> Self;
+  fn new(klen: usize, vlen: usize, ptr: *const u8) -> Self;
 
   fn as_key_slice<'a>(&self) -> &'a [u8];
 
@@ -45,7 +42,7 @@ pub trait GenericPointer<K: ?Sized, V: ?Sized>: Pointer {}
 
 pub trait Immutable {}
 
-pub trait Wal<C, S> {
+pub trait Wal<K: ?Sized, V: ?Sized, S> {
   type Allocator: Allocator;
   type Memtable;
 
@@ -53,7 +50,6 @@ pub trait Wal<C, S> {
     arena: Self::Allocator,
     base: Self::Memtable,
     opts: Options,
-    cmp: C,
     checksumer: S,
     maximum_version: u64,
     minimum_version: u64,
@@ -68,8 +64,6 @@ pub trait Wal<C, S> {
   fn memtable_mut(&mut self) -> &mut Self::Memtable;
 
   fn hasher(&self) -> &S;
-
-  fn comparator(&self) -> &C;
 
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -201,7 +195,7 @@ pub trait Wal<C, S> {
   ) -> Iter<'_, <Self::Memtable as Memtable>::Iterator<'_>, Self::Memtable>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+    <Self::Memtable as Memtable>::Pointer: Pointer,
   {
     Iter::new(version, self.memtable().iter())
   }
@@ -216,7 +210,7 @@ pub trait Wal<C, S> {
     R: RangeBounds<Q>,
     Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+    <Self::Memtable as Memtable>::Pointer: Pointer,
   {
     Range::new(version, self.memtable().range(range))
   }
@@ -226,7 +220,7 @@ pub trait Wal<C, S> {
   fn first(&self, version: Option<u64>) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer + Ord,
   {
     match version {
       Some(version) => {
@@ -251,7 +245,7 @@ pub trait Wal<C, S> {
   fn last(&self, version: Option<u64>) -> Option<<Self::Memtable as Memtable>::Item<'_>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord,
+    <Self::Memtable as Memtable>::Pointer: Pointer + Ord,
   {
     match version {
       Some(version) => {
@@ -277,7 +271,7 @@ pub trait Wal<C, S> {
   where
     Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+    <Self::Memtable as Memtable>::Pointer: Pointer,
   {
     match version {
       Some(version) => {
@@ -300,7 +294,7 @@ pub trait Wal<C, S> {
   where
     Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>,
+    <Self::Memtable as Memtable>::Pointer: Pointer,
   {
     if let Some(version) = version {
       if !self.contains_version(version) {
@@ -328,7 +322,7 @@ pub trait Wal<C, S> {
   where
     Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
+    <Self::Memtable as Memtable>::Pointer: Pointer;
 
   fn lower_bound<Q>(
     &self,
@@ -338,7 +332,7 @@ pub trait Wal<C, S> {
   where
     Q: ?Sized + Comparable<<Self::Memtable as Memtable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C>;
+    <Self::Memtable as Memtable>::Pointer: Pointer;
 
   #[inline]
   fn insert_pointer(&mut self, ptr: <Self::Memtable as Memtable>::Pointer) -> Result<(), Error>
@@ -370,10 +364,9 @@ pub trait Wal<C, S> {
   where
     KE: super::entry::BufWriterOnce,
     VE: super::entry::BufWriterOnce,
-    C: CheapClone,
     S: BuildChecksumer,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
+    <Self::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -454,9 +447,8 @@ pub trait Wal<C, S> {
             }
 
             buf.detach();
-            let cmp = self.comparator().cheap_clone();
             let ptr = buf.as_ptr().add(ko);
-            Ok(Pointer::new(klen, vlen, ptr, cmp))
+            Ok(Pointer::new(klen, vlen, ptr))
           }
         }
       }
@@ -470,14 +462,13 @@ pub trait Wal<C, S> {
     batch: &mut B,
   ) -> Result<(), Among<<B::Key as BufWriter>::Error, <B::Value as BufWriter>::Error, Error>>
   where
-    B: Batch<W>,
+    B: Batch<<Self::Memtable as Memtable>::Pointer>,
     B::Key: BufWriter,
     B::Value: BufWriter,
-    C: CheapClone,
     S: BuildChecksumer,
-    W: Constructable<Wal = Self, Memtable = Self::Memtable>,
+    W: Constructable<K, V, Wal = Self, Memtable = Self::Memtable>,
     Self::Memtable: Memtable,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
+    <Self::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -527,7 +518,6 @@ pub trait Wal<C, S> {
         })
         .map_err(Among::Right)?;
 
-      let cmp = self.comparator();
       let mut minimum = self.minimum_version();
       let mut maximum = self.maximum_version();
 
@@ -579,10 +569,7 @@ pub trait Wal<C, S> {
         .map_err(Among::Middle)?;
         cursor += vlen;
         ent.set_pointer(<<Self::Memtable as Memtable>::Pointer as Pointer>::new(
-          klen,
-          vlen,
-          ptr,
-          cmp.cheap_clone(),
+          klen, vlen, ptr,
         ));
       }
 
@@ -640,13 +627,11 @@ pub trait Wal<C, S> {
   }
 }
 
-pub trait Constructable: Sized {
+pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
   type Allocator: Allocator + 'static;
-  type Wal: Wal<Self::Comparator, Self::Checksumer, Allocator = Self::Allocator, Memtable = Self::Memtable>
+  type Wal: Wal<K, V, Self::Checksumer, Allocator = Self::Allocator, Memtable = Self::Memtable>
     + 'static;
-  // type Pointer: Pointer<Comparator = Self::Comparator>;
   type Memtable: Memtable;
-  type Comparator;
   type Checksumer;
   type Reader;
 
@@ -667,7 +652,6 @@ pub trait Constructable: Sized {
     arena: Self::Allocator,
     opts: Options,
     memtable_opts: <Self::Memtable as Memtable>::Options,
-    cmp: Self::Comparator,
     cks: Self::Checksumer,
   ) -> Result<Self::Wal, Either<<Self::Memtable as Memtable>::ConstructionError, Error>> {
     unsafe {
@@ -682,9 +666,7 @@ pub trait Constructable: Sized {
       .and_then(|_| {
         Self::Memtable::new(memtable_opts)
           .map(|memtable| {
-            <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
-              arena, memtable, opts, cmp, cks, 0, 0,
-            )
+            <Self::Wal as Wal<K, V, Self::Checksumer>>::construct(arena, memtable, opts, cks, 0, 0)
           })
           .map_err(Either::Left)
       })
@@ -695,13 +677,11 @@ pub trait Constructable: Sized {
     opts: Options,
     memtable_opts: <Self::Memtable as Memtable>::Options,
     ro: bool,
-    cmp: Self::Comparator,
     checksumer: Self::Checksumer,
   ) -> Result<Self::Wal, Either<<Self::Memtable as Memtable>::ConstructionError, Error>>
   where
-    Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
+    <Self::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];
@@ -715,9 +695,8 @@ pub trait Constructable: Sized {
       return Err(Either::Right(Error::magic_version_mismatch()));
     }
 
-    let mut set =
-      <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable::new(memtable_opts)
-        .map_err(Either::Left)?;
+    let mut set = <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable::new(memtable_opts)
+      .map_err(Either::Left)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -789,7 +768,6 @@ pub trait Constructable: Sized {
             key_len,
             value_len,
             arena.get_pointer(cursor + STATUS_SIZE + readed),
-            cmp.cheap_clone(),
           );
 
           let version = pointer.version();
@@ -853,7 +831,6 @@ pub trait Constructable: Sized {
               klen,
               vlen,
               arena.get_pointer(cursor + STATUS_SIZE + readed + sub_cursor + kvlen),
-              cmp.cheap_clone(),
             );
 
             let version = ptr.version();
@@ -876,17 +853,14 @@ pub trait Constructable: Sized {
       }
     }
 
-    Ok(
-      <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
-        arena,
-        set,
-        opts,
-        cmp,
-        checksumer,
-        maximum_version,
-        minimum_version,
-      ),
-    )
+    Ok(<Self::Wal as Wal<K, V, Self::Checksumer>>::construct(
+      arena,
+      set,
+      opts,
+      checksumer,
+      maximum_version,
+      minimum_version,
+    ))
   }
 
   fn from_core(core: Self::Wal) -> Self;

@@ -1,10 +1,10 @@
 pub use skl::Height;
 
-mod table;
 mod multiple_version;
+mod table;
 
-pub use table::ArenaTable;
 pub use multiple_version::VersionedArenaTable;
+pub use table::ArenaTable;
 
 /// Options to configure the [`ArenaTable`].
 #[derive(Debug, Copy, Clone)]
@@ -65,5 +65,3 @@ impl ArenaTableOptions {
     self.max_height
   }
 }
-
-

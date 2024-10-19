@@ -1,5 +1,5 @@
 use among::Among;
-use dbutils::{checksum::Crc32, Ascend, CheapClone, Comparator};
+use dbutils::checksum::Crc32;
 use skl::either::Either;
 
 use super::{
@@ -11,12 +11,11 @@ use super::{
 };
 
 /// A write-ahead log builder.
-pub struct Builder<M, C = Ascend, S = Crc32>
+pub struct Builder<M, S = Crc32>
 where
   M: Memtable,
 {
   pub(super) opts: Options,
-  pub(super) cmp: C,
   pub(super) cks: S,
   pub(super) memtable_opts: M::Options,
 }
@@ -42,36 +41,16 @@ where
   pub fn new() -> Self {
     Self {
       opts: Options::default(),
-      cmp: Ascend,
       cks: Crc32::default(),
       memtable_opts: M::Options::default(),
     }
   }
 }
 
-impl<M, C, S> Builder<M, C, S>
+impl<M, S> Builder<M, S>
 where
   M: Memtable,
 {
-  /// Returns a new write-ahead log builder with the new comparator
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use orderwal::{Builder, Ascend};
-  ///
-  /// let opts = Builder::new().with_comparator(Ascend);
-  /// ```
-  #[inline]
-  pub fn with_comparator<NC>(self, cmp: NC) -> Builder<M, NC, S> {
-    Builder {
-      opts: self.opts,
-      cmp,
-      cks: self.cks,
-      memtable_opts: self.memtable_opts,
-    }
-  }
-
   /// Returns a new write-ahead log builder with the new checksumer
   ///
   /// ## Example
@@ -82,10 +61,9 @@ where
   /// let opts = Builder::new().with_checksumer(Crc32::new());
   /// ```
   #[inline]
-  pub fn with_checksumer<NS>(self, cks: NS) -> Builder<M, C, NS> {
+  pub fn with_checksumer<NS>(self, cks: NS) -> Builder<M, NS> {
     Builder {
       opts: self.opts,
-      cmp: self.cmp,
       cks,
       memtable_opts: self.memtable_opts,
     }
@@ -104,7 +82,6 @@ where
   pub fn with_options(self, opts: Options) -> Self {
     Self {
       opts,
-      cmp: self.cmp,
       cks: self.cks,
       memtable_opts: self.memtable_opts,
     }
@@ -123,7 +100,6 @@ where
   pub fn with_memtable_options(self, opts: M::Options) -> Self {
     Self {
       opts: self.opts,
-      cmp: self.cmp,
       cks: self.cks,
       memtable_opts: opts,
     }
@@ -139,14 +115,13 @@ where
   /// let opts = Builder::new().with_options(Options::default());
   /// ```
   #[inline]
-  pub fn change_memtable<NM>(self) -> Builder<NM, C, S>
+  pub fn change_memtable<NM>(self) -> Builder<NM, S>
   where
     NM: Memtable,
     NM::Options: Default,
   {
     Builder {
       opts: self.opts,
-      cmp: self.cmp,
       cks: self.cks,
       memtable_opts: NM::Options::default(),
     }
@@ -162,13 +137,12 @@ where
   /// let opts = Builder::new().change_memtable_with_options(Options::default());
   /// ```
   #[inline]
-  pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, C, S>
+  pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, S>
   where
     NM: Memtable,
   {
     Builder {
       opts: self.opts,
-      cmp: self.cmp,
       cks: self.cks,
       memtable_opts: opts,
     }
@@ -433,7 +407,7 @@ where
   }
 }
 
-impl<M, C, S> Builder<M, C, S>
+impl<M, S> Builder<M, S>
 where
   M: Memtable,
 {
@@ -662,7 +636,7 @@ where
   }
 }
 
-impl<M, C, S> Builder<M, C, S>
+impl<M, S> Builder<M, S>
 where
   M: Memtable,
 {
@@ -802,7 +776,7 @@ where
   }
 }
 
-impl<M, C, S> Builder<M, C, S>
+impl<M, S> Builder<M, S>
 where
   M: Memtable,
 {
@@ -818,13 +792,16 @@ where
   ///   .alloc::<OrderWal>()
   ///   .unwrap();
   /// ```
-  pub fn alloc<W>(self) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
+  pub fn alloc<K, V, W>(
+    self,
+  ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
   where
-    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
+    K: ?Sized,
+    V: ?Sized,
+    W: Constructable<K, V, Memtable = M, Checksumer = S>,
   {
     let Self {
       opts,
-      cmp,
       cks,
       memtable_opts,
     } = self;
@@ -833,7 +810,7 @@ where
       .alloc()
       .map_err(|e| Either::Right(Error::from_insufficient_space(e)))
       .and_then(|arena| {
-        <W as Constructable>::new_in(arena, opts, memtable_opts, cmp, cks).map(W::from_core)
+        <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
       })
   }
 
@@ -849,13 +826,16 @@ where
   ///   .map_anon::<OrderWal>()
   ///   .unwrap();
   /// ```
-  pub fn map_anon<W>(self) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
+  pub fn map_anon<K, V, W>(
+    self,
+  ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
   where
-    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
+    K: ?Sized,
+    V: ?Sized,
+    W: Constructable<K, V, Memtable = M, Checksumer = S>,
   {
     let Self {
       opts,
-      cmp,
       cks,
       memtable_opts,
     } = self;
@@ -864,7 +844,7 @@ where
       .map_anon()
       .map_err(|e| Either::Right(e.into()))
       .and_then(|arena| {
-        <W as Constructable>::new_in(arena, opts, memtable_opts, cmp, cks).map(W::from_core)
+        <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
       })
   }
 
@@ -898,19 +878,20 @@ where
   ///     .map::<OrderWal, _>(&path)
   ///     .unwrap()
   /// };
-  pub unsafe fn map<W, P>(
+  pub unsafe fn map<K, V, W, P>(
     self,
     path: P,
   ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
   where
-    C: Comparator + CheapClone + 'static,
+    K: ?Sized,
+    V: ?Sized,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<Memtable = M, Comparator = C, Checksumer = S> + Immutable,
-    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
+    W: Constructable<K, V, Memtable = M, Checksumer = S> + Immutable,
+    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     self
-      .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(|e| e.into_middle_right())
   }
 
@@ -944,20 +925,20 @@ where
   ///     .map_with_path_builder::<OrderWal, _, ()>(|| Ok(path))
   ///     .unwrap()
   /// };
-  pub unsafe fn map_with_path_builder<W, PB, E>(
+  pub unsafe fn map_with_path_builder<K, V, W, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<W, Among<E, <W::Memtable as Memtable>::ConstructionError, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    C: Comparator + CheapClone + 'static,
+    K: ?Sized,
+    V: ?Sized,
     S: BuildChecksumer,
-    W: Constructable<Memtable = M, Comparator = C, Checksumer = S> + Immutable,
-    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
+    W: Constructable<K, V, Memtable = M, Checksumer = S> + Immutable,
+    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     let Self {
       opts,
-      cmp,
       cks,
       memtable_opts,
     } = self;
@@ -968,7 +949,7 @@ where
       .map_with_path_builder(path_builder)
       .map_err(|e| Among::from_either_to_left_right(e.map_right(Into::into)))
       .and_then(|arena| {
-        W::replay(arena, Options::new(), memtable_opts, true, cmp, cks)
+        W::replay(arena, Options::new(), memtable_opts, true, cks)
           .map(Constructable::from_core)
           .map_err(Among::from_either_to_middle_right)
       })
@@ -1002,19 +983,20 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut<W, P>(
+  pub unsafe fn map_mut<K, V, W, P>(
     self,
     path: P,
   ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
   where
-    C: Comparator + CheapClone + 'static,
+    K: ?Sized,
+    V: ?Sized,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
-    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
+    W: Constructable<K, V, Memtable = M, Checksumer = S>,
+    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     self
-      .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_mut_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(|e| e.into_middle_right())
   }
 
@@ -1047,22 +1029,22 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut_with_path_builder<W, PB, E>(
+  pub unsafe fn map_mut_with_path_builder<K, V, W, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<W, Among<E, <W::Memtable as Memtable>::ConstructionError, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    C: Comparator + CheapClone + 'static,
+    K: ?Sized,
+    V: ?Sized,
     S: BuildChecksumer,
-    W: Constructable<Memtable = M, Comparator = C, Checksumer = S>,
-    <W::Memtable as Memtable>::Pointer: Pointer<Comparator = C> + Ord + 'static,
+    W: Constructable<K, V, Memtable = M, Checksumer = S>,
+    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
   {
     let path = path_builder().map_err(Among::Left)?;
     let exist = path.exists();
     let Self {
       opts,
-      cmp,
       cks,
       memtable_opts,
     } = self;
@@ -1073,9 +1055,9 @@ where
       .map_err(|e| Among::Right(e.into()))
       .and_then(|arena| {
         if !exist {
-          <W as Constructable>::new_in(arena, opts, memtable_opts, cmp, cks).map(W::from_core)
+          <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
         } else {
-          <W as Constructable>::replay(arena, opts, memtable_opts, false, cmp, cks)
+          <W as Constructable<K, V>>::replay(arena, opts, memtable_opts, false, cks)
             .map(W::from_core)
         }
         .map_err(Among::from_either_to_middle_right)

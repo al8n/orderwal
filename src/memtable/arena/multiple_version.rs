@@ -1,10 +1,23 @@
 use core::ops::{Bound, RangeBounds};
 
 use among::Among;
-use dbutils::{traits::{KeyRef, Type}, equivalent::Comparable};
-use skl::{versioned::{sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry}, VersionedMap as _}, Arena as _, Options, VersionedContainer as _};
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
+use skl::{
+  versioned::{
+    sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry},
+    VersionedMap as _,
+  },
+  Arena as _, Options, VersionedContainer as _,
+};
 
-use crate::{error::Error, memtable::{MemtableEntry, VersionedMemtable, VersionedMemtableEntry}, sealed::WithVersion};
+use crate::{
+  error::Error,
+  memtable::{MemtableEntry, VersionedMemtable, VersionedMemtableEntry},
+  sealed::WithVersion,
+};
 
 use super::ArenaTableOptions;
 
@@ -78,7 +91,7 @@ where
   where
     Self::Pointer: 'a,
     Self: 'a;
-  
+
   type VersionedItem<'a>
     = VersionedEntry<'a, Self::Pointer, ()>
   where
@@ -157,13 +170,17 @@ where
   where
     Self::Pointer: Ord + 'static,
   {
-    self.map.insert(version, &ele, &()).map(|_| ()).map_err(|e| match e {
-      Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
-        requested,
-        available,
-      })) => Error::memtable_insufficient_space(requested as u64, available),
-      _ => unreachable!(),
-    })
+    self
+      .map
+      .insert(version, &ele, &())
+      .map(|_| ())
+      .map_err(|e| match e {
+        Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
+          requested,
+          available,
+        })) => Error::memtable_insufficient_space(requested as u64, available),
+        _ => unreachable!(),
+      })
   }
 
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
@@ -193,15 +210,15 @@ where
   {
     self.map.contains_key(version, key)
   }
-  
+
   fn iter(&self, version: u64) -> Self::Iterator<'_> {
     self.map.iter(version)
   }
-  
+
   fn iter_all_versions(&self, version: u64) -> Self::AllIterator<'_> {
     self.map.iter_all_versions(version)
   }
-  
+
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
@@ -209,11 +226,12 @@ where
   {
     self.map.range(version, range)
   }
-  
+
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::AllRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer> {
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
     self.map.range_all_versions(version, range)
   }
 }

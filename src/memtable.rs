@@ -149,7 +149,7 @@ pub trait VersionedMemtable {
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
+
   /// The range iterator type which can yields all the entries in the memtable.
   type AllRange<'a, Q, R>: Iterator<Item = Self::VersionedItem<'a>>
   where
@@ -157,7 +157,6 @@ pub trait VersionedMemtable {
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
 
   /// The configuration options for the memtable.
   type Options;
@@ -224,7 +223,7 @@ pub trait VersionedMemtable {
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
+
   /// Returns an iterator over all the entries in a subset of the memtable.
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::AllRange<'a, Q, R>
   where

@@ -1,12 +1,24 @@
 use core::ops::{Bound, RangeBounds};
 
 use among::Among;
-use dbutils::{traits::{KeyRef, Type}, equivalent::Comparable};
-use skl::{map::{sync::{Entry, Iter, Range, SkipMap}, Map as _}, Arena as _, Container as _, Options};
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
+use skl::{
+  map::{
+    sync::{Entry, Iter, Range, SkipMap},
+    Map as _,
+  },
+  Arena as _, Container as _, Options,
+};
 
 use crate::error::Error;
 
-use super::{ArenaTableOptions, super::{Memtable, MemtableEntry}};
+use super::{
+  super::{Memtable, MemtableEntry},
+  ArenaTableOptions,
+};
 
 impl<'a, P> MemtableEntry<'a> for Entry<'a, P, ()>
 where
@@ -29,7 +41,6 @@ where
     Entry::prev(self)
   }
 }
-
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
 pub struct ArenaTable<P> {

@@ -1,10 +1,9 @@
 use crate::{
-  memtable::Memtable,
   sealed::{WithVersion, WithoutVersion},
   VERSION_SIZE,
 };
 
-use super::{entry::BufWriter, sealed::Constructable};
+use super::entry::BufWriter;
 
 pub(crate) struct EncodedBatchEntryMeta {
   /// The output of `merge_lengths(klen, vlen)`
@@ -39,18 +38,17 @@ impl EncodedBatchEntryMeta {
 }
 
 /// An entry can be inserted into the WALs through [`Batch`](super::batch::Batch).
-pub struct BatchEntry<K, V, C: Constructable> {
+pub struct BatchEntry<K, V, P> {
   pub(crate) key: K,
   pub(crate) value: V,
   pub(crate) meta: EncodedBatchEntryMeta,
-  pointer: Option<<C::Memtable as Memtable>::Pointer>,
+  pointer: Option<P>,
   version: Option<u64>,
 }
 
-impl<K, V, C> BatchEntry<K, V, C>
+impl<K, V, P> BatchEntry<K, V, P>
 where
-  C: Constructable,
-  <C::Memtable as Memtable>::Pointer: WithoutVersion,
+  P: WithoutVersion,
 {
   /// Creates a new entry.
   #[inline]
@@ -65,10 +63,9 @@ where
   }
 }
 
-impl<K, V, C> BatchEntry<K, V, C>
+impl<K, V, P> BatchEntry<K, V, P>
 where
-  C: Constructable,
-  <C::Memtable as Memtable>::Pointer: WithVersion,
+  P: WithVersion,
 {
   /// Creates a new entry.
   #[inline]
@@ -98,7 +95,7 @@ where
   }
 }
 
-impl<K, V, C: Constructable> BatchEntry<K, V, C> {
+impl<K, V, P> BatchEntry<K, V, P> {
   /// Returns the length of the key.
   #[inline]
   pub fn key_len(&self) -> usize
@@ -153,12 +150,12 @@ impl<K, V, C: Constructable> BatchEntry<K, V, C> {
   }
 
   #[inline]
-  pub(crate) fn take_pointer(&mut self) -> Option<<C::Memtable as Memtable>::Pointer> {
+  pub(crate) fn take_pointer(&mut self) -> Option<P> {
     self.pointer.take()
   }
 
   #[inline]
-  pub(crate) fn set_pointer(&mut self, pointer: <C::Memtable as Memtable>::Pointer) {
+  pub(crate) fn set_pointer(&mut self, pointer: P) {
     self.pointer = Some(pointer);
   }
 
@@ -174,19 +171,19 @@ impl<K, V, C: Constructable> BatchEntry<K, V, C> {
 }
 
 /// A trait for batch insertions.
-pub trait Batch<C: Constructable> {
+pub trait Batch<P> {
   /// Any type that can be converted into a key.
   type Key;
   /// Any type that can be converted into a value.
   type Value;
 
   /// The iterator type.
-  type IterMut<'a>: Iterator<Item = &'a mut BatchEntry<Self::Key, Self::Value, C>>
+  type IterMut<'a>: Iterator<Item = &'a mut BatchEntry<Self::Key, Self::Value, P>>
   where
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    C: 'a;
+    P: 'a;
 
   /// Returns an iterator over the keys and values.
   fn iter_mut<'a>(&'a mut self) -> Self::IterMut<'a>
@@ -194,13 +191,12 @@ pub trait Batch<C: Constructable> {
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    C: 'a;
+    P: 'a;
 }
 
-impl<C, K, V, T> Batch<C> for T
+impl<K, V, P, T> Batch<P> for T
 where
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut BatchEntry<K, V, C>>,
-  C: Constructable,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut BatchEntry<K, V, P>>,
 {
   type Key = K;
   type Value = V;
@@ -211,14 +207,14 @@ where
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    C: 'a;
+    P: 'a;
 
   fn iter_mut<'a>(&'a mut self) -> Self::IterMut<'a>
   where
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    C: 'a,
+    P: 'a,
   {
     IntoIterator::into_iter(self)
   }

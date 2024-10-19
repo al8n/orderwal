@@ -1,4 +1,4 @@
-use core::ops::Bound;
+use core::{marker::PhantomData, ops::Bound};
 
 use dbutils::equivalent::Comparable;
 use rarena_allocator::sync::Arena;
@@ -8,18 +8,20 @@ use crate::{
   sealed::{Pointer, Wal},
   Options,
 };
-pub struct OrderCore<M, C, S> {
+pub struct OrderCore<K: ?Sized, V: ?Sized, M, S> {
   pub(super) arena: Arena,
   pub(super) map: M,
   pub(super) max_version: u64,
   pub(super) min_version: u64,
   pub(super) opts: Options,
-  pub(super) cmp: C,
   pub(super) cks: S,
+  pub(super) _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-impl<M, C, S> Wal<C, S> for OrderCore<M, C, S>
+impl<K, V, M, S> Wal<K, V, S> for OrderCore<K, V, M, S>
 where
+  K: ?Sized,
+  V: ?Sized,
   M: Memtable,
   M::Pointer: Ord + Send + 'static,
 {
@@ -41,7 +43,6 @@ where
     arena: Self::Allocator,
     set: Self::Memtable,
     opts: Options,
-    cmp: C,
     checksumer: S,
     maximum_version: u64,
     minimum_version: u64,
@@ -49,11 +50,11 @@ where
     Self {
       arena,
       map: set,
-      cmp,
       opts,
       max_version: maximum_version,
       min_version: minimum_version,
       cks: checksumer,
+      _m: PhantomData,
     }
   }
 
@@ -102,7 +103,7 @@ where
   #[inline]
   fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<M::Item<'_>>
   where
-    M::Pointer: Pointer<Comparator = C>,
+    M::Pointer: Pointer,
     Q: ?Sized + Comparable<M::Pointer>,
   {
     match version {
@@ -123,7 +124,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<M::Item<'_>>
   where
-    M::Pointer: Pointer<Comparator = C>,
+    M::Pointer: Pointer,
     Q: ?Sized + Comparable<M::Pointer>,
   {
     match version {
@@ -144,10 +145,5 @@ where
   #[inline]
   fn hasher(&self) -> &S {
     &self.cks
-  }
-
-  #[inline]
-  fn comparator(&self) -> &C {
-    &self.cmp
   }
 }

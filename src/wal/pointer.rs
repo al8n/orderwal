@@ -10,8 +10,6 @@ use crate::{
   VERSION_SIZE,
 };
 
-use super::GenericComparator;
-
 const PTR_SIZE: usize = mem::size_of::<usize>();
 const U32_SIZE: usize = mem::size_of::<u32>();
 
@@ -52,10 +50,8 @@ impl<K: ?Sized, V: ?Sized> CheapClone for GenericPointer<K, V> {
 }
 
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
-  type Comparator = GenericComparator<K>;
-
   #[inline]
-  fn new(klen: usize, vlen: usize, ptr: *const u8, _cmp: Self::Comparator) -> Self {
+  fn new(klen: usize, vlen: usize, ptr: *const u8) -> Self {
     Self::new(klen, vlen, ptr)
   }
 
@@ -237,10 +233,8 @@ impl<K: ?Sized, V: ?Sized> CheapClone for GenericVersionPointer<K, V> {
 }
 
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V> {
-  type Comparator = GenericComparator<K>;
-
   #[inline]
-  fn new(klen: usize, vlen: usize, ptr: *const u8, _cmp: Self::Comparator) -> Self {
+  fn new(klen: usize, vlen: usize, ptr: *const u8) -> Self {
     Self::new(klen, vlen, ptr)
   }
 

@@ -1,4 +1,4 @@
-use core::{cell::UnsafeCell, marker::PhantomData};
+use core::cell::UnsafeCell;
 use std::sync::Arc;
 
 use rarena_allocator::sync::Arena;
@@ -7,10 +7,9 @@ use crate::{
   memtable::Memtable,
   sealed::{self, Constructable, Immutable},
   swmr::wal::OrderCore,
-  wal::generic::GenericComparator,
 };
 
-use super::writer::{GenericOrderWal, OrderWal};
+use super::writer::GenericOrderWal;
 
 /// An [`GenericOrderWal`] reader.
 pub struct GenericOrderWalReader<K: ?Sized, V: ?Sized, P, S>(GenericOrderWal<K, V, P, S>);
@@ -24,24 +23,23 @@ where
 {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<P, GenericComparator<K>, S>>>) -> Self {
+  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<K, V, P, S>>>) -> Self {
     Self(GenericOrderWal::construct(wal))
   }
 }
 
-impl<K, V, M, S> Constructable for GenericOrderWalReader<K, V, M, S>
+impl<K, V, M, S> Constructable<K, V> for GenericOrderWalReader<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
   M: Memtable + 'static,
-  M::Pointer: sealed::Pointer<Comparator = GenericComparator<K>> + Ord + Send + 'static,
+  M::Pointer: sealed::Pointer + Ord + Send + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<Self::Memtable, Self::Comparator, Self::Checksumer>;
+  type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
-  type Comparator = GenericComparator<K>;
   type Reader = GenericOrderWalReader<K, V, M, S>;
 
   #[inline]
@@ -58,51 +56,6 @@ where
   fn from_core(core: Self::Wal) -> Self {
     Self(GenericOrderWal {
       core: Arc::new(UnsafeCell::new(core)),
-      _s: PhantomData,
-      _v: PhantomData,
     })
-  }
-}
-
-/// An [`OrderWal`] reader.
-pub struct OrderWalReader<M, C, S>(OrderWal<M, C, S>);
-
-impl<M, C, S> OrderWalReader<M, C, S> {
-  /// Creates a new read-only WAL reader.
-  #[inline]
-  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<M, C, S>>>) -> Self {
-    Self(OrderWal::construct(wal))
-  }
-}
-
-impl<M, C, S> Immutable for OrderWalReader<M, C, S> {}
-
-impl<M, C, S> Constructable for OrderWalReader<M, C, S>
-where
-  C: 'static,
-  S: 'static,
-  M: Memtable + 'static,
-  M::Pointer: sealed::Pointer<Comparator = C> + Ord + Send + 'static,
-{
-  type Allocator = Arena;
-  type Wal = OrderCore<Self::Memtable, C, S>;
-  type Memtable = M;
-  type Checksumer = S;
-  type Comparator = C;
-  type Reader = Self;
-
-  #[inline]
-  fn as_core(&self) -> &Self::Wal {
-    self.0.as_core()
-  }
-
-  #[inline]
-  fn as_core_mut(&mut self) -> &mut Self::Wal {
-    self.0.as_core_mut()
-  }
-
-  #[inline]
-  fn from_core(core: Self::Wal) -> Self {
-    Self(OrderWal::construct(Arc::new(UnsafeCell::new(core))))
   }
 }
