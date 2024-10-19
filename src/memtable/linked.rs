@@ -64,8 +64,12 @@ where
     Q: ?Sized + Comparable<Self::Pointer>;
 
   type Options = ();
+  type ConstructionError = ();
 
-  fn new(_: Self::Options) -> Result<Self, Error> where Self: Sized {
+  fn new(_: Self::Options) -> Result<Self, Self::ConstructionError>
+  where
+    Self: Sized,
+  {
     Ok(Self(SkipSet::new()))
   }
 

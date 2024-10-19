@@ -22,7 +22,10 @@ pub enum BatchError {
 pub enum Error {
   /// Insufficient space in the WAL
   #[error("insufficient space in the WAL: {0}")]
-  InsufficientSpace(#[from] InsufficientBuffer),
+  InsufficientSpace(InsufficientBuffer),
+  /// Memtable does not have enough space.
+  #[error("memtable does not have enough space: {0}")]
+  MemtableInsufficientSpace(InsufficientBuffer),
   /// The key is too large.
   #[error("the key size is {size} larger than the maximum key size {maximum_key_size}")]
   KeyTooLarge {
@@ -62,8 +65,8 @@ impl From<Among<InsufficientBuffer, InsufficientBuffer, Error>> for Error {
   #[inline]
   fn from(value: Among<InsufficientBuffer, InsufficientBuffer, Error>) -> Self {
     match value {
-      Among::Left(a) => Self::from(a),
-      Among::Middle(b) => Self::from(b),
+      Among::Left(a) => Self::InsufficientSpace(a),
+      Among::Middle(b) => Self::InsufficientSpace(b),
       Among::Right(c) => c,
     }
   }
@@ -73,6 +76,14 @@ impl Error {
   /// Create a new `Error::InsufficientSpace` instance.
   pub(crate) const fn insufficient_space(requested: u64, available: u32) -> Self {
     Self::InsufficientSpace(InsufficientBuffer::with_information(
+      requested,
+      available as u64,
+    ))
+  }
+
+  /// Create a new `Error::MemtableInsufficientSpace` instance.
+  pub(crate) const fn memtable_insufficient_space(requested: u64, available: u32) -> Self {
+    Self::MemtableInsufficientSpace(InsufficientBuffer::with_information(
       requested,
       available as u64,
     ))

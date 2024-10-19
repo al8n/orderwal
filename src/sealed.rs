@@ -669,7 +669,7 @@ pub trait Constructable: Sized {
     memtable_opts: <Self::Memtable as Memtable>::Options,
     cmp: Self::Comparator,
     cks: Self::Checksumer,
-  ) -> Result<Self::Wal, Error> {
+  ) -> Result<Self::Wal, Either<<Self::Memtable as Memtable>::ConstructionError, Error>> {
     unsafe {
       let slice = arena.reserved_slice_mut();
       slice[0..6].copy_from_slice(&MAGIC_TEXT);
@@ -678,17 +678,15 @@ pub trait Constructable: Sized {
 
     arena
       .flush_range(0, HEADER_SIZE)
-      .map_err(Into::into)
+      .map_err(|e| Either::Right(e.into()))
       .and_then(|_| {
-        Self::Memtable::new(memtable_opts).map(|memtable| <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
-          arena,
-          memtable,
-          opts,
-          cmp,
-          cks,
-          0,
-          0,
-        ))
+        Self::Memtable::new(memtable_opts)
+          .map(|memtable| {
+            <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::construct(
+              arena, memtable, opts, cmp, cks, 0, 0,
+            )
+          })
+          .map_err(Either::Left)
       })
   }
 
@@ -699,7 +697,7 @@ pub trait Constructable: Sized {
     ro: bool,
     cmp: Self::Comparator,
     checksumer: Self::Checksumer,
-  ) -> Result<Self::Wal, Error>
+  ) -> Result<Self::Wal, Either<<Self::Memtable as Memtable>::ConstructionError, Error>>
   where
     Self::Comparator: CheapClone,
     Self::Checksumer: BuildChecksumer,
@@ -710,14 +708,16 @@ pub trait Constructable: Sized {
     let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
 
     if magic_text != MAGIC_TEXT {
-      return Err(Error::magic_text_mismatch());
+      return Err(Either::Right(Error::magic_text_mismatch()));
     }
 
     if magic_version != opts.magic_version() {
-      return Err(Error::magic_version_mismatch());
+      return Err(Either::Right(Error::magic_version_mismatch()));
     }
 
-    let mut set = <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable::new(memtable_opts)?;
+    let mut set =
+      <Self::Wal as Wal<Self::Comparator, Self::Checksumer>>::Memtable::new(memtable_opts)
+        .map_err(Either::Left)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -732,7 +732,7 @@ pub trait Constructable: Sized {
         if cursor + STATUS_SIZE > allocated {
           if !ro && cursor < allocated {
             arena.rewind(ArenaPosition::Start(cursor as u32));
-            arena.flush()?;
+            arena.flush().map_err(|e| Either::Right(e.into()))?;
           }
           break;
         }
@@ -741,12 +741,15 @@ pub trait Constructable: Sized {
         let flag = Flags::from_bits_retain(header);
 
         if !flag.contains(Flags::BATCHING) {
-          let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
-            #[cfg(feature = "tracing")]
-            tracing::error!(err=%e);
+          let (readed, encoded_len) = arena
+            .get_u64_varint(cursor + STATUS_SIZE)
+            .map_err(|e| {
+              #[cfg(feature = "tracing")]
+              tracing::error!(err=%e);
 
-            Error::corrupted(e)
-          })?;
+              Error::corrupted(e)
+            })
+            .map_err(Either::Right)?;
           let (key_len, value_len) = split_lengths(encoded_len);
           let key_len = key_len as usize;
           let value_len = value_len as usize;
@@ -755,12 +758,12 @@ pub trait Constructable: Sized {
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
-              return Err(Error::corrupted("file is truncated"));
+              return Err(Either::Right(Error::corrupted("file is truncated")));
             }
 
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
-              arena.flush()?;
+              arena.flush().map_err(|e| Either::Right(e.into()))?;
             }
 
             break;
@@ -769,14 +772,14 @@ pub trait Constructable: Sized {
           let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
 
           if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
-            return Err(Error::corrupted("checksum mismatch"));
+            return Err(Either::Right(Error::corrupted("checksum mismatch")));
           }
 
           // If the entry is not committed, we should not rewind
           if !flag.contains(Flags::COMMITTED) {
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
-              arena.flush()?;
+              arena.flush().map_err(|e| Either::Right(e.into()))?;
             }
 
             break;
@@ -793,15 +796,18 @@ pub trait Constructable: Sized {
           minimum_version = minimum_version.min(version);
           maximum_version = maximum_version.max(version);
 
-          set.insert(pointer)?;
+          set.insert(pointer).map_err(Either::Right)?;
           cursor += cks_offset + CHECKSUM_SIZE;
         } else {
-          let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
-            #[cfg(feature = "tracing")]
-            tracing::error!(err=%e);
+          let (readed, encoded_len) = arena
+            .get_u64_varint(cursor + STATUS_SIZE)
+            .map_err(|e| {
+              #[cfg(feature = "tracing")]
+              tracing::error!(err=%e);
 
-            Error::corrupted(e)
-          })?;
+              Error::corrupted(e)
+            })
+            .map_err(Either::Right)?;
 
           let (num_entries, encoded_data_len) = split_lengths(encoded_len);
 
@@ -810,12 +816,12 @@ pub trait Constructable: Sized {
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
-              return Err(Error::corrupted("file is truncated"));
+              return Err(Either::Right(Error::corrupted("file is truncated")));
             }
 
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
-              arena.flush()?;
+              arena.flush().map_err(|e| Either::Right(e.into()))?;
             }
 
             break;
@@ -824,18 +830,20 @@ pub trait Constructable: Sized {
           let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
           let mut batch_data_buf = arena.get_bytes(cursor, cks_offset);
           if cks != checksumer.checksum_one(batch_data_buf) {
-            return Err(Error::corrupted("checksum mismatch"));
+            return Err(Either::Right(Error::corrupted("checksum mismatch")));
           }
 
           let mut sub_cursor = 0;
           batch_data_buf = &batch_data_buf[1 + readed..];
           for _ in 0..num_entries {
-            let (kvlen, ent_len) = decode_u64_varint(batch_data_buf).map_err(|e| {
-              #[cfg(feature = "tracing")]
-              tracing::error!(err=%e);
+            let (kvlen, ent_len) = decode_u64_varint(batch_data_buf)
+              .map_err(|e| {
+                #[cfg(feature = "tracing")]
+                tracing::error!(err=%e);
 
-              Error::corrupted(e)
-            })?;
+                Error::corrupted(e)
+              })
+              .map_err(Either::Right)?;
 
             let (klen, vlen) = split_lengths(ent_len);
             let klen = klen as usize;
@@ -852,7 +860,7 @@ pub trait Constructable: Sized {
             minimum_version = minimum_version.min(version);
             maximum_version = maximum_version.max(version);
 
-            set.insert(ptr)?;
+            set.insert(ptr).map_err(Either::Right)?;
             let ent_len = kvlen + klen + vlen;
             sub_cursor += kvlen + klen + vlen;
             batch_data_buf = &batch_data_buf[ent_len..];

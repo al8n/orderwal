@@ -1,11 +1,17 @@
-use core::{borrow::Borrow, cmp, slice};
+use core::{borrow::Borrow, cmp, mem, slice};
 
-use dbutils::{CheapClone, Comparator};
+use dbutils::{
+  traits::{Type, TypeRef},
+  CheapClone, Comparator, StaticComparator,
+};
 
 use crate::{
   sealed::{Pointer as _, WithVersion, WithoutVersion},
   VERSION_SIZE,
 };
+
+const PTR_SIZE: usize = mem::size_of::<usize>();
+const U32_SIZE: usize = mem::size_of::<u32>();
 
 #[doc(hidden)]
 pub struct Pointer<C> {
@@ -16,6 +22,16 @@ pub struct Pointer<C> {
   /// The length of the value.
   value_len: usize,
   cmp: C,
+}
+
+impl<C> core::fmt::Debug for Pointer<C> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("Pointer")
+      .field("ptr", &self.ptr)
+      .field("key_len", &self.key_len)
+      .field("value_len", &self.value_len)
+      .finish()
+  }
 }
 
 impl<C: Clone> Clone for Pointer<C> {
@@ -109,6 +125,62 @@ impl<C> crate::sealed::Pointer for Pointer<C> {
   }
 }
 
+impl<C> Type for Pointer<C>
+where
+  C: Copy + StaticComparator + Default,
+{
+  type Ref<'a> = Self;
+
+  type Error = ();
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    const SIZE: usize = PTR_SIZE + 2 * U32_SIZE;
+    SIZE
+  }
+
+  #[inline]
+  fn encode_to_buffer(&self, buf: &mut skl::VacantBuffer<'_>) -> Result<usize, Self::Error> {
+    // Safe to cast to u32 here, because the key and value length are guaranteed to be less than or equal to u32::MAX.
+    let key_len = self.key_len as u32;
+    let value_len = self.value_len as u32;
+    let ptr = self.ptr as usize;
+
+    buf.set_len(self.encoded_len());
+
+    buf[0..PTR_SIZE].copy_from_slice(&ptr.to_le_bytes());
+
+    let mut offset = PTR_SIZE;
+    buf[offset..offset + U32_SIZE].copy_from_slice(&key_len.to_le_bytes());
+    offset += U32_SIZE;
+    buf[offset..offset + U32_SIZE].copy_from_slice(&value_len.to_le_bytes());
+
+    Ok(offset + U32_SIZE)
+  }
+}
+
+impl<'a, C> TypeRef<'a> for Pointer<C>
+where
+  C: Copy + StaticComparator + Default,
+{
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
+    let ptr = usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()) as *const u8;
+    let mut offset = PTR_SIZE;
+    let key_len =
+      u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
+    offset += U32_SIZE;
+    let value_len =
+      u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
+
+    Self {
+      ptr,
+      key_len,
+      value_len,
+      cmp: Default::default(),
+    }
+  }
+}
+
 #[doc(hidden)]
 pub struct VersionPointer<C> {
   /// The pointer to the start of the entry.
@@ -118,6 +190,16 @@ pub struct VersionPointer<C> {
   /// The length of the value.
   value_len: usize,
   cmp: C,
+}
+
+impl<C> core::fmt::Debug for VersionPointer<C> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("VersionPointer")
+      .field("ptr", &self.ptr)
+      .field("key_len", &(self.key_len - VERSION_SIZE))
+      .field("value_len", &self.value_len)
+      .finish()
+  }
 }
 
 impl<C: Clone> Clone for VersionPointer<C> {
@@ -221,6 +303,62 @@ impl<C> crate::sealed::Pointer for VersionPointer<C> {
     unsafe {
       let slice = slice::from_raw_parts(self.ptr, VERSION_SIZE);
       u64::from_le_bytes(slice.try_into().unwrap())
+    }
+  }
+}
+
+impl<C> Type for VersionPointer<C>
+where
+  C: Copy + StaticComparator + Default,
+{
+  type Ref<'a> = Self;
+
+  type Error = ();
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    const SIZE: usize = PTR_SIZE + 2 * U32_SIZE;
+    SIZE
+  }
+
+  #[inline]
+  fn encode_to_buffer(&self, buf: &mut skl::VacantBuffer<'_>) -> Result<usize, Self::Error> {
+    // Safe to cast to u32 here, because the key and value length are guaranteed to be less than or equal to u32::MAX.
+    let key_len = self.key_len as u32;
+    let value_len = self.value_len as u32;
+    let ptr = self.ptr as usize;
+
+    buf.set_len(self.encoded_len());
+
+    buf[0..PTR_SIZE].copy_from_slice(&ptr.to_le_bytes());
+
+    let mut offset = PTR_SIZE;
+    buf[offset..offset + U32_SIZE].copy_from_slice(&key_len.to_le_bytes());
+    offset += U32_SIZE;
+    buf[offset..offset + U32_SIZE].copy_from_slice(&value_len.to_le_bytes());
+
+    Ok(offset + U32_SIZE)
+  }
+}
+
+impl<'a, C> TypeRef<'a> for VersionPointer<C>
+where
+  C: Copy + StaticComparator + Default,
+{
+  unsafe fn from_slice(src: &'a [u8]) -> Self {
+    let ptr = usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()) as *const u8;
+    let mut offset = PTR_SIZE;
+    let key_len =
+      u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
+    offset += U32_SIZE;
+    let value_len =
+      u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
+
+    Self {
+      ptr,
+      key_len,
+      value_len,
+      cmp: Default::default(),
     }
   }
 }

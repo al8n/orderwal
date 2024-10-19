@@ -1,6 +1,6 @@
 use crate::{
   memtable::Memtable,
-  sealed::{self, Constructable},
+  sealed::{self, Constructable, WithVersion},
   wal::{
     bytes::pointer::{Pointer, VersionPointer},
     generic::{GenericComparator, GenericPointer, GenericVersionPointer},
@@ -129,7 +129,7 @@ impl<K, V, M, S> crate::wal::generic::mvcc::Writer<K, V> for GenericOrderWal<K, 
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
-  M: Memtable<Pointer = GenericVersionPointer<K, V>> + 'static,
+  M: Memtable<Pointer = GenericVersionPointer<K, V>> + WithVersion + 'static,
   GenericVersionPointer<K, V>: Ord,
   S: 'static,
 {
@@ -226,7 +226,7 @@ where
 
 impl<M, C, S> crate::wal::bytes::mvcc::Writer for OrderWal<M, C, S>
 where
-  M: Memtable<Pointer = VersionPointer<C>> + 'static,
+  M: Memtable<Pointer = VersionPointer<C>> + WithVersion + 'static,
   C: Comparator + Send + 'static,
   S: 'static,
 {

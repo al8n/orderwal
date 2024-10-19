@@ -118,15 +118,25 @@ pub mod types {
 }
 
 mod internal_iter;
-mod memtable;
+/// The memory table implementation.
+pub mod memtable;
+
 mod sealed;
 
 bitflags::bitflags! {
-  /// The flags of the entry.
+  /// The flags for each atomic write.
   struct Flags: u8 {
     /// First bit: 1 indicates committed, 0 indicates uncommitted
     const COMMITTED = 0b00000001;
     /// Second bit: 1 indicates batching, 0 indicates single entry
     const BATCHING = 0b00000010;
+  }
+}
+
+bitflags::bitflags! {
+  /// The flags for each entry.
+  struct EntryFlags: u8 {
+    /// First bit: 1 indicates removed
+    const REMOVED = 0b00000001;
   }
 }

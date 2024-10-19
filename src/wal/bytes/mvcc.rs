@@ -28,6 +28,7 @@ use super::{
 pub trait Reader: Constructable
 where
   <Self::Memtable as Memtable>::Pointer: WithVersion,
+  Self::Memtable: WithVersion,
 {
   /// Returns the reserved space in the WAL.
   ///
@@ -293,6 +294,7 @@ impl<T> Reader for T
 where
   T: Constructable,
   <T::Memtable as Memtable>::Pointer: WithVersion,
+  T::Memtable: WithVersion,
 {
 }
 
@@ -300,6 +302,7 @@ where
 pub trait Writer: Reader
 where
   <Self::Memtable as Memtable>::Pointer: WithVersion,
+  Self::Memtable: WithVersion,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -446,7 +449,7 @@ where
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
       Among::Left(e) => Either::Left(e),
-      Among::Middle(e) => Either::Right(e.into()),
+      Among::Middle(e) => Either::Right(Error::InsufficientSpace(e)),
       Among::Right(e) => Either::Right(e),
     })
   }
@@ -466,7 +469,7 @@ where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
-      Among::Left(e) => Either::Right(e.into()),
+      Among::Left(e) => Either::Right(Error::InsufficientSpace(e)),
       Among::Middle(e) => Either::Left(e),
       Among::Right(e) => Either::Right(e),
     })

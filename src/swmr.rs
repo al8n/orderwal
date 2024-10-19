@@ -8,15 +8,20 @@ pub mod base {
 
   use super::{reader, writer};
 
-  use crate::memtable::linked::LinkedTable as BaseLinkedTable;
+  use crate::memtable::{
+    arena::ArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
+  };
 
   pub use crate::wal::bytes::{
     base::{Reader, Writer},
     pointer::Pointer,
   };
 
-  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`crossbeam_skiplist::SkipSet`].
+  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`LinkedTable`](BaseLinkedTable).
   pub type LinkedTable<C> = BaseLinkedTable<Pointer<C>>;
+
+  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`ArenaTable`](BaseArenaTable).
+  pub type ArenaTable<C> = BaseArenaTable<Pointer<C>>;
 
   /// An ordered write-ahead log implementation for multiple threads environments.
   ///
@@ -47,15 +52,20 @@ pub mod multiple_version {
 
   use super::{reader, writer};
 
-  use crate::memtable::linked::LinkedTable as BaseLinkedTable;
+  use crate::memtable::{
+    arena::VersionedArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
+  };
 
   pub use crate::wal::bytes::{
     mvcc::{Reader, Writer},
     pointer::VersionPointer,
   };
 
-  /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`crossbeam_skiplist::SkipSet`].
+  /// A memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`LinkedTable`](BaseLinkedTable).
   pub type LinkedTable<C> = BaseLinkedTable<VersionPointer<C>>;
+
+  /// A memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`VersionedArenaTable`](BaseArenaTable).
+  pub type ArenaTable<C> = BaseArenaTable<VersionPointer<C>>;
 
   /// A multiple versioned ordered write-ahead log implementation for multiple threads environments.
   ///
@@ -83,15 +93,20 @@ pub mod generic {
   use dbutils::checksum::Crc32;
 
   use super::{reader, writer};
-  use crate::memtable::linked::LinkedTable as BaseLinkedTable;
+  use crate::memtable::{
+    arena::ArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
+  };
 
   pub use crate::wal::generic::{
     base::{Reader, Writer},
     GenericPointer,
   };
 
-  /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`crossbeam_skiplist::SkipSet`].
+  /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`LinkedTable`](BaseLinkedTable).
   pub type LinkedTable<K, V> = BaseLinkedTable<GenericPointer<K, V>>;
+
+  /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`ArenaTable`](BaseArenaTable).
+  pub type ArenaTable<K, V> = BaseArenaTable<GenericPointer<K, V>>;
 
   /// A generic ordered write-ahead log implementation for multiple threads environments.
   ///
@@ -121,15 +136,20 @@ pub mod generic_multiple_version {
   use dbutils::checksum::Crc32;
 
   use super::{reader, writer};
-  use crate::memtable::linked::LinkedTable as BaseLinkedTable;
+  use crate::memtable::{
+    arena::VersionedArenaTable as BaseArenaTable, linked::LinkedTable as BaseLinkedTable,
+  };
 
   pub use crate::wal::generic::{
     mvcc::{Reader, Writer},
     GenericVersionPointer,
   };
 
-  /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`crossbeam_skiplist::SkipSet`].
+  /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`LinkedTable`](BaseLinkedTable).
   pub type LinkedTable<K, V> = BaseLinkedTable<GenericVersionPointer<K, V>>;
+
+  /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`VersionedArenaTable`](BaseArenaTable).
+  pub type ArenaTable<K, V> = BaseArenaTable<GenericVersionPointer<K, V>>;
 
   /// A multiple versioned generic ordered write-ahead log implementation for multiple threads environments.
   ///

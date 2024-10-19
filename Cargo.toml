@@ -18,7 +18,7 @@ harness = false
 
 [features]
 default = ["std"]
-std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/std", "dbutils/default", "among/default", "faststr?/default", "bytes?/default", "smol_str?/default"]
+std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/std", "dbutils/default", "among/default", "faststr?/default", "bytes?/default", "smol_str?/default", "skl/memmap"]
 
 xxhash3 = ["dbutils/xxhash3", "std"]
 xxhash64 = ["dbutils/xxhash64", "std"]

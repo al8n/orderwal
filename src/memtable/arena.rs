@@ -1,139 +1,69 @@
-use core::ops::{Bound, RangeBounds};
+pub use skl::Height;
 
-use dbutils::{equivalent::Comparable, traits::{KeyRef, Type}};
-use skl::{map::{sync::{Entry, Iter, Range, SkipMap}, Map}, Arena as _, Container};
+mod table;
+mod multiple_version;
 
-use crate::error::Error;
+pub use table::ArenaTable;
+pub use multiple_version::VersionedArenaTable;
 
-use super::{Memtable, MemtableEntry};
-
-
-pub struct ArenaTable<P> {
-  map: SkipMap<P, ()>,
+/// Options to configure the [`ArenaTable`].
+#[derive(Debug, Copy, Clone)]
+pub struct ArenaTableOptions {
+  capacity: u32,
+  map_anon: bool,
+  max_height: Height,
 }
 
-impl<P> Default for ArenaTable<P> {
+impl Default for ArenaTableOptions {
   #[inline]
   fn default() -> Self {
-    todo!()
+    Self {
+      capacity: 2048,
+      map_anon: false,
+      max_height: Height::try_from(20u8).unwrap(),
+    }
   }
 }
 
-impl<'a, P> MemtableEntry<'a> for Entry<'a, P, ()>
-where
-  P: Type<Ref<'a> = P> + KeyRef<'a, P>,
-{
-  type Pointer = P;
-
+impl ArenaTableOptions {
+  /// Sets the capacity of the table.
   #[inline]
-  fn pointer(&self) -> &Self::Pointer {
-    self.key()
+  pub const fn with_capacity(mut self, capacity: u32) -> Self {
+    self.capacity = capacity;
+    self
   }
 
+  /// Sets the table to use anonymous memory.
   #[inline]
-  fn next(&mut self) -> Option<Self> {
-    Entry::next(self)
+  pub const fn with_map_anon(mut self, map_anon: bool) -> Self {
+    self.map_anon = map_anon;
+    self
   }
 
+  /// Sets the maximum height of the table.
   #[inline]
-  fn prev(&mut self) -> Option<Self> {
-    Entry::prev(self)
+  pub const fn with_max_height(mut self, max_height: Height) -> Self {
+    self.max_height = max_height;
+    self
+  }
+
+  /// Returns the capacity of the table.
+  #[inline]
+  pub const fn capacity(&self) -> u32 {
+    self.capacity
+  }
+
+  /// Returns `true` if the table is using anonymous memory.
+  #[inline]
+  pub const fn map_anon(&self) -> bool {
+    self.map_anon
+  }
+
+  /// Returns the maximum height of the table.
+  #[inline]
+  pub const fn max_height(&self) -> Height {
+    self.max_height
   }
 }
 
-impl<P> Memtable for ArenaTable<P>
-where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static,
-{
-  type Pointer = P;
 
-  type Item<'a> = Entry<'a, Self::Pointer, ()>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
-  type Iterator<'a> = Iter<'a, P, ()>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
-  type Range<'a, Q, R> = Range<'a, P, (), Q, R>
-  where
-    Self::Pointer: 'a,
-    Self: 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
-  
-  type Options = ();
-
-  #[inline]
-  fn new(_: Self::Options) -> Result<Self, Error> {
-    todo!()
-  }
-
-  #[inline]
-  fn len(&self) -> usize {
-    self.map.len()
-  }
-
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<Self::Pointer>,
-  {
-    self.map.upper_bound(bound)
-  }
-
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<Self::Pointer>,
-  {
-    self.map.lower_bound(bound)
-  }
-
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
-  where
-    Self::Pointer: Ord + 'static,
-  {
-    self.map.insert(&ele, &()).map(|_| ()).map_err(|_| Error::insufficient_space(0, 0))
-  }
-
-  fn first(&self) -> Option<Self::Item<'_>>
-  where
-    Self::Pointer: Ord,
-  {
-    self.map.first()
-  }
-
-  fn last(&self) -> Option<Self::Item<'_>>
-  where
-    Self::Pointer: Ord,
-  {
-    self.map.last()
-  }
-
-  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<Self::Pointer>,
-  {
-    self.map.get(key)
-  }
-
-  fn contains<Q>(&self, key: &Q) -> bool
-  where
-    Q: ?Sized + Comparable<Self::Pointer>,
-  {
-    self.map.contains_key(key)
-  }
-
-  fn iter(&self) -> Self::Iterator<'_> {
-    self.map.iter()
-  }
-
-  fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
-  where
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>,
-  {
-    self.map.range(range)
-  }
-}

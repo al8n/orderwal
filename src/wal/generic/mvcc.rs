@@ -26,6 +26,7 @@ use super::{entry::*, iter::*, GenericComparator, GenericQueryRange, Query, Slic
 pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<Comparator = GenericComparator<K>>
 where
   <Self::Memtable as memtable::Memtable>::Pointer: WithVersion + GenericPointer<K, V>,
+  Self::Memtable: WithVersion,
 {
   /// Returns the reserved space in the WAL.
   ///
@@ -420,6 +421,7 @@ impl<T, K, V> Reader<K, V> for T
 where
   T: Constructable<Comparator = GenericComparator<K>>,
   <T::Memtable as memtable::Memtable>::Pointer: WithVersion + GenericPointer<K, V>,
+  T::Memtable: WithVersion,
   K: ?Sized,
   V: ?Sized,
 {
@@ -430,6 +432,7 @@ pub trait Writer<K: ?Sized, V: ?Sized>: Reader<K, V>
 where
   <Self::Memtable as memtable::Memtable>::Pointer: WithVersion + GenericPointer<K, V>,
   Self::Reader: Reader<K, V, Memtable = Self::Memtable>,
+  Self::Memtable: WithVersion,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]

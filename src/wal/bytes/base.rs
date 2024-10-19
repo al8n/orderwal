@@ -432,7 +432,7 @@ where
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
       Among::Left(e) => Either::Left(e),
-      Among::Middle(e) => Either::Right(e.into()),
+      Among::Middle(e) => Either::Right(Error::InsufficientSpace(e)),
       Among::Right(e) => Either::Right(e),
     })
   }
@@ -452,7 +452,7 @@ where
     <Self::Memtable as Memtable>::Pointer: Pointer<Comparator = Self::Comparator> + Ord + 'static,
   {
     self.as_core_mut().insert_batch(batch).map_err(|e| match e {
-      Among::Left(e) => Either::Right(e.into()),
+      Among::Left(e) => Either::Right(Error::InsufficientSpace(e)),
       Among::Middle(e) => Either::Left(e),
       Among::Right(e) => Either::Right(e),
     })
