@@ -2,20 +2,22 @@ use core::{iter::FusedIterator, marker::PhantomData};
 
 use dbutils::CheapClone;
 
+use crate::memtable::BaseTable;
+
 use super::{
-  memtable::{Memtable, MemtableEntry},
+  memtable::MemtableEntry,
   sealed::Pointer,
 };
 
 /// Iterator over the entries in the WAL.
-pub struct Iter<'a, I, M: Memtable> {
+pub struct Iter<'a, I, M: BaseTable> {
   iter: I,
   version: Option<u64>,
   pointer: Option<M::Pointer>,
   _m: PhantomData<&'a ()>,
 }
 
-impl<I, M: Memtable> Iter<'_, I, M> {
+impl<I, M: BaseTable> Iter<'_, I, M> {
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: I) -> Self {
     Self {
@@ -35,7 +37,7 @@ impl<I, M: Memtable> Iter<'_, I, M> {
 
 impl<'a, I, M> Iterator for Iter<'a, I, M>
 where
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
@@ -73,7 +75,7 @@ where
 
 impl<'a, I, M> DoubleEndedIterator for Iter<'a, I, M>
 where
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
@@ -109,21 +111,21 @@ where
 
 impl<'a, I, M> FusedIterator for Iter<'a, I, M>
 where
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// An iterator over a subset of the entries in the WAL.
-pub struct Range<'a, R, M: Memtable> {
+pub struct Range<'a, R, M: BaseTable> {
   iter: R,
   version: Option<u64>,
   pointer: Option<M::Pointer>,
   _m: PhantomData<&'a ()>,
 }
 
-impl<R, M: Memtable> Range<'_, R, M> {
+impl<R, M: BaseTable> Range<'_, R, M> {
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: R) -> Self {
     Self {
@@ -143,7 +145,7 @@ impl<R, M: Memtable> Range<'_, R, M> {
 
 impl<'a, R, M> Iterator for Range<'a, R, M>
 where
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   R: Iterator<Item = M::Item<'a>>,
 {
@@ -181,7 +183,7 @@ where
 
 impl<'a, R, M> DoubleEndedIterator for Range<'a, R, M>
 where
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   R: DoubleEndedIterator<Item = M::Item<'a>>,
 {
@@ -216,7 +218,7 @@ where
 
 impl<'a, R, M> FusedIterator for Range<'a, R, M>
 where
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   R: FusedIterator<Item = M::Item<'a>>,
 {

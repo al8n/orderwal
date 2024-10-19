@@ -1,13 +1,13 @@
-use core::{marker::PhantomData, ops::Bound};
+use core::marker::PhantomData;
 
-use dbutils::equivalent::Comparable;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  memtable::{Memtable, MemtableEntry as _},
-  sealed::{Pointer, Wal},
+  memtable::BaseTable,
+  sealed::Wal,
   Options,
 };
+
 pub struct OrderCore<K: ?Sized, V: ?Sized, M, S> {
   pub(super) arena: Arena,
   pub(super) map: M,
@@ -22,7 +22,7 @@ impl<K, V, M, S> Wal<K, V, S> for OrderCore<K, V, M, S>
 where
   K: ?Sized,
   V: ?Sized,
-  M: Memtable,
+  M: BaseTable,
   M::Pointer: Ord + Send + 'static,
 {
   type Allocator = Arena;
@@ -63,18 +63,6 @@ where
     &self.opts
   }
 
-  /// Returns the number of entries in the WAL.
-  #[inline]
-  fn len(&self) -> usize {
-    self.map.len()
-  }
-
-  /// Returns `true` if the WAL is empty.
-  #[inline]
-  fn is_empty(&self) -> bool {
-    self.map.is_empty()
-  }
-
   #[inline]
   fn maximum_version(&self) -> u64 {
     self.max_version
@@ -98,48 +86,6 @@ where
   #[inline]
   fn allocator(&self) -> &Self::Allocator {
     &self.arena
-  }
-
-  #[inline]
-  fn upper_bound<Q>(&self, version: Option<u64>, bound: Bound<&Q>) -> Option<M::Item<'_>>
-  where
-    M::Pointer: Pointer,
-    Q: ?Sized + Comparable<M::Pointer>,
-  {
-    match version {
-      None => self.map.upper_bound(bound),
-      Some(version) => {
-        let mut ent = self.map.upper_bound(bound);
-        loop {
-          match ent {
-            Some(ent) if ent.pointer().version() <= version => return Some(ent),
-            Some(mut e) => ent = e.next(),
-            None => return None,
-          }
-        }
-      }
-    }
-  }
-
-  #[inline]
-  fn lower_bound<Q>(&self, version: Option<u64>, bound: core::ops::Bound<&Q>) -> Option<M::Item<'_>>
-  where
-    M::Pointer: Pointer,
-    Q: ?Sized + Comparable<M::Pointer>,
-  {
-    match version {
-      None => self.map.lower_bound(bound),
-      Some(version) => {
-        let mut ent = self.map.lower_bound(bound);
-        loop {
-          match ent {
-            Some(ent) if ent.pointer().version() <= version => return Some(ent),
-            Some(mut e) => ent = e.next(),
-            None => return None,
-          }
-        }
-      }
-    }
   }
 
   #[inline]

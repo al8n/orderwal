@@ -1,7 +1,7 @@
 use core::ops::{Bound, RangeBounds};
 use dbutils::equivalent::Comparable;
 
-use crate::{error::Error, sealed::WithVersion};
+use crate::{error::Error, sealed::{Pointer, WithVersion, WithoutVersion}};
 
 /// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].
 pub mod linked;
@@ -31,19 +31,28 @@ pub trait VersionedMemtableEntry<'a>: MemtableEntry<'a> {
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait Memtable {
+pub trait BaseTable {
   /// The pointer type.
   type Pointer;
+
+  /// The configuration options for the memtable.
+  type Options;
+
+  /// The error type may be returned when constructing the memtable.
+  type ConstructionError;
+
   /// The item returned by the iterator or query methods.
   type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer>
   where
     Self::Pointer: 'a,
     Self: 'a;
+
   /// The iterator type.
   type Iterator<'a>: DoubleEndedIterator<Item = Self::Item<'a>>
   where
     Self::Pointer: 'a,
     Self: 'a;
+
   /// The range iterator type.
   type Range<'a, Q, R>: Iterator<Item = Self::Item<'a>>
   where
@@ -52,17 +61,22 @@ pub trait Memtable {
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
 
-  /// The configuration options for the memtable.
-  type Options;
-
-  /// The error type may be returned when constructing the memtable.
-  type ConstructionError;
-
   /// Creates a new memtable with the specified options.
   fn new(opts: Self::Options) -> Result<Self, Self::ConstructionError>
   where
     Self: Sized;
+  
+  /// Inserts a pointer into the memtable.
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  where
+    Self::Pointer: Pointer + Ord + 'static;
+}
 
+/// A memory table which is used to store pointers to the underlying entries.
+pub trait Memtable: BaseTable
+where
+  Self::Pointer: WithoutVersion,
+{
   /// Returns the number of entries in the memtable.
   fn len(&self) -> usize;
 
@@ -80,11 +94,6 @@ pub trait Memtable {
   fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
     Q: ?Sized + Comparable<Self::Pointer>;
-
-  /// Inserts a pointer into the memtable.
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
-  where
-    Self::Pointer: Ord + 'static;
 
   /// Returns the first pointer in the memtable.
   fn first(&self) -> Option<Self::Item<'_>>
@@ -117,38 +126,21 @@ pub trait Memtable {
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait VersionedMemtable {
-  /// The pointer type.
-  type Pointer: WithVersion;
-  /// The item returned by the iterator or query methods.
-  type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
-
+pub trait VersionedMemtable: BaseTable
+where
+  Self::Pointer: WithVersion,
+{
   /// The item returned by the iterator or query methods.
   type VersionedItem<'a>: VersionedMemtableEntry<'a, Pointer = Self::Pointer>
   where
     Self::Pointer: 'a,
     Self: 'a;
 
-  /// The iterator type which can only yields latest version of the entries in the memtable.
-  type Iterator<'a>: DoubleEndedIterator<Item = Self::Item<'a>>
-  where
-    Self::Pointer: 'a,
-    Self: 'a;
   /// The iterator type which can yields all the entries in the memtable.
   type AllIterator<'a>: Iterator<Item = Self::VersionedItem<'a>>
   where
     Self::Pointer: 'a,
     Self: 'a;
-  /// The range iterator type which can only yields latest version of the entries in the memtable.
-  type Range<'a, Q, R>: Iterator<Item = Self::Item<'a>>
-  where
-    Self::Pointer: 'a,
-    Self: 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
 
   /// The range iterator type which can yields all the entries in the memtable.
   type AllRange<'a, Q, R>: Iterator<Item = Self::VersionedItem<'a>>
@@ -158,23 +150,13 @@ pub trait VersionedMemtable {
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
 
-  /// The configuration options for the memtable.
-  type Options;
-
-  /// The error type may be returned when constructing the memtable.
-  type ConstructionError;
-
-  /// Creates a new memtable with the specified options.
-  fn new(opts: Self::Options) -> Result<Self, Self::ConstructionError>
-  where
-    Self: Sized;
-
   /// Returns the number of entries in the memtable.
-  fn len(&self) -> usize;
+  fn len(&self, version: u64) -> usize;
 
   /// Returns `true` if the memtable is empty.
-  fn is_empty(&self) -> bool {
-    self.len() == 0
+  #[inline]
+  fn is_empty(&self, version: u64) -> bool {
+    self.len(version) == 0
   }
 
   /// Returns the upper bound of the memtable.
@@ -186,11 +168,6 @@ pub trait VersionedMemtable {
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
     Q: ?Sized + Comparable<Self::Pointer>;
-
-  /// Inserts a pointer into the memtable.
-  fn insert(&mut self, version: u64, ele: Self::Pointer) -> Result<(), Error>
-  where
-    Self::Pointer: Ord + 'static;
 
   /// Returns the first pointer in the memtable.
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
@@ -223,7 +200,7 @@ pub trait VersionedMemtable {
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-
+  
   /// Returns an iterator over all the entries in a subset of the memtable.
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::AllRange<'a, Q, R>
   where

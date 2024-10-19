@@ -1,5 +1,5 @@
 use crate::{
-  memtable::Memtable,
+  memtable::{BaseTable, Memtable, VersionedMemtable},
   sealed::{self, Constructable, WithVersion},
   wal::{GenericPointer, GenericVersionPointer},
 };
@@ -40,7 +40,7 @@ where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: sealed::Pointer + Ord + Send + 'static,
 {
   type Allocator = Arena;
@@ -72,7 +72,7 @@ where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: sealed::Pointer + Ord + Send + 'static,
 {
   /// Returns the path of the WAL if it is backed by a file.
@@ -110,7 +110,7 @@ impl<K, V, M, S> crate::wal::multiple_version::Writer<K, V> for GenericOrderWal<
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
-  M: Memtable<Pointer = GenericVersionPointer<K, V>> + WithVersion + 'static,
+  M: VersionedMemtable<Pointer = GenericVersionPointer<K, V>> + WithVersion + 'static,
   GenericVersionPointer<K, V>: Ord,
   S: 'static,
 {

@@ -5,7 +5,7 @@ use skl::either::Either;
 use super::{
   checksum::BuildChecksumer,
   error::Error,
-  memtable::Memtable,
+  memtable::BaseTable,
   options::{arena_options, ArenaOptionsExt, Options},
   sealed::{Constructable, Immutable, Pointer},
 };
@@ -13,7 +13,7 @@ use super::{
 /// A write-ahead log builder.
 pub struct Builder<M, S = Crc32>
 where
-  M: Memtable,
+  M: BaseTable,
 {
   pub(super) opts: Options,
   pub(super) cks: S,
@@ -22,7 +22,7 @@ where
 
 impl<M> Default for Builder<M>
 where
-  M: Memtable,
+  M: BaseTable,
   M::Options: Default,
 {
   #[inline]
@@ -33,7 +33,7 @@ where
 
 impl<M> Builder<M>
 where
-  M: Memtable,
+  M: BaseTable,
   M::Options: Default,
 {
   /// Returns a new write-ahead log builder with the given options.
@@ -49,7 +49,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: Memtable,
+  M: BaseTable,
 {
   /// Returns a new write-ahead log builder with the new checksumer
   ///
@@ -117,7 +117,7 @@ where
   #[inline]
   pub fn change_memtable<NM>(self) -> Builder<NM, S>
   where
-    NM: Memtable,
+    NM: BaseTable,
     NM::Options: Default,
   {
     Builder {
@@ -139,7 +139,7 @@ where
   #[inline]
   pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, S>
   where
-    NM: Memtable,
+    NM: BaseTable,
   {
     Builder {
       opts: self.opts,
@@ -409,7 +409,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: Memtable,
+  M: BaseTable,
 {
   /// Sets the option for read access.
   ///
@@ -638,7 +638,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: Memtable,
+  M: BaseTable,
 {
   /// Returns `true` if the file should be opened with read access.
   ///
@@ -778,7 +778,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: Memtable,
+  M: BaseTable,
 {
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///
@@ -794,7 +794,7 @@ where
   /// ```
   pub fn alloc<K, V, W>(
     self,
-  ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
+  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
   where
     K: ?Sized,
     V: ?Sized,
@@ -828,7 +828,7 @@ where
   /// ```
   pub fn map_anon<K, V, W>(
     self,
-  ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
+  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
   where
     K: ?Sized,
     V: ?Sized,
@@ -881,14 +881,14 @@ where
   pub unsafe fn map<K, V, W, P>(
     self,
     path: P,
-  ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
+  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
   where
     K: ?Sized,
     V: ?Sized,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<K, V, Memtable = M, Checksumer = S> + Immutable,
-    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
+    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
       .map_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -928,14 +928,14 @@ where
   pub unsafe fn map_with_path_builder<K, V, W, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<W, Among<E, <W::Memtable as Memtable>::ConstructionError, Error>>
+  ) -> Result<W, Among<E, <W::Memtable as BaseTable>::ConstructionError, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     K: ?Sized,
     V: ?Sized,
     S: BuildChecksumer,
     W: Constructable<K, V, Memtable = M, Checksumer = S> + Immutable,
-    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
+    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     let Self {
       opts,
@@ -986,14 +986,14 @@ where
   pub unsafe fn map_mut<K, V, W, P>(
     self,
     path: P,
-  ) -> Result<W, Either<<W::Memtable as Memtable>::ConstructionError, Error>>
+  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
   where
     K: ?Sized,
     V: ?Sized,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<K, V, Memtable = M, Checksumer = S>,
-    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
+    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
       .map_mut_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -1032,14 +1032,14 @@ where
   pub unsafe fn map_mut_with_path_builder<K, V, W, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<W, Among<E, <W::Memtable as Memtable>::ConstructionError, Error>>
+  ) -> Result<W, Among<E, <W::Memtable as BaseTable>::ConstructionError, Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     K: ?Sized,
     V: ?Sized,
     S: BuildChecksumer,
     W: Constructable<K, V, Memtable = M, Checksumer = S>,
-    <W::Memtable as Memtable>::Pointer: Pointer + Ord + 'static,
+    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     let path = path_builder().map_err(Among::Left)?;
     let exist = path.exists();

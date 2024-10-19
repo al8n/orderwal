@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rarena_allocator::sync::Arena;
 
 use crate::{
-  memtable::Memtable,
+  memtable::BaseTable,
   sealed::{self, Constructable, Immutable},
   swmr::wal::OrderCore,
 };
@@ -33,7 +33,7 @@ where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: Memtable + 'static,
+  M: BaseTable + 'static,
   M::Pointer: sealed::Pointer + Ord + Send + 'static,
 {
   type Allocator = Arena;
