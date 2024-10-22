@@ -35,7 +35,7 @@ bitflags::bitflags! {
   }
 }
 
-pub trait Pointer: Sized {
+pub trait Pointer: Sized + Copy {
   fn new(flag: EntryFlags, klen: usize, vlen: usize, ptr: *const u8) -> Self;
 
   fn as_key_slice<'a>(&self) -> &'a [u8];
@@ -86,9 +86,7 @@ pub trait WalReader<K: ?Sized, V: ?Sized, S> {
   }
 
   #[inline]
-  fn iter(
-    &self,
-  ) -> Iter<'_, <Self::Memtable as BaseTable>::Iterator<'_>, Self::Memtable>
+  fn iter(&self) -> Iter<'_, <Self::Memtable as BaseTable>::Iterator<'_>, Self::Memtable>
   where
     Self::Memtable: Memtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithoutVersion,
@@ -150,26 +148,20 @@ pub trait WalReader<K: ?Sized, V: ?Sized, S> {
     self.memtable().get(key)
   }
 
-  fn upper_bound<Q>(
-    &self,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Pointer: Pointer + WithoutVersion
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithoutVersion,
   {
     self.memtable().upper_bound(bound)
   }
 
-  fn lower_bound<Q>(
-    &self,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Pointer: Pointer + WithoutVersion
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithoutVersion,
   {
     self.memtable().lower_bound(bound)
   }
@@ -210,7 +202,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64,) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn first(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Self::Memtable: VersionedMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
@@ -223,7 +215,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(&self, version: u64,) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn last(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Self::Memtable: VersionedMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
@@ -272,12 +264,12 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
     Self::Memtable: VersionedMemtable,
-    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     if !self.contains_version(version) {
       return None;
     }
-  
+
     self.memtable().upper_bound(version, bound)
   }
 
@@ -289,12 +281,12 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
     Self::Memtable: VersionedMemtable,
-    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     if !self.contains_version(version) {
       return None;
     }
-  
+
     self.memtable().lower_bound(version, bound)
   }
 
@@ -480,11 +472,12 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
     let res = {
       // 1 byte for entry flag
-      let klen = 1 + if version.is_some() {
-        kb.len() + VERSION_SIZE
-      } else {
-        kb.len()
-      };
+      let klen = 1
+        + if version.is_some() {
+          kb.len() + VERSION_SIZE
+        } else {
+          kb.len()
+        };
 
       let vlen = vb.len();
       self
@@ -680,7 +673,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
           .map_err(Among::Middle)?;
           cursor += vlen;
         }
-        
+
         ent.set_pointer(<<Self::Memtable as BaseTable>::Pointer as Pointer>::new(
           ent.flag, klen, vlen, ptr,
         ));
@@ -746,7 +739,7 @@ where
   V: ?Sized,
   T: Wal<K, V, S>,
   T::Memtable: Memtable,
-  <T::Memtable as BaseTable>::Pointer: WithoutVersion
+  <T::Memtable as BaseTable>::Pointer: WithoutVersion,
 {
   type Allocator = T::Allocator;
 
@@ -764,7 +757,7 @@ where
   V: ?Sized,
   T: Wal<K, V, S>,
   T::Memtable: VersionedMemtable,
-  <T::Memtable as BaseTable>::Pointer: WithVersion
+  <T::Memtable as BaseTable>::Pointer: WithVersion,
 {
   type Allocator = T::Allocator;
 
@@ -926,12 +919,8 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           let ptr = arena.get_pointer(cursor + STATUS_SIZE + readed);
 
           let flag = EntryFlags::from_bits_retain(*ptr);
-          let pointer: <Self::Memtable as BaseTable>::Pointer = Pointer::new(
-            flag,
-            key_len,
-            value_len,
-            ptr,
-          );
+          let pointer: <Self::Memtable as BaseTable>::Pointer =
+            Pointer::new(flag, key_len, value_len, ptr);
 
           let version = pointer.version();
           minimum_version = minimum_version.min(version);
@@ -992,12 +981,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
 
             let ptr = arena.get_pointer(cursor + STATUS_SIZE + readed + sub_cursor + kvlen);
             let flag = EntryFlags::from_bits_retain(*ptr);
-            let ptr: <Self::Memtable as BaseTable>::Pointer = Pointer::new(
-              flag,
-              klen,
-              vlen,
-              ptr,
-            );
+            let ptr: <Self::Memtable as BaseTable>::Pointer = Pointer::new(flag, klen, vlen, ptr);
 
             let version = ptr.version();
             minimum_version = minimum_version.min(version);

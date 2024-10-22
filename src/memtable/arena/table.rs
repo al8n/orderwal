@@ -6,18 +6,17 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use skl::{
-  map::{
+  either::Either, map::{
     sync::{Entry, Iter, Range, SkipMap},
     Map as _,
-  },
-  Arena as _, Container as _, Options,
+  }, Arena as _, Container as _, Options
 };
 
-use crate::{error::Error, memtable::BaseTable, sealed::WithoutVersion};
+use crate::{error::Error, memtable::BaseTable, sealed::{Pointer, WithoutVersion}};
 
 use super::{
   super::{Memtable, MemtableEntry},
-  ArenaTableOptions,
+  TableOptions,
 };
 
 impl<'a, P> MemtableEntry<'a> for Entry<'a, P, ()>
@@ -43,11 +42,11 @@ where
 }
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
-pub struct ArenaTable<P> {
+pub struct Table<P> {
   map: SkipMap<P, ()>,
 }
 
-impl<P> BaseTable for ArenaTable<P>
+impl<P> BaseTable for Table<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static,
 {
@@ -73,7 +72,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
 
-  type Options = ArenaTableOptions;
+  type Options = TableOptions;
   type ConstructionError = skl::Error;
 
   #[inline]
@@ -108,7 +107,7 @@ where
   }
 }
 
-impl<P> Memtable for ArenaTable<P>
+impl<P> Memtable for Table<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithoutVersion + 'static,
 {
@@ -171,10 +170,18 @@ where
     self.map.range(range)
   }
 
-  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  #[allow(single_use_lifetimes)]
+  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
   where
-    Self::Pointer: Ord + 'static
+    Self::Pointer: Pointer + Ord + 'static,
   {
-    self.map.get_or_remove(&key)
+    self.map.get_or_remove(key)
+      .map_err(|e| match e {
+        Either::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
+          requested,
+          available,
+        })) => Error::memtable_insufficient_space(requested as u64, available),
+        _ => unreachable!(),
+      })
   }
 }

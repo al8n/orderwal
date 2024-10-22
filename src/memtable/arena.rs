@@ -3,18 +3,18 @@ pub use skl::Height;
 mod multiple_version;
 mod table;
 
-pub use multiple_version::VersionedArenaTable;
-pub use table::ArenaTable;
+pub use multiple_version::MultipleVersionTable;
+pub use table::Table;
 
-/// Options to configure the [`ArenaTable`].
+/// Options to configure the [`Table`] or [`MultipleVersionTable`].
 #[derive(Debug, Copy, Clone)]
-pub struct ArenaTableOptions {
+pub struct TableOptions {
   capacity: u32,
   map_anon: bool,
   max_height: Height,
 }
 
-impl Default for ArenaTableOptions {
+impl Default for TableOptions {
   #[inline]
   fn default() -> Self {
     Self {
@@ -25,7 +25,7 @@ impl Default for ArenaTableOptions {
   }
 }
 
-impl ArenaTableOptions {
+impl TableOptions {
   /// Sets the capacity of the table.
   #[inline]
   pub const fn with_capacity(mut self, capacity: u32) -> Self {

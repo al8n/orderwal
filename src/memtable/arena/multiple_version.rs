@@ -1,12 +1,24 @@
-use core::{ops::{Bound, RangeBounds}, sync::atomic::Ordering};
+use core::ops::{Bound, RangeBounds};
 
 use among::Among;
-use dbutils::{traits::{KeyRef, Type}, equivalent::Comparable};
-use skl::{versioned::{sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry}, VersionedMap as _}, Options, VersionedContainer as _};
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
+use skl::{
+  either::Either, versioned::{
+    sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry},
+    VersionedMap as _,
+  }, Options, VersionedContainer as _
+};
 
-use crate::{error::Error, memtable::{BaseTable, MemtableEntry, VersionedMemtable, VersionedMemtableEntry}, sealed::{Pointer, WithVersion}};
+use crate::{
+  error::Error,
+  memtable::{BaseTable, MemtableEntry, VersionedMemtable, VersionedMemtableEntry},
+  sealed::{Pointer, WithVersion},
+};
 
-use super::ArenaTableOptions;
+use super::TableOptions;
 
 impl<'a, P> MemtableEntry<'a> for Entry<'a, P, ()>
 where
@@ -63,11 +75,11 @@ where
 }
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
-pub struct VersionedArenaTable<P> {
+pub struct MultipleVersionTable<P> {
   map: SkipMap<P, ()>,
 }
 
-impl<P> BaseTable for VersionedArenaTable<P>
+impl<P> BaseTable for MultipleVersionTable<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
 {
@@ -78,13 +90,13 @@ where
   where
     Self::Pointer: 'a,
     Self: 'a;
-  
+
   type Iterator<'a>
     = Iter<'a, Self::Pointer, ()>
   where
     Self::Pointer: 'a,
     Self: 'a;
-  
+
   type Range<'a, Q, R>
     = Range<'a, Self::Pointer, (), Q, R>
   where
@@ -92,8 +104,8 @@ where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
-  type Options = ArenaTableOptions;
+
+  type Options = TableOptions;
 
   type ConstructionError = skl::Error;
 
@@ -119,18 +131,21 @@ where
   where
     Self::Pointer: Pointer + Ord + 'static,
   {
-    self.map.insert(ele.version(), &ele, &()).map(|_| ()).map_err(|e| match e {
-      Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
-        requested,
-        available,
-      })) => Error::memtable_insufficient_space(requested as u64, available),
-      _ => unreachable!(),
-    })
+    self
+      .map
+      .insert(ele.version(), &ele, &())
+      .map(|_| ())
+      .map_err(|e| match e {
+        Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
+          requested,
+          available,
+        })) => Error::memtable_insufficient_space(requested as u64, available),
+        _ => unreachable!(),
+      })
   }
 }
 
-
-impl<P> VersionedMemtable for VersionedArenaTable<P>
+impl<P> VersionedMemtable for MultipleVersionTable<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
 {
@@ -195,15 +210,15 @@ where
   {
     self.map.contains_key(version, key)
   }
-  
+
   fn iter(&self, version: u64) -> Self::Iterator<'_> {
     self.map.iter(version)
   }
-  
+
   fn iter_all_versions(&self, version: u64) -> Self::AllIterator<'_> {
     self.map.iter_all_versions(version)
   }
-  
+
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
@@ -211,17 +226,31 @@ where
   {
     self.map.range(version, range)
   }
-  
+
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::AllRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer> {
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
     self.map.range_all_versions(version, range)
   }
 
-  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  #[allow(single_use_lifetimes)]
+  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
   where
-    Self::Pointer: Pointer + Ord + 'static {
-    self.map.get_or_remove(key.version(), key, Ordering::AcqRel, Ordering::Relaxed)
+    Self::Pointer: Pointer + Ord + 'static,
+  {
+    self
+      .map
+      .get_or_remove(key.version(), key)
+      .map_err(|e| {
+        match e {
+          Either::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
+            requested,
+            available,
+          })) => Error::memtable_insufficient_space(requested as u64, available),
+          _ => unreachable!(),
+        }
+      })
   }
 }

@@ -205,7 +205,9 @@ where
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  fn last(
+    &self,
+  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -258,10 +260,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self
-      .as_core()
-      .get(&Query::new(key))
-      .map(GenericEntry::new)
+    self.as_core().get(&Query::new(key)).map(GenericEntry::new)
   }
 
   /// Gets the value associated with the key.

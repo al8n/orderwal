@@ -6,18 +6,18 @@ use dbutils::{
 };
 
 use crate::{
-  sealed::{Pointer, WithVersion, WithoutVersion, EntryFlags}, VERSION_SIZE
+  sealed::{EntryFlags, Pointer, WithVersion, WithoutVersion},
+  VERSION_SIZE,
 };
 
 const PTR_SIZE: usize = mem::size_of::<usize>();
 const U32_SIZE: usize = mem::size_of::<u32>();
 const ENTRY_FLAGS_SIZE: usize = mem::size_of::<EntryFlags>();
 
-
 #[doc(hidden)]
 pub struct GenericPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
-  /// 
+  ///
   /// | flag (1 byte) | version (8 bytes, optional) | key | value (optional) |
   ptr: *const u8,
   flag: EntryFlags,
@@ -141,7 +141,12 @@ where
   V: ?Sized,
 {
   #[inline]
-  pub(crate) const fn new(flag: EntryFlags, key_len: usize, value_len: usize, ptr: *const u8) -> Self {
+  pub(crate) const fn new(
+    flag: EntryFlags,
+    key_len: usize,
+    value_len: usize,
+    ptr: *const u8,
+  ) -> Self {
     Self {
       key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE) },
       value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + key_len) },
@@ -209,7 +214,7 @@ impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericPointer<K, V> {
 #[doc(hidden)]
 pub struct GenericVersionPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
-  /// 
+  ///
   /// | flag (1 byte) | version (8 bytes, optional) | key | value (optional) |
   ptr: *const u8,
   flag: EntryFlags,

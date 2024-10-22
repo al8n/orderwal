@@ -1,5 +1,6 @@
 use crate::{
-  sealed::{WithVersion, WithoutVersion, EntryFlags}, VERSION_SIZE
+  sealed::{EntryFlags, WithVersion, WithoutVersion},
+  VERSION_SIZE,
 };
 
 use super::entry::BufWriter;

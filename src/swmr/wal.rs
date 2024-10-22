@@ -2,11 +2,7 @@ use core::marker::PhantomData;
 
 use rarena_allocator::sync::Arena;
 
-use crate::{
-  memtable::BaseTable,
-  sealed::Wal,
-  Options,
-};
+use crate::{memtable::BaseTable, sealed::Wal, Options};
 
 pub struct OrderCore<K: ?Sized, V: ?Sized, M, S> {
   pub(super) arena: Arena,

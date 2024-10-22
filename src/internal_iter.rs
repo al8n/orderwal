@@ -4,10 +4,7 @@ use dbutils::CheapClone;
 
 use crate::memtable::BaseTable;
 
-use super::{
-  memtable::MemtableEntry,
-  sealed::Pointer,
-};
+use super::{memtable::MemtableEntry, sealed::Pointer};
 
 /// Iterator over the entries in the WAL.
 pub struct Iter<'a, I, M: BaseTable> {

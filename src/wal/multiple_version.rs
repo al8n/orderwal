@@ -99,14 +99,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> GenericRange<
-    'a,
-    K,
-    V,
-    R,
-    Q,
-    <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable,
-  >
+  ) -> GenericRange<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -114,11 +107,7 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericRange::new(
-      self
-        .as_core()
-        .range(version, GenericQueryRange::new(range)),
-    )
+    GenericRange::new(self.as_core().range(version, GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the keys in the WAL.
@@ -133,7 +122,7 @@ where
     Self::Memtable,
   >
   where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     GenericKeys::new(self.as_core().iter(version))
   }
@@ -144,13 +133,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> GenericRangeKeys<
-    'a,
-    K,
-    R,
-    Q,
-    <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable,
-  >
+  ) -> GenericRangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -158,11 +141,7 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericRangeKeys::new(
-      self
-        .as_core()
-        .range(version, GenericQueryRange::new(range)),
-    )
+    GenericRangeKeys::new(self.as_core().range(version, GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the values in the WAL.
@@ -177,7 +156,7 @@ where
     Self::Memtable,
   >
   where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     GenericValues::new(self.as_core().iter(version))
   }
@@ -188,14 +167,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> GenericRangeValues<
-    'a,
-    K,
-    V,
-    R,
-    Q,
-    <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable,
-  >
+  ) -> GenericRangeValues<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -203,11 +175,7 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericRangeValues::new(
-      self
-        .as_core()
-        .range(version, GenericQueryRange::new(range)),
-    )
+    GenericRangeValues::new(self.as_core().range(version, GenericQueryRange::new(range)))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -219,8 +187,7 @@ where
   where
     K: Type,
     V: Type,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
   {
     self
       .as_core()
@@ -237,10 +204,10 @@ where
   where
     K: Type,
     V: Type,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
   {
-    VersionedWalReader::last(self.as_core(), version).map(|ent| GenericEntry::with_version(ent, version))
+    VersionedWalReader::last(self.as_core(), version)
+      .map(|ent| GenericEntry::with_version(ent, version))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -517,8 +484,7 @@ where
     K: Type,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert(Some(version), kb, value.into())
   }
@@ -538,8 +504,7 @@ where
     K: Type + 'a,
     V: Type,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert(Some(version), key.into(), vb)
   }
@@ -557,8 +522,7 @@ where
     K: Type,
     V: Type,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert(Some(version), kb, vb)
   }
@@ -575,8 +539,7 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
       .as_core_mut()
@@ -590,12 +553,15 @@ where
     batch: &'a mut B,
   ) -> Result<(), Among<K::Error, V::Error, Error>>
   where
-    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = Generic<'a, K>, Value = Generic<'a, V>>,
+    B: Batch<
+      <Self::Memtable as memtable::BaseTable>::Pointer,
+      Key = Generic<'a, K>,
+      Value = Generic<'a, V>,
+    >,
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert_batch::<Self, _>(batch)
   }
@@ -612,8 +578,7 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert_batch::<Self, _>(batch)
   }
@@ -630,8 +595,7 @@ where
     K: Type + 'a,
     V: Type + 'a,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert_batch::<Self, _>(batch)
   }
@@ -647,8 +611,7 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer:
-      Pointer + Ord + 'static,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_core_mut().insert_batch::<Self, _>(batch)
   }

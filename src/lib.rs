@@ -130,4 +130,3 @@ bitflags::bitflags! {
     const BATCHING = 0b00000010;
   }
 }
-

@@ -1,7 +1,10 @@
 use core::ops::{Bound, RangeBounds};
 use dbutils::equivalent::Comparable;
 
-use crate::{error::Error, sealed::{Pointer, WithVersion, WithoutVersion}};
+use crate::{
+  error::Error,
+  sealed::{Pointer, WithVersion, WithoutVersion},
+};
 
 /// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].
 pub mod linked;
@@ -65,7 +68,7 @@ pub trait BaseTable {
   fn new(opts: Self::Options) -> Result<Self, Self::ConstructionError>
   where
     Self: Sized;
-  
+
   /// Inserts a pointer into the memtable.
   fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
   where
@@ -123,9 +126,10 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
+
   /// Removes the pointer associated with the key.
-  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  #[allow(single_use_lifetimes)]
+  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 }
@@ -196,15 +200,16 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
+
   /// Returns an iterator over all the entries in a subset of the memtable.
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::AllRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-  
+
   /// Removes the pointer associated with the key.
-  fn remove(&mut self, key: Self::Pointer) -> Option<Self::Item<'_>>
+  #[allow(single_use_lifetimes)]
+  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 }
