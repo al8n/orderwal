@@ -413,61 +413,18 @@ where
 
   /// Flushes the to disk.
   #[inline]
-  fn flush(&self) -> Result<(), Error> {
+  fn flush(&self) -> Result<(), Error<Self::Memtable>> {
     self.as_core().flush()
   }
 
   /// Flushes the to disk.
   #[inline]
-  fn flush_async(&self) -> Result<(), Error> {
+  fn flush_async(&self) -> Result<(), Error<Self::Memtable>> {
     self.as_core().flush_async()
   }
 
   /// Returns the read-only view for the WAL.
   fn reader(&self) -> Self::Reader;
-
-  // /// Get or insert a new entry into the WAL.
-  // #[inline]
-  // fn get_or_insert<'a>(
-  //   &'a mut self,
-  //   key: impl Into<Generic<'a, K>>,
-  //   val: impl Into<Generic<'a, V>>,
-  // ) -> Result<Option<V::Ref<'a>>, Among<K::Error, V::Error, Error>>
-  // where
-  //   K: Type + Ord + for<'b> Comparable<K::Ref<'b>> + 'a,
-  //   for<'b> K::Ref<'b>: KeyRef<'b, K>,
-  //   V: Type + 'a,
-  //   Query<'a, K, Generic<'a, K>>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-  //   <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Comparable<K> + Ord,
-  //   Self::Checksumer: BuildChecksumer,
-  // {
-
-  //   let key: Generic<'a, K> = key.into();
-  //   let val: Generic<'a, V> = val.into();
-
-  //   let vb = ValueBuilder::once(val.encoded_len() as u32, |buf| {
-  //     val.encode_to_buffer(buf).map(|_| ())
-  //   });
-  //   self.as_core_mut().get_or_insert_with_value_builder(Some(version), &key, vb)
-  //     .map(|res| res.map(ty_ref::<V>))
-  // }
-
-  // /// Get or insert a new entry into the WAL.
-  // #[inline]
-  // fn get_or_insert_with_value_builder<E>(
-  //   &mut self,
-  //   version: u64,
-  //   key: &[u8],
-  //   vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-  // ) -> Result<Option<&[u8]>, Either<E, Error>>
-  // where
-  //   Self::Checksumer: BuildChecksumer,
-  //   <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
-  // {
-  //   self
-  //     .as_core_mut()
-  //     .get_or_insert_with_value_builder(Some(version), key, vb)
-  // }
 
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
@@ -479,7 +436,7 @@ where
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: impl Into<Generic<'a, V>>,
-  ) -> Result<(), Among<E, V::Error, Error>>
+  ) -> Result<(), Among<E, V::Error, Error<Self::Memtable>>>
   where
     K: Type,
     V: Type + 'a,
@@ -499,7 +456,7 @@ where
     version: u64,
     key: impl Into<Generic<'a, K>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-  ) -> Result<(), Among<K::Error, E, Error>>
+  ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     K: Type + 'a,
     V: Type,
@@ -517,7 +474,7 @@ where
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>>
+  ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     K: Type,
     V: Type,
@@ -534,7 +491,7 @@ where
     version: u64,
     key: impl Into<Generic<'a, K>>,
     value: impl Into<Generic<'a, V>>,
-  ) -> Result<(), Among<K::Error, V::Error, Error>>
+  ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     K: Type + 'a,
     V: Type + 'a,
@@ -551,7 +508,7 @@ where
   fn insert_batch<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<K::Error, V::Error, Error>>
+  ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     B: Batch<
       <Self::Memtable as memtable::BaseTable>::Pointer,
@@ -571,7 +528,7 @@ where
   fn insert_batch_with_key_builder<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<<B::Key as BufWriter>::Error, V::Error, Error>>
+  ) -> Result<(), Among<<B::Key as BufWriter>::Error, V::Error, Error<Self::Memtable>>>
   where
     B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Value = Generic<'a, V>>,
     B::Key: BufWriter,
@@ -588,7 +545,7 @@ where
   fn insert_batch_with_value_builder<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<K::Error, <B::Value as BufWriter>::Error, Error>>
+  ) -> Result<(), Among<K::Error, <B::Value as BufWriter>::Error, Error<Self::Memtable>>>
   where
     B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = Generic<'a, K>>,
     B::Value: BufWriter,
@@ -605,7 +562,7 @@ where
   fn insert_batch_with_builders<KB, VB, B>(
     &mut self,
     batch: &mut B,
-  ) -> Result<(), Among<KB::Error, VB::Error, Error>>
+  ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
   where
     B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = KB, Value = VB>,
     KB: BufWriter,

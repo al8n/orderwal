@@ -415,13 +415,13 @@ where
 
   /// Flushes the to disk.
   #[inline]
-  fn flush(&self) -> Result<(), Error> {
+  fn flush(&self) -> Result<(), Error<Self::Memtable>> {
     self.as_core().flush()
   }
 
   /// Flushes the to disk.
   #[inline]
-  fn flush_async(&self) -> Result<(), Error> {
+  fn flush_async(&self) -> Result<(), Error<Self::Memtable>> {
     self.as_core().flush_async()
   }
 
@@ -437,7 +437,7 @@ where
     &'a mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
     value: impl Into<Generic<'a, V>>,
-  ) -> Result<(), Among<E, V::Error, Error>>
+  ) -> Result<(), Among<E, V::Error, Error<Self::Memtable>>>
   where
     K: Type,
     V: Type + 'a,
@@ -456,7 +456,7 @@ where
     &'a mut self,
     key: impl Into<Generic<'a, K>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-  ) -> Result<(), Among<K::Error, E, Error>>
+  ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     K: Type + 'a,
     V: Type,
@@ -473,7 +473,7 @@ where
     &mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
-  ) -> Result<(), Among<KE, VE, Error>>
+  ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     K: Type,
     V: Type,
@@ -489,7 +489,7 @@ where
     &mut self,
     key: impl Into<Generic<'a, K>>,
     value: impl Into<Generic<'a, V>>,
-  ) -> Result<(), Among<K::Error, V::Error, Error>>
+  ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     K: Type + 'a,
     V: Type + 'a,
@@ -504,7 +504,7 @@ where
   fn insert_batch<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<K::Error, V::Error, Error>>
+  ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     B: Batch<
       <Self::Memtable as memtable::BaseTable>::Pointer,
@@ -524,7 +524,7 @@ where
   fn insert_batch_with_key_builder<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<<B::Key as BufWriter>::Error, V::Error, Error>>
+  ) -> Result<(), Among<<B::Key as BufWriter>::Error, V::Error, Error<Self::Memtable>>>
   where
     B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Value = Generic<'a, V>>,
     B::Key: BufWriter,
@@ -541,7 +541,7 @@ where
   fn insert_batch_with_value_builder<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<K::Error, <B::Value as BufWriter>::Error, Error>>
+  ) -> Result<(), Among<K::Error, <B::Value as BufWriter>::Error, Error<Self::Memtable>>>
   where
     B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = Generic<'a, K>>,
     B::Value: BufWriter,
@@ -558,7 +558,7 @@ where
   fn insert_batch_with_builders<KB, VB, B>(
     &mut self,
     batch: &mut B,
-  ) -> Result<(), Among<KB::Error, VB::Error, Error>>
+  ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
   where
     B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = KB, Value = VB>,
     KB: BufWriter,

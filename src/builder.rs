@@ -1,4 +1,3 @@
-use among::Among;
 use dbutils::checksum::Crc32;
 use skl::either::Either;
 
@@ -792,9 +791,7 @@ where
   ///   .alloc::<OrderWal>()
   ///   .unwrap();
   /// ```
-  pub fn alloc<K, V, W>(
-    self,
-  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
+  pub fn alloc<K, V, W>(self) -> Result<W, Error<W::Memtable>>
   where
     K: ?Sized,
     V: ?Sized,
@@ -808,7 +805,7 @@ where
     arena_options(opts.reserved())
       .with_capacity(opts.capacity())
       .alloc()
-      .map_err(|e| Either::Right(Error::from_insufficient_space(e)))
+      .map_err(Error::from_insufficient_space)
       .and_then(|arena| {
         <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
       })
@@ -826,9 +823,7 @@ where
   ///   .map_anon::<OrderWal>()
   ///   .unwrap();
   /// ```
-  pub fn map_anon<K, V, W>(
-    self,
-  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
+  pub fn map_anon<K, V, W>(self) -> Result<W, Error<W::Memtable>>
   where
     K: ?Sized,
     V: ?Sized,
@@ -842,7 +837,7 @@ where
     arena_options(opts.reserved())
       .merge(&opts)
       .map_anon()
-      .map_err(|e| Either::Right(e.into()))
+      .map_err(Into::into)
       .and_then(|arena| {
         <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
       })
@@ -878,10 +873,7 @@ where
   ///     .map::<OrderWal, _>(&path)
   ///     .unwrap()
   /// };
-  pub unsafe fn map<K, V, W, P>(
-    self,
-    path: P,
-  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
+  pub unsafe fn map<K, V, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
   where
     K: ?Sized,
     V: ?Sized,
@@ -892,7 +884,7 @@ where
   {
     self
       .map_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
-      .map_err(|e| e.into_middle_right())
+      .map_err(Either::unwrap_right)
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
@@ -928,7 +920,7 @@ where
   pub unsafe fn map_with_path_builder<K, V, W, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<W, Among<E, <W::Memtable as BaseTable>::ConstructionError, Error>>
+  ) -> Result<W, Either<E, Error<W::Memtable>>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     K: ?Sized,
@@ -947,11 +939,11 @@ where
       .merge(&opts)
       .with_read(true)
       .map_with_path_builder(path_builder)
-      .map_err(|e| Among::from_either_to_left_right(e.map_right(Into::into)))
+      .map_err(|e| e.map_right(Into::into))
       .and_then(|arena| {
         W::replay(arena, Options::new(), memtable_opts, true, cks)
           .map(Constructable::from_core)
-          .map_err(Among::from_either_to_middle_right)
+          .map_err(Either::Right)
       })
   }
 
@@ -983,10 +975,7 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut<K, V, W, P>(
-    self,
-    path: P,
-  ) -> Result<W, Either<<W::Memtable as BaseTable>::ConstructionError, Error>>
+  pub unsafe fn map_mut<K, V, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
   where
     K: ?Sized,
     V: ?Sized,
@@ -997,7 +986,7 @@ where
   {
     self
       .map_mut_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
-      .map_err(|e| e.into_middle_right())
+      .map_err(Either::unwrap_right)
   }
 
   /// Opens a write-ahead log backed by a file backed memory map.
@@ -1032,7 +1021,7 @@ where
   pub unsafe fn map_mut_with_path_builder<K, V, W, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<W, Among<E, <W::Memtable as BaseTable>::ConstructionError, Error>>
+  ) -> Result<W, Either<E, Error<W::Memtable>>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     K: ?Sized,
@@ -1041,7 +1030,7 @@ where
     W: Constructable<K, V, Memtable = M, Checksumer = S>,
     <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    let path = path_builder().map_err(Among::Left)?;
+    let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
     let Self {
       opts,
@@ -1052,7 +1041,7 @@ where
     arena_options(opts.reserved())
       .merge(&opts)
       .map_mut(path)
-      .map_err(|e| Among::Right(e.into()))
+      .map_err(Into::into)
       .and_then(|arena| {
         if !exist {
           <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
@@ -1060,7 +1049,7 @@ where
           <W as Constructable<K, V>>::replay(arena, opts, memtable_opts, false, cks)
             .map(W::from_core)
         }
-        .map_err(Among::from_either_to_middle_right)
       })
+      .map_err(Either::Right)
   }
 }

@@ -6,14 +6,15 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use skl::{
-  either::Either, versioned::{
+  either::Either,
+  versioned::{
     sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry},
     VersionedMap as _,
-  }, Options, VersionedContainer as _
+  },
+  Options, VersionedContainer as _,
 };
 
 use crate::{
-  error::Error,
   memtable::{BaseTable, MemtableEntry, VersionedMemtable, VersionedMemtableEntry},
   sealed::{Pointer, WithVersion},
 };
@@ -107,10 +108,10 @@ where
 
   type Options = TableOptions;
 
-  type ConstructionError = skl::Error;
+  type Error = skl::Error;
 
   #[inline]
-  fn new(opts: Self::Options) -> Result<Self, Self::ConstructionError> {
+  fn new(opts: Self::Options) -> Result<Self, Self::Error> {
     let arena_opts = Options::new()
       .with_capacity(opts.capacity())
       .with_freelist(skl::Freelist::None)
@@ -127,7 +128,7 @@ where
     .map(|map| Self { map })
   }
 
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static,
   {
@@ -136,10 +137,7 @@ where
       .insert(ele.version(), &ele, &())
       .map(|_| ())
       .map_err(|e| match e {
-        Among::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
-          requested,
-          available,
-        })) => Error::memtable_insufficient_space(requested as u64, available),
+        Among::Right(e) => e,
         _ => unreachable!(),
       })
   }
@@ -236,21 +234,19 @@ where
   }
 
   #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
+  fn remove<'a, 'b: 'a>(
+    &'a mut self,
+    key: &'b Self::Pointer,
+  ) -> Result<Option<Self::Item<'a>>, Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static,
   {
     self
       .map
       .get_or_remove(key.version(), key)
-      .map_err(|e| {
-        match e {
-          Either::Right(skl::Error::Arena(skl::ArenaError::InsufficientSpace {
-            requested,
-            available,
-          })) => Error::memtable_insufficient_space(requested as u64, available),
-          _ => unreachable!(),
-        }
+      .map_err(|e| match e {
+        Either::Right(e) => e,
+        _ => unreachable!(),
       })
   }
 }

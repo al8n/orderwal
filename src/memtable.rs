@@ -1,10 +1,7 @@
 use core::ops::{Bound, RangeBounds};
 use dbutils::equivalent::Comparable;
 
-use crate::{
-  error::Error,
-  sealed::{Pointer, WithVersion, WithoutVersion},
-};
+use crate::sealed::{Pointer, WithVersion, WithoutVersion};
 
 /// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].
 pub mod linked;
@@ -42,7 +39,7 @@ pub trait BaseTable {
   type Options;
 
   /// The error type may be returned when constructing the memtable.
-  type ConstructionError;
+  type Error;
 
   /// The item returned by the iterator or query methods.
   type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer>
@@ -65,12 +62,12 @@ pub trait BaseTable {
     Q: ?Sized + Comparable<Self::Pointer>;
 
   /// Creates a new memtable with the specified options.
-  fn new(opts: Self::Options) -> Result<Self, Self::ConstructionError>
+  fn new(opts: Self::Options) -> Result<Self, Self::Error>
   where
     Self: Sized;
 
   /// Inserts a pointer into the memtable.
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 }
@@ -129,7 +126,10 @@ where
 
   /// Removes the pointer associated with the key.
   #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
+  fn remove<'a, 'b: 'a>(
+    &'a mut self,
+    key: &'b Self::Pointer,
+  ) -> Result<Option<Self::Item<'a>>, Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 }
@@ -209,7 +209,10 @@ where
 
   /// Removes the pointer associated with the key.
   #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
+  fn remove<'a, 'b: 'a>(
+    &'a mut self,
+    key: &'b Self::Pointer,
+  ) -> Result<Option<Self::Item<'a>>, Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 }

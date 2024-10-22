@@ -1,9 +1,9 @@
-use core::ops::RangeBounds;
+use core::{convert::Infallible, ops::RangeBounds};
 
 use crossbeam_skiplist::{set::Entry, SkipSet};
 use dbutils::equivalent::Comparable;
 
-use crate::{error::Error, memtable, sealed::WithoutVersion};
+use crate::{memtable, sealed::WithoutVersion};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
 pub struct Table<P>(SkipSet<P>);
@@ -64,9 +64,9 @@ where
     Q: ?Sized + Comparable<Self::Pointer>;
 
   type Options = ();
-  type ConstructionError = ();
+  type Error = Infallible;
 
-  fn new(_: Self::Options) -> Result<Self, Self::ConstructionError>
+  fn new(_: Self::Options) -> Result<Self, Self::Error>
   where
     Self: Sized,
   {
@@ -74,7 +74,7 @@ where
   }
 
   #[inline]
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Error>
+  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Ord + 'static,
   {
@@ -150,7 +150,10 @@ where
 
   #[allow(single_use_lifetimes)]
   #[inline]
-  fn remove<'a, 'b: 'a>(&'a mut self, key: &'b Self::Pointer) -> Result<Option<Self::Item<'a>>, Error>
+  fn remove<'a, 'b: 'a>(
+    &'a mut self,
+    key: &'b Self::Pointer,
+  ) -> Result<Option<Self::Item<'a>>, Self::Error>
   where
     Self::Pointer: crate::sealed::Pointer + Ord + 'static,
   {

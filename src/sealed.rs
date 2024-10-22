@@ -401,7 +401,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   /// Flushes the to disk.
-  fn flush(&self) -> Result<(), Error> {
+  fn flush(&self) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Memtable: BaseTable,
+  {
     if !self.read_only() {
       self.allocator().flush().map_err(Into::into)
     } else {
@@ -410,7 +413,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   /// Flushes the to disk.
-  fn flush_async(&self) -> Result<(), Error> {
+  fn flush_async(&self) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Memtable: BaseTable,
+  {
     if !self.read_only() {
       self.allocator().flush_async().map_err(Into::into)
     } else {
@@ -433,19 +439,22 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   fn update_minimum_version(&mut self, version: u64);
 
   #[inline]
-  fn insert_pointer(&mut self, ptr: <Self::Memtable as BaseTable>::Pointer) -> Result<(), Error>
+  fn insert_pointer(
+    &mut self,
+    ptr: <Self::Memtable as BaseTable>::Pointer,
+  ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.memtable_mut().insert(ptr)
+    self.memtable_mut().insert(ptr).map_err(Error::memtable)
   }
 
   #[inline]
   fn insert_pointers(
     &mut self,
     mut ptrs: impl Iterator<Item = <Self::Memtable as BaseTable>::Pointer>,
-  ) -> Result<(), Error>
+  ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
@@ -458,7 +467,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     version: Option<u64>,
     kb: KE,
     vb: VE,
-  ) -> Result<(), Among<KE::Error, VE::Error, Error>>
+  ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
   where
     KE: super::entry::BufWriterOnce,
     VE: super::entry::BufWriterOnce,
@@ -561,7 +570,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   fn insert_batch<W, B>(
     &mut self,
     batch: &mut B,
-  ) -> Result<(), Among<<B::Key as BufWriter>::Error, <B::Value as BufWriter>::Error, Error>>
+  ) -> Result<
+    (),
+    Among<<B::Key as BufWriter>::Error, <B::Value as BufWriter>::Error, Error<Self::Memtable>>,
+  >
   where
     B: Batch<<Self::Memtable as BaseTable>::Pointer>,
     B::Key: BufWriter,
@@ -719,12 +731,18 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     max_key_size: u32,
     max_value_size: u32,
     ro: bool,
-  ) -> Result<(), Error> {
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Memtable: BaseTable,
+  {
     check(klen, vlen, max_key_size, max_value_size, ro)
   }
 
   #[inline]
-  fn check_batch_entry(&self, klen: usize, vlen: usize) -> Result<(), Error> {
+  fn check_batch_entry(&self, klen: usize, vlen: usize) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Memtable: BaseTable,
+  {
     let opts = self.options();
     let max_key_size = opts.maximum_key_size();
     let max_value_size = opts.maximum_value_size();
@@ -805,7 +823,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
     opts: Options,
     memtable_opts: <Self::Memtable as BaseTable>::Options,
     cks: Self::Checksumer,
-  ) -> Result<Self::Wal, Either<<Self::Memtable as BaseTable>::ConstructionError, Error>> {
+  ) -> Result<Self::Wal, Error<Self::Memtable>> {
     unsafe {
       let slice = arena.reserved_slice_mut();
       slice[0..6].copy_from_slice(&MAGIC_TEXT);
@@ -814,13 +832,13 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
 
     arena
       .flush_range(0, HEADER_SIZE)
-      .map_err(|e| Either::Right(e.into()))
+      .map_err(Into::into)
       .and_then(|_| {
         Self::Memtable::new(memtable_opts)
           .map(|memtable| {
             <Self::Wal as Wal<K, V, Self::Checksumer>>::construct(arena, memtable, opts, cks, 0, 0)
           })
-          .map_err(Either::Left)
+          .map_err(Error::memtable)
       })
   }
 
@@ -830,7 +848,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
     memtable_opts: <Self::Memtable as BaseTable>::Options,
     ro: bool,
     checksumer: Self::Checksumer,
-  ) -> Result<Self::Wal, Either<<Self::Memtable as BaseTable>::ConstructionError, Error>>
+  ) -> Result<Self::Wal, Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
@@ -840,15 +858,15 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
     let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
 
     if magic_text != MAGIC_TEXT {
-      return Err(Either::Right(Error::magic_text_mismatch()));
+      return Err(Error::magic_text_mismatch());
     }
 
     if magic_version != opts.magic_version() {
-      return Err(Either::Right(Error::magic_version_mismatch()));
+      return Err(Error::magic_version_mismatch());
     }
 
     let mut set = <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable::new(memtable_opts)
-      .map_err(Either::Left)?;
+      .map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -863,7 +881,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
         if cursor + STATUS_SIZE > allocated {
           if !ro && cursor < allocated {
             arena.rewind(ArenaPosition::Start(cursor as u32));
-            arena.flush().map_err(|e| Either::Right(e.into()))?;
+            arena.flush()?;
           }
           break;
         }
@@ -872,15 +890,12 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
         let flag = Flags::from_bits_retain(header);
 
         if !flag.contains(Flags::BATCHING) {
-          let (readed, encoded_len) = arena
-            .get_u64_varint(cursor + STATUS_SIZE)
-            .map_err(|e| {
-              #[cfg(feature = "tracing")]
-              tracing::error!(err=%e);
+          let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
+            #[cfg(feature = "tracing")]
+            tracing::error!(err=%e);
 
-              Error::corrupted(e)
-            })
-            .map_err(Either::Right)?;
+            Error::corrupted(e)
+          })?;
           let (key_len, value_len) = split_lengths(encoded_len);
           let key_len = key_len as usize;
           let value_len = value_len as usize;
@@ -889,12 +904,12 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
-              return Err(Either::Right(Error::corrupted("file is truncated")));
+              return Err(Error::corrupted("file is truncated"));
             }
 
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
-              arena.flush().map_err(|e| Either::Right(e.into()))?;
+              arena.flush()?;
             }
 
             break;
@@ -903,14 +918,14 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
 
           if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
-            return Err(Either::Right(Error::corrupted("checksum mismatch")));
+            return Err(Error::corrupted("checksum mismatch"));
           }
 
           // If the entry is not committed, we should not rewind
           if !flag.contains(Flags::COMMITTED) {
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
-              arena.flush().map_err(|e| Either::Right(e.into()))?;
+              arena.flush()?;
             }
 
             break;
@@ -926,18 +941,15 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           minimum_version = minimum_version.min(version);
           maximum_version = maximum_version.max(version);
 
-          set.insert(pointer).map_err(Either::Right)?;
+          set.insert(pointer).map_err(Error::memtable)?;
           cursor += cks_offset + CHECKSUM_SIZE;
         } else {
-          let (readed, encoded_len) = arena
-            .get_u64_varint(cursor + STATUS_SIZE)
-            .map_err(|e| {
-              #[cfg(feature = "tracing")]
-              tracing::error!(err=%e);
+          let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
+            #[cfg(feature = "tracing")]
+            tracing::error!(err=%e);
 
-              Error::corrupted(e)
-            })
-            .map_err(Either::Right)?;
+            Error::corrupted(e)
+          })?;
 
           let (num_entries, encoded_data_len) = split_lengths(encoded_len);
 
@@ -946,12 +958,12 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
-              return Err(Either::Right(Error::corrupted("file is truncated")));
+              return Err(Error::corrupted("file is truncated"));
             }
 
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
-              arena.flush().map_err(|e| Either::Right(e.into()))?;
+              arena.flush()?;
             }
 
             break;
@@ -960,20 +972,18 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
           let mut batch_data_buf = arena.get_bytes(cursor, cks_offset);
           if cks != checksumer.checksum_one(batch_data_buf) {
-            return Err(Either::Right(Error::corrupted("checksum mismatch")));
+            return Err(Error::corrupted("checksum mismatch"));
           }
 
           let mut sub_cursor = 0;
           batch_data_buf = &batch_data_buf[1 + readed..];
           for _ in 0..num_entries {
-            let (kvlen, ent_len) = decode_u64_varint(batch_data_buf)
-              .map_err(|e| {
-                #[cfg(feature = "tracing")]
-                tracing::error!(err=%e);
+            let (kvlen, ent_len) = decode_u64_varint(batch_data_buf).map_err(|e| {
+              #[cfg(feature = "tracing")]
+              tracing::error!(err=%e);
 
-                Error::corrupted(e)
-              })
-              .map_err(Either::Right)?;
+              Error::corrupted(e)
+            })?;
 
             let (klen, vlen) = split_lengths(ent_len);
             let klen = klen as usize;
@@ -987,7 +997,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
             minimum_version = minimum_version.min(version);
             maximum_version = maximum_version.max(version);
 
-            set.insert(ptr).map_err(Either::Right)?;
+            set.insert(ptr).map_err(Error::memtable)?;
             let ent_len = kvlen + klen + vlen;
             sub_cursor += kvlen + klen + vlen;
             batch_data_buf = &batch_data_buf[ent_len..];
@@ -1056,13 +1066,13 @@ pub(crate) const fn min_u64(a: u64, b: u64) -> u64 {
 }
 
 #[inline]
-pub(crate) const fn check(
+pub(crate) const fn check<T: BaseTable>(
   klen: usize,
   vlen: usize,
   max_key_size: u32,
   max_value_size: u32,
   ro: bool,
-) -> Result<(), Error> {
+) -> Result<(), Error<T>> {
   if ro {
     return Err(Error::read_only());
   }
@@ -1091,12 +1101,12 @@ pub(crate) const fn check(
 }
 
 #[inline]
-pub(crate) fn check_batch_entry(
+pub(crate) fn check_batch_entry<T: BaseTable>(
   klen: usize,
   vlen: usize,
   max_key_size: u32,
   max_value_size: u32,
-) -> Result<(), Error> {
+) -> Result<(), Error<T>> {
   if klen > max_key_size as usize {
     return Err(Error::key_too_large(klen as u64, max_key_size));
   }
