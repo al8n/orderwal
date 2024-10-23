@@ -115,7 +115,7 @@ where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -220,11 +220,11 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
+  fn contains_key<'a, 'b, Q>(&'a self, key: &'b Q) -> bool
   where
     K: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -249,15 +249,15 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(
+  fn get<'a, 'b, Q>(
     &'a self,
-    key: &Q,
+    key: &'b Q,
   ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -269,14 +269,14 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_by_bytes(
-    &self,
+  unsafe fn get_by_bytes<'a>(
+    &'a self,
     key: &[u8],
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type,
     V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K>,
+    K::Ref<'a>: KeyRef<'a, K>,
     Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
@@ -290,15 +290,15 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn upper_bound<'a, Q>(
+  fn upper_bound<'a, 'b, Q>(
     &'a self,
-    bound: Bound<&Q>,
+    bound: Bound<&'b Q>,
   ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type + Ord,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -314,14 +314,14 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn upper_bound_by_bytes(
-    &self,
+  unsafe fn upper_bound_by_bytes<'a>(
+    &'a self,
     bound: Bound<&[u8]>,
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type,
     V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K>,
+    K::Ref<'a>: KeyRef<'a, K>,
     Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
@@ -335,15 +335,15 @@ where
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn lower_bound<'a, Q>(
+  fn lower_bound<'a, 'b, Q>(
     &'a self,
-    bound: Bound<&Q>,
+    bound: Bound<&'b Q>,
   ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type + Ord,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -359,14 +359,14 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn lower_bound_by_bytes(
-    &self,
+  unsafe fn lower_bound_by_bytes<'a>(
+    &'a self,
     bound: Bound<&[u8]>,
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type,
     V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    K::Ref<'a>: KeyRef<'a, K> + Ord,
     Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,

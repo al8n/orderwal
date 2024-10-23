@@ -82,7 +82,7 @@ pub struct MultipleVersionTable<P> {
 
 impl<P> BaseTable for MultipleVersionTable<P>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
+  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + Clone + WithVersion,
 {
   type Pointer = P;
 
@@ -156,7 +156,7 @@ where
 
 impl<P> MultipleVersionMemtable for MultipleVersionTable<P>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
+  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + Clone + WithVersion,
 {
   type MultipleVersionItem<'a>
     = VersionedEntry<'a, Self::Pointer, ()>

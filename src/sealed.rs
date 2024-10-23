@@ -17,7 +17,7 @@ use super::{
   entry::BufWriter,
   error::Error,
   internal_iter::*,
-  memtable::{Memtable, BaseTable, MultipleVersionMemtable},
+  memtable::{BaseTable, Memtable, MultipleVersionMemtable},
   options::Options,
   Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, STATUS_SIZE, VERSION_SIZE,
 };

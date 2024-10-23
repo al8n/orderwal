@@ -53,7 +53,7 @@ pub struct Table<P> {
 
 impl<P> BaseTable for Table<P>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static,
+  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + Clone + 'static,
 {
   type Pointer = P;
 
@@ -100,7 +100,7 @@ where
 
   fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
-    Self::Pointer: Ord + 'static,
+    Self::Pointer: Pointer + Ord + 'static,
   {
     self.map.insert(&ele, &()).map(|_| ()).map_err(|e| match e {
       Among::Right(e) => e,
@@ -122,7 +122,7 @@ where
 
 impl<P> Memtable for Table<P>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithoutVersion + 'static,
+  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + Clone + WithoutVersion + 'static,
 {
   #[inline]
   fn len(&self) -> usize {

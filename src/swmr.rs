@@ -2,6 +2,9 @@ mod reader;
 mod wal;
 mod writer;
 
+#[cfg(test)]
+mod tests;
+
 /// The ordered write-ahead log only supports generic.
 pub mod generic {
   use dbutils::checksum::Crc32;

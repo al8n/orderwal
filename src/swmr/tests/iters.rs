@@ -1,6 +1,17 @@
+use core::ops::Bound;
+
+use generic::{GenericOrderWal, GenericPointer, Reader, Writer};
+
+use crate::{memtable::Memtable, sealed::WithoutVersion};
+
 use super::*;
 
-fn iter(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
+fn iter<M>(wal: &mut GenericOrderWal<Person, String, M>)
+where
+  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
+  M::Pointer: WithoutVersion,
+  M::Error: std::fmt::Debug,
+{
   let mut people = (0..100)
     .map(|_| {
       let p = Person::random();
@@ -26,45 +37,6 @@ fn iter(wal: &mut GenericOrderWal<Person, String>) -> Vec<(Person, String)> {
     assert_eq!(&pwal.1, pvec.value());
   }
 
-  people
-}
-
-#[test]
-fn iter_inmemory() {
-  let mut wal = GenericBuilder::new()
-    .with_capacity(MB)
-    .alloc::<Person, String>()
-    .unwrap();
-  iter(&mut wal);
-}
-
-#[test]
-fn iter_map_anon() {
-  let mut wal = GenericBuilder::new()
-    .with_capacity(MB)
-    .map_anon::<Person, String>()
-    .unwrap();
-  iter(&mut wal);
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn iter_map_file() {
-  let dir = tempdir().unwrap();
-  let path = dir.path().join("generic_wal_iter_map_file");
-
-  let mut wal = unsafe {
-    GenericBuilder::new()
-      .with_capacity(MB)
-      .with_create_new(true)
-      .with_read(true)
-      .with_write(true)
-      .map_mut::<Person, String, _>(&path)
-      .unwrap()
-  };
-
-  let people = iter(&mut wal);
-
   let wal = wal.reader();
   let mut iter = wal.iter();
 
@@ -74,7 +46,12 @@ fn iter_map_file() {
   }
 }
 
-fn bounds(wal: &mut GenericOrderWal<u32, u32>) {
+fn bounds<M>(wal: &mut GenericOrderWal<u32, u32, M>)
+where
+  M: Memtable<Pointer = GenericPointer<u32, u32>> + 'static,
+  M::Pointer: WithoutVersion,
+  M::Error: std::fmt::Debug,
+{
   for i in 0..100u32 {
     wal.insert(&i, &i).unwrap();
   }
@@ -209,38 +186,12 @@ fn bounds(wal: &mut GenericOrderWal<u32, u32>) {
   assert_eq!(lower_unbounded.value(), &0u32);
 }
 
-#[test]
-fn bounds_inmemory() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).alloc().unwrap();
-  bounds(&mut wal);
-}
-
-#[test]
-fn bounds_map_anon() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).map_anon().unwrap();
-  bounds(&mut wal);
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn bounds_file() {
-  let dir = tempdir().unwrap();
-  let path = dir.path().join("generic_wal_bounds_map_file");
-
-  let mut wal = unsafe {
-    GenericBuilder::new()
-      .with_capacity(MB)
-      .with_create_new(true)
-      .with_read(true)
-      .with_write(true)
-      .map_mut::<u32, u32, _>(&path)
-      .unwrap()
-  };
-
-  bounds(&mut wal);
-}
-
-fn range(wal: &mut GenericOrderWal<Person, String>) {
+fn range<M>(wal: &mut GenericOrderWal<Person, String, M>)
+where
+  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
+  M::Pointer: WithoutVersion,
+  M::Error: std::fmt::Debug,
+{
   let mut mid = Person::random();
   let people = (0..100)
     .map(|idx| {
@@ -255,7 +206,7 @@ fn range(wal: &mut GenericOrderWal<Person, String>) {
     })
     .collect::<BTreeMap<_, _>>();
 
-  let mut iter = wal.range(Bound::Included(&mid), Bound::Unbounded);
+  let mut iter = wal.range::<Person, _>(&mid..);
 
   for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
     assert!(pwal.0.equivalent(pvec.key()));
@@ -265,14 +216,14 @@ fn range(wal: &mut GenericOrderWal<Person, String>) {
   assert!(iter.next().is_none());
 
   let wal = wal.reader();
-  let mut iter = wal.range(Bound::Included(&mid), Bound::Unbounded);
+  let mut iter = wal.range::<Person, _>(&mid..);
 
   for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
     assert!(pwal.0.equivalent(pvec.key()));
     assert_eq!(&pwal.1, pvec.value());
   }
 
-  let mut rev_iter = wal.range(Bound::Included(&mid), Bound::Unbounded).rev();
+  let mut rev_iter = wal.range::<Person, _>(&mid..).rev();
 
   for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
     assert!(pwal.0.equivalent(pvec.key()));
@@ -280,51 +231,19 @@ fn range(wal: &mut GenericOrderWal<Person, String>) {
   }
 }
 
-#[test]
-fn range_inmemory() {
-  let mut wal = GenericBuilder::new()
-    .with_capacity(MB)
-    .alloc::<Person, String>()
-    .unwrap();
-  range(&mut wal);
-}
-
-#[test]
-fn range_map_anon() {
-  let mut wal = GenericBuilder::new()
-    .with_capacity(MB)
-    .map_anon::<Person, String>()
-    .unwrap();
-  range(&mut wal);
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn range_map_file() {
-  let dir = tempdir().unwrap();
-  let path = dir.path().join("generic_wal_range_map_file");
-
-  let mut wal = unsafe {
-    GenericBuilder::new()
-      .with_capacity(MB)
-      .with_create_new(true)
-      .with_read(true)
-      .with_write(true)
-      .map_mut::<Person, String, _>(&path)
-      .unwrap()
-  };
-
-  range(&mut wal);
-}
-
-fn entry_iter(wal: &mut GenericOrderWal<u32, u32>) {
+fn entry_iter<M>(wal: &mut GenericOrderWal<u32, u32, M>)
+where
+  M: Memtable<Pointer = GenericPointer<u32, u32>> + 'static,
+  M::Pointer: WithoutVersion,
+  M::Error: std::fmt::Debug,
+{
   for i in 0..100u32 {
     wal.insert(&i, &i).unwrap();
   }
 
   let mut curr = wal.first();
   let mut cursor = 0;
-  while let Some(ent) = curr {
+  while let Some(mut ent) = curr {
     assert_eq!(ent.key(), &cursor);
     assert_eq!(ent.value(), &cursor);
     cursor += 1;
@@ -332,11 +251,10 @@ fn entry_iter(wal: &mut GenericOrderWal<u32, u32>) {
   }
 
   let curr = wal.last();
-  std::println!("{:?}", curr);
 
   let mut curr = curr.clone();
   let mut cursor = 100;
-  while let Some(ent) = curr {
+  while let Some(mut ent) = curr {
     cursor -= 1;
     assert_eq!(ent.key(), &cursor);
     assert_eq!(ent.value(), &cursor);
@@ -344,33 +262,24 @@ fn entry_iter(wal: &mut GenericOrderWal<u32, u32>) {
   }
 }
 
-#[test]
-fn entry_iter_inmemory() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).alloc().unwrap();
-  entry_iter(&mut wal);
-}
+expand_unit_tests!("linked": GenericOrderWalLinkedTable<u32, u32> {
+  bounds,
+  entry_iter,
+});
 
-#[test]
-fn entry_iter_map_anon() {
-  let mut wal = GenericBuilder::new().with_capacity(MB).map_anon().unwrap();
-  entry_iter(&mut wal);
-}
+expand_unit_tests!("arena": GenericOrderWalArenaTable<u32, u32> {
+  bounds,
+  entry_iter,
+});
 
-#[test]
-#[cfg_attr(miri, ignore)]
-fn entry_iter_map_file() {
-  let dir = tempdir().unwrap();
-  let path = dir.path().join("generic_wal_entry_iter_map_file");
+expand_unit_tests!("linked": GenericOrderWalLinkedTable<Person, String> {
+  range,
+  iter,
+});
 
-  let mut wal = unsafe {
-    GenericBuilder::new()
-      .with_capacity(MB)
-      .with_create_new(true)
-      .with_read(true)
-      .with_write(true)
-      .map_mut(&path)
-      .unwrap()
-  };
+expand_unit_tests!("arena": GenericOrderWalArenaTable<Person, String> {
+  range,
+  iter,
+});
 
-  entry_iter(&mut wal);
-}
+

@@ -56,6 +56,7 @@ const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 //   // )
 // ))]
 // #[macro_use]
+// #[cfg(test)]
 // mod tests;
 
 /// Error types.

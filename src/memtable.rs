@@ -42,7 +42,7 @@ pub trait BaseTable {
   type Error;
 
   /// The item returned by the iterator or query methods.
-  type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer>
+  type Item<'a>: MemtableEntry<'a, Pointer = Self::Pointer> + Clone
   where
     Self::Pointer: 'a,
     Self: 'a;
@@ -54,7 +54,7 @@ pub trait BaseTable {
     Self: 'a;
 
   /// The range iterator type.
-  type Range<'a, Q, R>: Iterator<Item = Self::Item<'a>>
+  type Range<'a, Q, R>: DoubleEndedIterator<Item = Self::Item<'a>>
   where
     Self::Pointer: 'a,
     Self: 'a,

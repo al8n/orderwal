@@ -1,6 +1,7 @@
 use core::{cmp, marker::PhantomData, mem, slice};
 
 use dbutils::{
+  equivalent::Comparable,
   traits::{KeyRef, Type, TypeRef},
   CheapClone,
 };
@@ -211,6 +212,26 @@ impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericPointer<K, V> {
   }
 }
 
+impl<K, V> KeyRef<'_, Self> for GenericPointer<K, V>
+where
+  K: Type + Ord + ?Sized,
+  for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
+{
+  #[inline]
+  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
+  where
+    Q: ?Sized + Ord + Comparable<Self>,
+  {
+    Comparable::compare(a, self).reverse()
+  }
+
+  #[inline]
+  unsafe fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering {
+    <K::Ref<'_> as KeyRef<K>>::compare_binary(a, b)
+  }
+}
+
 #[doc(hidden)]
 pub struct GenericVersionPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
@@ -409,6 +430,26 @@ impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericVersionPointer<K, V> {
       u32::from_le_bytes((&src[offset..offset + U32_SIZE]).try_into().unwrap()) as usize;
 
     Self::new(flag, key_len, value_len, ptr)
+  }
+}
+
+impl<K, V> KeyRef<'_, Self> for GenericVersionPointer<K, V>
+where
+  K: Type + Ord + ?Sized,
+  for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized,
+{
+  #[inline]
+  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
+  where
+    Q: ?Sized + Ord + Comparable<Self>,
+  {
+    Comparable::compare(a, self).reverse()
+  }
+
+  #[inline]
+  unsafe fn compare_binary(a: &[u8], b: &[u8]) -> cmp::Ordering {
+    <K::Ref<'_> as KeyRef<K>>::compare_binary(a, b)
   }
 }
 
