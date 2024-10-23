@@ -9,13 +9,14 @@ use dbutils::{
 };
 use rarena_allocator::Allocator;
 use ref_cast::RefCast;
+use skl::either::Either;
 
 use crate::{
   batch::Batch,
   entry::BufWriter,
   error::Error,
   memtable::{self, MultipleVersionMemtable},
-  sealed::{Constructable, GenericPointer, Pointer, VersionedWalReader, Wal, WithVersion},
+  sealed::{Constructable, GenericPointer, MultipleVersionWalReader, Pointer, Wal, WithVersion},
   types::{KeyBuilder, ValueBuilder},
   Options,
 };
@@ -35,43 +36,43 @@ where
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
   unsafe fn reserved_slice(&self) -> &[u8] {
-    self.as_core().reserved_slice()
+    self.as_wal().reserved_slice()
   }
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
   fn path(&self) -> Option<&<<Self as Constructable<K, V>>::Allocator as Allocator>::Path> {
-    self.as_core().path()
+    self.as_wal().path()
   }
 
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
   fn maximum_key_size(&self) -> u32 {
-    self.as_core().maximum_key_size()
+    self.as_wal().maximum_key_size()
   }
 
   /// Returns the maximum value size allowed in the WAL.
   #[inline]
   fn maximum_value_size(&self) -> u32 {
-    self.as_core().maximum_value_size()
+    self.as_wal().maximum_value_size()
   }
 
   /// Returns the remaining capacity of the WAL.
   #[inline]
   fn remaining(&self) -> u32 {
-    self.as_core().remaining()
+    self.as_wal().remaining()
   }
 
   /// Returns the capacity of the WAL.
   #[inline]
   fn capacity(&self) -> u32 {
-    self.as_core().capacity()
+    self.as_wal().capacity()
   }
 
   /// Returns the options used to create this WAL instance.
   #[inline]
   fn options(&self) -> &Options {
-    self.as_core().options()
+    self.as_wal().options()
   }
 
   /// Returns an iterator over the entries in the WAL.
@@ -79,7 +80,7 @@ where
   fn iter(
     &self,
     version: u64,
-  ) -> GenericIter<
+  ) -> Iter<
     '_,
     K,
     V,
@@ -90,7 +91,26 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
   {
-    GenericIter::new(self.as_core().iter(version))
+    Iter::new(self.as_wal().iter(version))
+  }
+
+  /// Returns an iterator over the entries (all versions) in the WAL.
+  #[inline]
+  fn iter_all_versions(
+    &self,
+    version: u64,
+  ) -> MultipleVersionIter<
+    '_,
+    K,
+    V,
+    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::MultipleVersionMemtable>::AllIterator<'_>,
+    Self::Memtable,
+  >
+  where
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    MultipleVersionIter::new(self.as_wal().iter_all_versions(version))
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
@@ -99,7 +119,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> GenericRange<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> Range<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -107,7 +127,28 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericRange::new(self.as_core().range(version, GenericQueryRange::new(range)))
+    Range::new(self.as_wal().range(version, GenericQueryRange::new(range)))
+  }
+
+  /// Returns an iterator over a subset of entries (all versions) in the WAL.
+  #[inline]
+  fn range_all_versions<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> MultipleVersionRange<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  where
+    R: RangeBounds<Q> + 'a,
+    K: Type + Ord,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+  {
+    MultipleVersionRange::new(
+      self
+        .as_wal()
+        .range_all_versions(version, GenericQueryRange::new(range)),
+    )
   }
 
   /// Returns an iterator over the keys in the WAL.
@@ -115,7 +156,7 @@ where
   fn keys(
     &self,
     version: u64,
-  ) -> GenericKeys<
+  ) -> Keys<
     '_,
     K,
     <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
@@ -124,7 +165,24 @@ where
   where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericKeys::new(self.as_core().iter(version))
+    Keys::new(self.as_wal().iter(version))
+  }
+
+  /// Returns an iterator over the keys (all versions) in the WAL.
+  #[inline]
+  fn keys_all_versions(
+    &self,
+    version: u64,
+  ) -> MultipleVersionKeys<
+    '_,
+    K,
+    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::MultipleVersionMemtable>::AllIterator<'_>,
+    Self::Memtable,
+  >
+  where
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+  {
+    MultipleVersionKeys::new(self.as_wal().iter_all_versions(version))
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
@@ -133,7 +191,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> GenericRangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> RangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -141,7 +199,28 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericRangeKeys::new(self.as_core().range(version, GenericQueryRange::new(range)))
+    RangeKeys::new(self.as_wal().range(version, GenericQueryRange::new(range)))
+  }
+
+  /// Returns an iterator over a subset of keys (all versions) in the WAL.
+  #[inline]
+  fn range_keys_all_versions<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> MultipleVersionRangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  where
+    R: RangeBounds<Q> + 'a,
+    K: Type + Ord,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+  {
+    MultipleVersionRangeKeys::new(
+      self
+        .as_wal()
+        .range_all_versions(version, GenericQueryRange::new(range)),
+    )
   }
 
   /// Returns an iterator over the values in the WAL.
@@ -149,7 +228,7 @@ where
   fn values(
     &self,
     version: u64,
-  ) -> GenericValues<
+  ) -> Values<
     '_,
     V,
     <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
@@ -158,7 +237,24 @@ where
   where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericValues::new(self.as_core().iter(version))
+    Values::new(self.as_wal().iter(version))
+  }
+
+  /// Returns an iterator over the values (all versions) in the WAL.
+  #[inline]
+  fn values_all_versions(
+    &self,
+    version: u64,
+  ) -> MultipleVersionValues<
+    '_,
+    V,
+    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::MultipleVersionMemtable>::AllIterator<'_>,
+    Self::Memtable,
+  >
+  where
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+  {
+    MultipleVersionValues::new(self.as_wal().iter_all_versions(version))
   }
 
   /// Returns an iterator over a subset of values in the WAL.
@@ -167,7 +263,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> GenericRangeValues<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> RangeValues<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -175,12 +271,40 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    GenericRangeValues::new(self.as_core().range(version, GenericQueryRange::new(range)))
+    RangeValues::new(self.as_wal().range(version, GenericQueryRange::new(range)))
+  }
+
+  /// Returns an iterator over a subset of values (all versions) in the WAL.
+  #[inline]
+  fn range_values_all_versions<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> MultipleVersionRangeValues<
+    'a,
+    K,
+    V,
+    R,
+    Q,
+    <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable,
+  >
+  where
+    R: RangeBounds<Q> + 'a,
+    K: Type + Ord,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+  {
+    MultipleVersionRangeValues::new(
+      self
+        .as_wal()
+        .range_all_versions(version, GenericQueryRange::new(range)),
+    )
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first_entry(
+  fn first(
     &self,
     version: u64,
   ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
@@ -190,7 +314,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
   {
     self
-      .as_core()
+      .as_wal()
       .first(version)
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -206,7 +330,7 @@ where
     V: Type,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
   {
-    VersionedWalReader::last(self.as_core(), version)
+    MultipleVersionWalReader::last(self.as_wal(), version)
       .map(|ent| GenericEntry::with_version(ent, version))
   }
 
@@ -219,7 +343,7 @@ where
     for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    self.as_core().contains_key(version, &Query::new(key))
+    self.as_wal().contains_key(version, &Query::new(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -236,7 +360,7 @@ where
     Self::Memtable: MultipleVersionMemtable,
   {
     self
-      .as_core()
+      .as_wal()
       .contains_key(version, Slice::<K>::ref_cast(key))
   }
 
@@ -255,7 +379,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
-      .as_core()
+      .as_wal()
       .get(version, &Query::new(key))
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -278,7 +402,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
-      .as_core()
+      .as_wal()
       .get(version, Slice::<K>::ref_cast(key))
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -299,7 +423,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
-      .as_core()
+      .as_wal()
       .upper_bound(version, bound.map(Query::ref_cast))
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -323,7 +447,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
-      .as_core()
+      .as_wal()
       .upper_bound(version, bound.map(Slice::ref_cast))
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -344,7 +468,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
-      .as_core()
+      .as_wal()
       .lower_bound(version, bound.map(Query::ref_cast))
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -369,7 +493,7 @@ where
     Self::Memtable: MultipleVersionMemtable,
   {
     self
-      .as_core()
+      .as_wal()
       .lower_bound(version, bound.map(Slice::ref_cast))
       .map(|ent| GenericEntry::with_version(ent, version))
   }
@@ -395,7 +519,7 @@ where
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
   fn read_only(&self) -> bool {
-    self.as_core().read_only()
+    self.as_wal().read_only()
   }
 
   /// Returns the mutable reference to the reserved slice.
@@ -408,19 +532,19 @@ where
   where
     Self::Allocator: 'a,
   {
-    self.as_core_mut().reserved_slice_mut()
+    self.as_wal_mut().reserved_slice_mut()
   }
 
   /// Flushes the to disk.
   #[inline]
   fn flush(&self) -> Result<(), Error<Self::Memtable>> {
-    self.as_core().flush()
+    self.as_wal().flush()
   }
 
   /// Flushes the to disk.
   #[inline]
   fn flush_async(&self) -> Result<(), Error<Self::Memtable>> {
-    self.as_core().flush_async()
+    self.as_wal().flush_async()
   }
 
   /// Returns the read-only view for the WAL.
@@ -443,7 +567,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(Some(version), kb, value.into())
+    self.as_wal_mut().insert(Some(version), kb, value.into())
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -463,7 +587,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(Some(version), key.into(), vb)
+    self.as_wal_mut().insert(Some(version), key.into(), vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -481,7 +605,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(Some(version), kb, vb)
+    self.as_wal_mut().insert(Some(version), kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
@@ -499,8 +623,39 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
-      .as_core_mut()
+      .as_wal_mut()
       .insert(Some(version), key.into(), value.into())
+  }
+
+  /// Removes a key-value pair from the WAL. This method
+  /// allows the caller to build the key in place.
+  #[inline]
+  fn remove_with_builder<KE>(
+    &mut self,
+    version: u64,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+  ) -> Result<(), Either<KE, Error<Self::Memtable>>>
+  where
+    K: Type,
+    Self::Checksumer: BuildChecksumer,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
+  {
+    self.as_wal_mut().remove(Some(version), kb)
+  }
+
+  /// Removes a key-value pair from the WAL.
+  #[inline]
+  fn remove<'a>(
+    &mut self,
+    version: u64,
+    key: impl Into<Generic<'a, K>>,
+  ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
+  where
+    K: Type + 'a,
+    Self::Checksumer: BuildChecksumer,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
+  {
+    self.as_wal_mut().remove(Some(version), key.into())
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -520,7 +675,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -537,7 +692,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -554,7 +709,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -570,6 +725,6 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 }

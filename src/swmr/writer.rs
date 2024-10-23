@@ -50,12 +50,12 @@ where
   type Reader = GenericOrderWalReader<K, V, M, S>;
 
   #[inline]
-  fn as_core(&self) -> &Self::Wal {
+  fn as_wal(&self) -> &Self::Wal {
     unsafe { &*self.core.get() }
   }
 
   #[inline]
-  fn as_core_mut(&mut self) -> &mut Self::Wal {
+  fn as_wal_mut(&mut self) -> &mut Self::Wal {
     unsafe { &mut *self.core.get() }
   }
 
@@ -88,7 +88,7 @@ where
   /// assert!(wal.path_buf().is_none());
   /// ```
   pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
-    self.as_core().arena.path()
+    self.as_wal().arena.path()
   }
 }
 

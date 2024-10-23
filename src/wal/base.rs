@@ -9,6 +9,7 @@ use dbutils::{
 };
 use rarena_allocator::Allocator;
 use ref_cast::RefCast;
+use skl::either::Either;
 
 use crate::{
   batch::Batch,
@@ -35,62 +36,62 @@ where
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
   unsafe fn reserved_slice(&self) -> &[u8] {
-    self.as_core().reserved_slice()
+    self.as_wal().reserved_slice()
   }
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
   fn path(&self) -> Option<&<<Self as Constructable<K, V>>::Allocator as Allocator>::Path> {
-    self.as_core().path()
+    self.as_wal().path()
   }
 
   /// Returns the number of entries in the WAL.
   #[inline]
   fn len(&self) -> usize {
-    self.as_core().len()
+    self.as_wal().len()
   }
 
   /// Returns `true` if the WAL is empty.
   #[inline]
   fn is_empty(&self) -> bool {
-    self.as_core().is_empty()
+    self.as_wal().is_empty()
   }
 
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
   fn maximum_key_size(&self) -> u32 {
-    self.as_core().maximum_key_size()
+    self.as_wal().maximum_key_size()
   }
 
   /// Returns the maximum value size allowed in the WAL.
   #[inline]
   fn maximum_value_size(&self) -> u32 {
-    self.as_core().maximum_value_size()
+    self.as_wal().maximum_value_size()
   }
 
   /// Returns the remaining capacity of the WAL.
   #[inline]
   fn remaining(&self) -> u32 {
-    self.as_core().remaining()
+    self.as_wal().remaining()
   }
 
   /// Returns the capacity of the WAL.
   #[inline]
   fn capacity(&self) -> u32 {
-    self.as_core().capacity()
+    self.as_wal().capacity()
   }
 
   /// Returns the options used to create this WAL instance.
   #[inline]
   fn options(&self) -> &Options {
-    self.as_core().options()
+    self.as_wal().options()
   }
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   fn iter(
     &self,
-  ) -> GenericIter<
+  ) -> Iter<
     '_,
     K,
     V,
@@ -101,7 +102,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    GenericIter::new(self.as_core().iter())
+    Iter::new(self.as_wal().iter())
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
@@ -109,7 +110,7 @@ where
   fn range<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> GenericRange<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> Range<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -118,14 +119,14 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    GenericRange::new(self.as_core().range(GenericQueryRange::new(range)))
+    Range::new(self.as_wal().range(GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys(
     &self,
-  ) -> GenericKeys<
+  ) -> Keys<
     '_,
     K,
     <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
@@ -135,7 +136,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    GenericKeys::new(self.as_core().iter())
+    Keys::new(self.as_wal().iter())
   }
 
   /// Returns an iterator over a subset of keys in the WAL.
@@ -143,7 +144,7 @@ where
   fn range_keys<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> GenericRangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> RangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -152,14 +153,14 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    GenericRangeKeys::new(self.as_core().range(GenericQueryRange::new(range)))
+    RangeKeys::new(self.as_wal().range(GenericQueryRange::new(range)))
   }
 
   /// Returns an iterator over the values in the WAL.
   #[inline]
   fn values(
     &self,
-  ) -> GenericValues<
+  ) -> Values<
     '_,
     V,
     <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
@@ -169,7 +170,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    GenericValues::new(self.as_core().iter())
+    Values::new(self.as_wal().iter())
   }
 
   /// Returns an iterator over a subset of values in the WAL.
@@ -177,7 +178,7 @@ where
   fn range_values<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> GenericRangeValues<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> RangeValues<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
@@ -186,7 +187,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    GenericRangeValues::new(self.as_core().range(GenericQueryRange::new(range)))
+    RangeValues::new(self.as_wal().range(GenericQueryRange::new(range)))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -200,7 +201,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self.as_core().first().map(GenericEntry::new)
+    self.as_wal().first().map(GenericEntry::new)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -214,7 +215,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    WalReader::last(self.as_core()).map(GenericEntry::new)
+    WalReader::last(self.as_wal()).map(GenericEntry::new)
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -227,7 +228,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self.as_core().contains_key(&Query::new(key))
+    self.as_wal().contains_key(&Query::new(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -243,7 +244,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self.as_core().contains_key(Slice::<K>::ref_cast(key))
+    self.as_wal().contains_key(Slice::<K>::ref_cast(key))
   }
 
   /// Gets the value associated with the key.
@@ -260,7 +261,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self.as_core().get(&Query::new(key)).map(GenericEntry::new)
+    self.as_wal().get(&Query::new(key)).map(GenericEntry::new)
   }
 
   /// Gets the value associated with the key.
@@ -281,7 +282,7 @@ where
     Self::Memtable: Memtable,
   {
     self
-      .as_core()
+      .as_wal()
       .get(Slice::<K>::ref_cast(key))
       .map(GenericEntry::new)
   }
@@ -302,7 +303,7 @@ where
     Self::Memtable: Memtable,
   {
     self
-      .as_core()
+      .as_wal()
       .upper_bound(bound.map(Query::ref_cast))
       .map(GenericEntry::new)
   }
@@ -326,7 +327,7 @@ where
     Self::Memtable: Memtable,
   {
     self
-      .as_core()
+      .as_wal()
       .upper_bound(bound.map(Slice::ref_cast))
       .map(GenericEntry::new)
   }
@@ -347,7 +348,7 @@ where
     Self::Memtable: Memtable,
   {
     self
-      .as_core()
+      .as_wal()
       .lower_bound(bound.map(Query::ref_cast))
       .map(GenericEntry::new)
   }
@@ -371,7 +372,7 @@ where
     Self::Memtable: Memtable,
   {
     self
-      .as_core()
+      .as_wal()
       .lower_bound(bound.map(Slice::ref_cast))
       .map(GenericEntry::new)
   }
@@ -397,7 +398,7 @@ where
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
   fn read_only(&self) -> bool {
-    self.as_core().read_only()
+    self.as_wal().read_only()
   }
 
   /// Returns the mutable reference to the reserved slice.
@@ -410,19 +411,19 @@ where
   where
     Self::Allocator: 'a,
   {
-    self.as_core_mut().reserved_slice_mut()
+    self.as_wal_mut().reserved_slice_mut()
   }
 
   /// Flushes the to disk.
   #[inline]
   fn flush(&self) -> Result<(), Error<Self::Memtable>> {
-    self.as_core().flush()
+    self.as_wal().flush()
   }
 
   /// Flushes the to disk.
   #[inline]
   fn flush_async(&self) -> Result<(), Error<Self::Memtable>> {
-    self.as_core().flush_async()
+    self.as_wal().flush_async()
   }
 
   /// Returns the read-only view for the WAL.
@@ -444,7 +445,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(None, kb, value.into())
+    self.as_wal_mut().insert(None, kb, value.into())
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -463,7 +464,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(None, key.into(), vb)
+    self.as_wal_mut().insert(None, key.into(), vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -480,7 +481,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(None, kb, vb)
+    self.as_wal_mut().insert(None, kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
@@ -496,7 +497,36 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert(None, key.into(), value.into())
+    self.as_wal_mut().insert(None, key.into(), value.into())
+  }
+
+  /// Removes a key-value pair from the WAL. This method
+  /// allows the caller to build the key in place.
+  #[inline]
+  fn remove_with_builder<KE>(
+    &mut self,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+  ) -> Result<(), Either<KE, Error<Self::Memtable>>>
+  where
+    K: Type,
+    Self::Checksumer: BuildChecksumer,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
+  {
+    self.as_wal_mut().remove(None, kb)
+  }
+
+  /// Removes a key-value pair from the WAL.
+  #[inline]
+  fn remove<'a>(
+    &mut self,
+    key: impl Into<Generic<'a, K>>,
+  ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
+  where
+    K: Type + 'a,
+    Self::Checksumer: BuildChecksumer,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
+  {
+    self.as_wal_mut().remove(None, key.into())
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -516,7 +546,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -533,7 +563,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -550,7 +580,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -566,6 +596,6 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_core_mut().insert_batch::<Self, _>(batch)
+    self.as_wal_mut().insert_batch::<Self, _>(batch)
   }
 }

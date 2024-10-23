@@ -120,6 +120,15 @@ where
     self.0.insert_unchecked(ele.version(), ele, ());
     Ok(())
   }
+
+  #[inline]
+  fn remove(&mut self, key: Self::Pointer) -> Result<(), Self::Error>
+  where
+    Self::Pointer: crate::sealed::Pointer + Ord + 'static,
+  {
+    self.0.remove_unchecked(key.version(), key);
+    Ok(())
+  }
 }
 
 impl<P> memtable::MultipleVersionMemtable for MultipleVersionTable<P>
@@ -210,16 +219,5 @@ where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.0.range_all_versions(version, range)
-  }
-
-  #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b Self::Pointer,
-  ) -> Result<Option<Self::Item<'a>>, Self::Error>
-  where
-    Self::Pointer: Pointer + Ord + 'static,
-  {
-    Ok(self.0.remove_unchecked(key.version(), *key))
   }
 }

@@ -81,6 +81,15 @@ where
     self.0.insert(ele);
     Ok(())
   }
+
+  #[inline]
+  fn remove(&mut self, key: Self::Pointer) -> Result<(), Self::Error>
+  where
+    Self::Pointer: crate::sealed::Pointer + Ord + 'static,
+  {
+    self.0.remove(&key);
+    Ok(())
+  }
 }
 
 impl<P> memtable::Memtable for Table<P>
@@ -146,17 +155,5 @@ where
     Q: ?Sized + Comparable<P>,
   {
     self.0.range(range)
-  }
-
-  #[allow(single_use_lifetimes)]
-  #[inline]
-  fn remove<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b Self::Pointer,
-  ) -> Result<Option<Self::Item<'a>>, Self::Error>
-  where
-    Self::Pointer: crate::sealed::Pointer + Ord + 'static,
-  {
-    Ok(self.0.remove(key))
   }
 }

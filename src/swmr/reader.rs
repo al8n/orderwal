@@ -43,13 +43,13 @@ where
   type Reader = GenericOrderWalReader<K, V, M, S>;
 
   #[inline]
-  fn as_core(&self) -> &Self::Wal {
-    self.0.as_core()
+  fn as_wal(&self) -> &Self::Wal {
+    self.0.as_wal()
   }
 
   #[inline]
-  fn as_core_mut(&mut self) -> &mut Self::Wal {
-    self.0.as_core_mut()
+  fn as_wal_mut(&mut self) -> &mut Self::Wal {
+    self.0.as_wal_mut()
   }
 
   #[inline]

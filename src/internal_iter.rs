@@ -2,15 +2,16 @@ use core::{iter::FusedIterator, marker::PhantomData};
 
 use dbutils::CheapClone;
 
-use crate::memtable::BaseTable;
+use crate::memtable::{BaseTable, MemtableEntry};
 
-use super::{memtable::MemtableEntry, sealed::Pointer};
+use super::sealed::Pointer;
 
 /// Iterator over the entries in the WAL.
 pub struct Iter<'a, I, M: BaseTable> {
   iter: I,
   version: Option<u64>,
-  pointer: Option<M::Pointer>,
+  head: Option<M::Pointer>,
+  tail: Option<M::Pointer>,
   _m: PhantomData<&'a ()>,
 }
 
@@ -20,7 +21,8 @@ impl<I, M: BaseTable> Iter<'_, I, M> {
     Self {
       version,
       iter,
-      pointer: None,
+      head: None,
+      tail: None,
       _m: PhantomData,
     }
   }
@@ -42,31 +44,9 @@ where
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    match self.version {
-      None => self.iter.next().inspect(|ent| {
-        let ptr = ent.pointer();
-        self.pointer = Some(ptr.cheap_clone());
-      }),
-      Some(version) => loop {
-        match self.iter.next() {
-          Some(ent) => {
-            let next_pointer = ent.pointer();
-            if let Some(ref pointer) = self.pointer {
-              if next_pointer.version() <= version
-                && next_pointer.as_key_slice() != pointer.as_key_slice()
-              {
-                self.pointer = Some(next_pointer.cheap_clone());
-                return Some(ent);
-              }
-            } else if next_pointer.version() <= version {
-              self.pointer = Some(next_pointer.cheap_clone());
-              return Some(ent);
-            }
-          }
-          None => return None,
-        }
-      },
-    }
+    self.iter.next().inspect(|ent| {
+      self.head = Some(ent.pointer().cheap_clone());
+    })
   }
 }
 
@@ -78,31 +58,9 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    match self.version {
-      None => self.iter.next_back().inspect(|ent| {
-        let ptr = ent.pointer();
-        self.pointer = Some(ptr.cheap_clone());
-      }),
-      Some(version) => loop {
-        match self.iter.next_back() {
-          Some(ent) => {
-            let prev_pointer = ent.pointer();
-            if let Some(ref pointer) = self.pointer {
-              if prev_pointer.version() <= version
-                && prev_pointer.as_key_slice() != pointer.as_key_slice()
-              {
-                self.pointer = Some(prev_pointer.cheap_clone());
-                return Some(ent);
-              }
-            } else if prev_pointer.version() <= version {
-              self.pointer = Some(prev_pointer.cheap_clone());
-              return Some(ent);
-            }
-          }
-          None => return None,
-        }
-      },
-    }
+    self.iter.next_back().inspect(|ent| {
+      self.tail = Some(ent.pointer().cheap_clone());
+    })
   }
 }
 
@@ -111,112 +69,5 @@ where
   M: BaseTable + 'static,
   M::Pointer: Pointer + CheapClone + 'static,
   I: FusedIterator<Item = M::Item<'a>>,
-{
-}
-
-/// An iterator over a subset of the entries in the WAL.
-pub struct Range<'a, R, M: BaseTable> {
-  iter: R,
-  version: Option<u64>,
-  pointer: Option<M::Pointer>,
-  _m: PhantomData<&'a ()>,
-}
-
-impl<R, M: BaseTable> Range<'_, R, M> {
-  #[inline]
-  pub(super) fn new(version: Option<u64>, iter: R) -> Self {
-    Self {
-      version,
-      iter,
-      pointer: None,
-      _m: PhantomData,
-    }
-  }
-
-  /// Returns the query version of the iterator.
-  #[inline]
-  pub(super) const fn version(&self) -> Option<u64> {
-    self.version
-  }
-}
-
-impl<'a, R, M> Iterator for Range<'a, R, M>
-where
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
-  R: Iterator<Item = M::Item<'a>>,
-{
-  type Item = M::Item<'a>;
-
-  #[inline]
-  fn next(&mut self) -> Option<Self::Item> {
-    match self.version {
-      None => self.iter.next().inspect(|ent| {
-        let ptr = ent.pointer();
-        self.pointer = Some(ptr.cheap_clone());
-      }),
-      Some(version) => loop {
-        match self.iter.next() {
-          Some(ent) => {
-            let next_pointer = ent.pointer();
-            if let Some(ref pointer) = self.pointer {
-              if next_pointer.version() <= version
-                && next_pointer.as_key_slice() != pointer.as_key_slice()
-              {
-                self.pointer = Some(next_pointer.cheap_clone());
-                return Some(ent);
-              }
-            } else if next_pointer.version() <= version {
-              self.pointer = Some(next_pointer.cheap_clone());
-              return Some(ent);
-            }
-          }
-          None => return None,
-        }
-      },
-    }
-  }
-}
-
-impl<'a, R, M> DoubleEndedIterator for Range<'a, R, M>
-where
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
-  R: DoubleEndedIterator<Item = M::Item<'a>>,
-{
-  fn next_back(&mut self) -> Option<Self::Item> {
-    match self.version {
-      None => self.iter.next_back().inspect(|ent| {
-        let ptr = ent.pointer();
-        self.pointer = Some(ptr.cheap_clone());
-      }),
-      Some(version) => loop {
-        match self.iter.next_back() {
-          Some(ent) => {
-            let prev_pointer = ent.pointer();
-            if let Some(ref pointer) = self.pointer {
-              if prev_pointer.version() <= version
-                && prev_pointer.as_key_slice() != pointer.as_key_slice()
-              {
-                self.pointer = Some(prev_pointer.cheap_clone());
-                return Some(ent);
-              }
-            } else if prev_pointer.version() <= version {
-              self.pointer = Some(prev_pointer.cheap_clone());
-              return Some(ent);
-            }
-          }
-          None => return None,
-        }
-      },
-    }
-  }
-}
-
-impl<'a, R, M> FusedIterator for Range<'a, R, M>
-where
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
-  R: FusedIterator<Item = M::Item<'a>>,
 {
 }

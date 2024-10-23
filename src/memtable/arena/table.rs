@@ -107,6 +107,17 @@ where
       _ => unreachable!(),
     })
   }
+
+  fn remove(&mut self, key: Self::Pointer) -> Result<(), Self::Error>
+  where
+    Self::Pointer: Pointer + Ord + 'static,
+  {
+    match self.map.get_or_remove(&key) {
+      Err(Either::Right(e)) => Err(e),
+      Err(Either::Left(_)) => unreachable!(),
+      _ => Ok(()),
+    }
+  }
 }
 
 impl<P> Memtable for Table<P>
@@ -170,19 +181,5 @@ where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.map.range(range)
-  }
-
-  #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b Self::Pointer,
-  ) -> Result<Option<Self::Item<'a>>, Self::Error>
-  where
-    Self::Pointer: Pointer + Ord + 'static,
-  {
-    self.map.get_or_remove(key).map_err(|e| match e {
-      Either::Right(e) => e,
-      _ => unreachable!(),
-    })
   }
 }

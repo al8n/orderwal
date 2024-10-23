@@ -70,6 +70,11 @@ pub trait BaseTable {
   fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
+
+  /// Removes the pointer associated with the key.
+  fn remove(&mut self, key: Self::Pointer) -> Result<(), Self::Error>
+  where
+    Self::Pointer: Pointer + Ord + 'static;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -123,15 +128,6 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-
-  /// Removes the pointer associated with the key.
-  #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b Self::Pointer,
-  ) -> Result<Option<Self::Item<'a>>, Self::Error>
-  where
-    Self::Pointer: Pointer + Ord + 'static;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -206,13 +202,4 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<Self::Pointer>;
-
-  /// Removes the pointer associated with the key.
-  #[allow(single_use_lifetimes)]
-  fn remove<'a, 'b: 'a>(
-    &'a mut self,
-    key: &'b Self::Pointer,
-  ) -> Result<Option<Self::Item<'a>>, Self::Error>
-  where
-    Self::Pointer: Pointer + Ord + 'static;
 }
