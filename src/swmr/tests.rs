@@ -6,7 +6,7 @@ use dbutils::{
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
   traits::{KeyRef, Type, TypeRef},
 };
-use generic::{ArenaTable, GenericOrderWal, LinkedTable};
+use generic::{ArenaTable, GenericOrderWal, GenericOrderWalReader, LinkedTable};
 
 use super::*;
 
@@ -45,7 +45,8 @@ macro_rules! expand_unit_tests {
 #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
 
-#[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
+// #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
+#[cfg(test)]
 mod insert;
 
 #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
@@ -56,6 +57,8 @@ mod get;
 
 type GenericOrderWalLinkedTable<K, V> = GenericOrderWal<K, V, LinkedTable<K, V>>;
 type GenericOrderWalArenaTable<K, V> = GenericOrderWal<K, V, ArenaTable<K, V>>;
+type GenericOrderWalReaderLinkedTable<K, V> = GenericOrderWalReader<K, V, LinkedTable<K, V>>;
+type GenericOrderWalReaderArenaTable<K, V> = GenericOrderWalReader<K, V, ArenaTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
