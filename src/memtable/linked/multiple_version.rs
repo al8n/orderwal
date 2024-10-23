@@ -67,7 +67,7 @@ where
   }
 }
 
-impl<'a, P> memtable::VersionedMemtableEntry<'a> for VersionedEntry<'a, P, ()>
+impl<'a, P> memtable::MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, P, ()>
 where
   P: Ord,
 {
@@ -122,11 +122,11 @@ where
   }
 }
 
-impl<P> memtable::VersionedMemtable for MultipleVersionTable<P>
+impl<P> memtable::MultipleVersionMemtable for MultipleVersionTable<P>
 where
   P: Send + Ord + WithVersion,
 {
-  type VersionedItem<'a>
+  type MultipleVersionItem<'a>
     = VersionedEntry<'a, P, ()>
   where
     Self::Pointer: 'a,

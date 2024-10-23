@@ -1,5 +1,5 @@
 use crate::{
-  memtable::{BaseTable, Memtable, VersionedMemtable},
+  memtable::{BaseTable, Memtable, MultipleVersionMemtable},
   sealed::{self, Constructable, WithVersion},
   wal::{GenericPointer, GenericVersionPointer},
 };
@@ -110,7 +110,7 @@ impl<K, V, M, S> crate::wal::multiple_version::Writer<K, V> for GenericOrderWal<
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
-  M: VersionedMemtable<Pointer = GenericVersionPointer<K, V>> + WithVersion + 'static,
+  M: MultipleVersionMemtable<Pointer = GenericVersionPointer<K, V>> + WithVersion + 'static,
   GenericVersionPointer<K, V>: Ord,
   S: 'static,
 {

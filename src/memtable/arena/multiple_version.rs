@@ -15,7 +15,7 @@ use skl::{
 };
 
 use crate::{
-  memtable::{BaseTable, MemtableEntry, VersionedMemtable, VersionedMemtableEntry},
+  memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry},
   sealed::{Pointer, WithVersion},
 };
 
@@ -65,7 +65,7 @@ where
   }
 }
 
-impl<'a, P> VersionedMemtableEntry<'a> for VersionedEntry<'a, P, ()>
+impl<'a, P> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, P, ()>
 where
   P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithVersion,
 {
@@ -143,11 +143,11 @@ where
   }
 }
 
-impl<P> VersionedMemtable for MultipleVersionTable<P>
+impl<P> MultipleVersionMemtable for MultipleVersionTable<P>
 where
   for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + WithVersion,
 {
-  type VersionedItem<'a>
+  type MultipleVersionItem<'a>
     = VersionedEntry<'a, Self::Pointer, ()>
   where
     Self::Pointer: 'a,

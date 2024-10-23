@@ -25,7 +25,7 @@ pub trait MemtableEntry<'a>: Sized {
 }
 
 /// An entry which is stored in the multiple versioned memory table.
-pub trait VersionedMemtableEntry<'a>: MemtableEntry<'a> {
+pub trait MultipleVersionMemtableEntry<'a>: MemtableEntry<'a> {
   /// Returns the version associated with the entry.
   fn version(&self) -> u64;
 }
@@ -135,24 +135,24 @@ where
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait VersionedMemtable: BaseTable
+pub trait MultipleVersionMemtable: BaseTable
 where
   Self::Pointer: WithVersion,
 {
   /// The item returned by the iterator or query methods.
-  type VersionedItem<'a>: VersionedMemtableEntry<'a, Pointer = Self::Pointer>
+  type MultipleVersionItem<'a>: MultipleVersionMemtableEntry<'a, Pointer = Self::Pointer>
   where
     Self::Pointer: 'a,
     Self: 'a;
 
   /// The iterator type which can yields all the entries in the memtable.
-  type AllIterator<'a>: Iterator<Item = Self::VersionedItem<'a>>
+  type AllIterator<'a>: Iterator<Item = Self::MultipleVersionItem<'a>>
   where
     Self::Pointer: 'a,
     Self: 'a;
 
   /// The range iterator type which can yields all the entries in the memtable.
-  type AllRange<'a, Q, R>: Iterator<Item = Self::VersionedItem<'a>>
+  type AllRange<'a, Q, R>: Iterator<Item = Self::MultipleVersionItem<'a>>
   where
     Self::Pointer: 'a,
     Self: 'a,

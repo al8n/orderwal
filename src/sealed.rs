@@ -11,7 +11,7 @@ use dbutils::{
 };
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
-use crate::memtable::{BaseTable, VersionedMemtable};
+use crate::memtable::{BaseTable, MultipleVersionMemtable};
 
 use super::{
   batch::{Batch, EncodedBatchEntryMeta},
@@ -179,7 +179,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
     version: u64,
   ) -> Iter<'_, <Self::Memtable as BaseTable>::Iterator<'_>, Self::Memtable>
   where
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     Iter::new(Some(version), self.memtable().iter(version))
@@ -194,7 +194,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     Range::new(Some(version), self.memtable().range(version, range))
@@ -204,7 +204,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   #[inline]
   fn first(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
   {
     if !self.contains_version(version) {
@@ -217,7 +217,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   fn last(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
   {
     if !self.contains_version(version) {
@@ -231,7 +231,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     if !self.contains_version(version) {
@@ -246,7 +246,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   fn get<Q>(&self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     if !self.contains_version(version) {
@@ -263,7 +263,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   ) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     if !self.contains_version(version) {
@@ -280,7 +280,7 @@ pub trait VersionedWalReader<K: ?Sized, V: ?Sized, S> {
   ) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     if !self.contains_version(version) {
@@ -558,13 +558,23 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
             buf.detach();
             let ptr = buf.as_ptr().add(ko);
-            Ok(Pointer::new(EntryFlags::empty(), klen, vlen, ptr))
+            Ok((
+              buf.buffer_offset(),
+              Pointer::new(EntryFlags::empty(), klen, vlen, ptr),
+            ))
           }
         }
       }
     };
 
-    res.and_then(|ptr| self.insert_pointer(ptr).map_err(Among::Right))
+    res.and_then(|(offset, ptr)| {
+      self.insert_pointer(ptr).map_err(|e| {
+        unsafe {
+          self.allocator().rewind(ArenaPosition::Start(offset as u32));
+        };
+        Among::Right(e)
+      })
+    })
   }
 
   fn insert_batch<W, B>(
@@ -587,7 +597,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
       return Err(Among::Right(Error::read_only()));
     }
 
-    unsafe {
+    let start_offset = unsafe {
       let (mut cursor, allocator, mut buf) = batch
         .iter_mut()
         .try_fold((0u32, 0u64), |(num_entries, size), ent| {
@@ -716,11 +726,21 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
           .map_err(|e| Among::Right(e.into()))?;
       }
       buf.detach();
-    }
+      Buffer::buffer_offset(&buf)
+    };
 
     self
       .insert_pointers(batch.iter_mut().map(|e| e.take_pointer().unwrap()))
-      .map_err(Among::Right)
+      .map_err(|e| {
+        // Safety: the writer is single threaded, the memory chunk in buf cannot be accessed by other threads,
+        // so it's safe to rewind the arena.
+        unsafe {
+          self
+            .allocator()
+            .rewind(ArenaPosition::Start(start_offset as u32));
+        }
+        Among::Right(e)
+      })
   }
 
   #[inline]
@@ -774,7 +794,7 @@ where
   K: ?Sized,
   V: ?Sized,
   T: Wal<K, V, S>,
-  T::Memtable: VersionedMemtable,
+  T::Memtable: MultipleVersionMemtable,
   <T::Memtable as BaseTable>::Pointer: WithVersion,
 {
   type Allocator = T::Allocator;

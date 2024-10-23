@@ -14,7 +14,7 @@ use crate::{
   batch::Batch,
   entry::BufWriter,
   error::Error,
-  memtable::{self, VersionedMemtable},
+  memtable::{self, MultipleVersionMemtable},
   sealed::{Constructable, GenericPointer, Pointer, VersionedWalReader, Wal, WithVersion},
   types::{KeyBuilder, ValueBuilder},
   Options,
@@ -26,7 +26,7 @@ use super::{entry::*, iter::*, GenericQueryRange, Query, Slice};
 pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<K, V>
 where
   <Self::Memtable as memtable::BaseTable>::Pointer: WithVersion + GenericPointer<K, V>,
-  Self::Memtable: VersionedMemtable,
+  Self::Memtable: MultipleVersionMemtable,
 {
   /// Returns the reserved space in the WAL.
   ///
@@ -88,7 +88,7 @@ where
   >
   where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
   {
     GenericIter::new(self.as_core().iter(version))
   }
@@ -233,7 +233,7 @@ where
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
     Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
   {
     self
       .as_core()
@@ -366,7 +366,7 @@ where
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
     Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
-    Self::Memtable: VersionedMemtable,
+    Self::Memtable: MultipleVersionMemtable,
   {
     self
       .as_core()
@@ -379,7 +379,7 @@ impl<T, K, V> Reader<K, V> for T
 where
   T: Constructable<K, V>,
   <T::Memtable as memtable::BaseTable>::Pointer: WithVersion + GenericPointer<K, V>,
-  T::Memtable: VersionedMemtable,
+  T::Memtable: MultipleVersionMemtable,
   K: ?Sized,
   V: ?Sized,
 {
@@ -390,7 +390,7 @@ pub trait Writer<K: ?Sized, V: ?Sized>: Reader<K, V>
 where
   <Self::Memtable as memtable::BaseTable>::Pointer: WithVersion + GenericPointer<K, V>,
   Self::Reader: Reader<K, V, Memtable = Self::Memtable>,
-  Self::Memtable: VersionedMemtable,
+  Self::Memtable: MultipleVersionMemtable,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
