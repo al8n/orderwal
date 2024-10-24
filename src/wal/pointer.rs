@@ -59,7 +59,15 @@ impl<K: ?Sized, V: ?Sized> CheapClone for GenericPointer<K, V> {
 impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   #[inline]
   fn new(flag: EntryFlags, klen: usize, vlen: usize, ptr: *const u8) -> Self {
-    Self::new(flag, klen, vlen, ptr)
+    Self {
+      key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE) },
+      value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + klen) },
+      ptr,
+      key_len: klen,
+      value_len: vlen,
+      flag,
+      _m: PhantomData,
+    }
   }
 
   #[inline]
@@ -89,11 +97,6 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   #[inline]
   fn version(&self) -> u64 {
     0
-  }
-
-  #[inline]
-  fn is_removed(&self) -> bool {
-    self.flag.contains(EntryFlags::REMOVED)
   }
 }
 
@@ -139,30 +142,6 @@ where
   K: ?Sized,
   V: ?Sized,
 {
-}
-
-impl<K, V> GenericPointer<K, V>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
-  #[inline]
-  pub(crate) const fn new(
-    flag: EntryFlags,
-    key_len: usize,
-    value_len: usize,
-    ptr: *const u8,
-  ) -> Self {
-    Self {
-      key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE) },
-      value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + key_len) },
-      ptr,
-      key_len,
-      value_len,
-      flag,
-      _m: PhantomData,
-    }
-  }
 }
 
 impl<K, V> Type for GenericPointer<K, V>

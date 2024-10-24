@@ -48,7 +48,7 @@ where
   M::Pointer: WithoutVersion,
   M::Error: std::fmt::Debug,
 {
-  let people = (0..1)
+  let people = (0..10)
     .map(|_| {
       let p = Person::random();
       let v = format!("My name is {}", p.name);
@@ -59,9 +59,7 @@ where
     .collect::<BTreeMap<_, _>>();
 
   let ent = wal.last().unwrap();
-  println!("ent raw key {:?}", ent.raw_key);
   let (p, v) = people.last_key_value().unwrap();
-  println!("p {:?}", p);
   assert!(ent.key().equivalent(p));
   assert_eq!(ent.value(), v);
 
@@ -232,13 +230,13 @@ where
 }
 
 expand_unit_tests!("linked": GenericOrderWalLinkedTable<Person, String> {
-  // first,
+  first,
   last,
-  // insert,
-  // insert_with_value_builder,
-  // insert_with_key_builder,
-  // insert_with_bytes,
-  // insert_with_builders,
+  insert,
+  insert_with_value_builder,
+  insert_with_key_builder,
+  insert_with_bytes,
+  insert_with_builders,
 });
 
 expand_unit_tests!("arena": GenericOrderWalArenaTable<Person, String> {

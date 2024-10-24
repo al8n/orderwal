@@ -32,6 +32,8 @@ bitflags::bitflags! {
     const REMOVED = 0b00000001;
     /// Second bit: 1 indicates the key is pointer
     const POINTER = 0b00000010;
+    /// Third bit: 1 indicates the entry contains a version
+    const VERSIONED = 0b00000100;
   }
 }
 
@@ -565,7 +567,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
               "the precalculated size should be equal to the written size"
             );
 
-            let entry_flag = if !remove {
+            let mut entry_flag = if !remove {
               EntryFlags::empty()
             } else {
               EntryFlags::REMOVED
@@ -574,6 +576,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
             if let Some(version) = version {
               buf.put_u64_le_unchecked(version);
+              entry_flag |= EntryFlags::VERSIONED;
             }
 
             let ko = encoded_entry_meta.key_offset();
@@ -581,9 +584,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
             buf.set_len(encoded_entry_meta.entry_size as usize - VERSION_SIZE);
 
             let mut key_buf = VacantBuffer::new(klen, NonNull::new_unchecked(ptr));
-            kb.write_once(&mut key_buf)
-              .map_err(Among::Left)?;
-            println!("encoded key {:?}", key_buf.as_slice());
+            kb.write_once(&mut key_buf).map_err(Among::Left)?;
 
             if let Some(vb) = vb {
               let vo = encoded_entry_meta.value_offset();
@@ -610,7 +611,9 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
             }
 
             buf.detach();
-            let ptr = buf.as_ptr().add(encoded_entry_meta.entry_flag_offset() as usize);
+            let ptr = buf
+              .as_ptr()
+              .add(encoded_entry_meta.entry_flag_offset() as usize);
             Ok((
               buf.buffer_offset(),
               Pointer::new(entry_flag, klen, vlen, ptr),
@@ -952,8 +955,24 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           let (key_len, value_len) = split_lengths(encoded_len);
           let key_len = key_len as usize;
           let value_len = value_len as usize;
+          let entry_flag = arena
+            .get_u8(cursor + RECORD_FLAG_SIZE + readed)
+            .map_err(|e| {
+              #[cfg(feature = "tracing")]
+              tracing::error!(err=%e);
+
+              Error::corrupted(e)
+            })?;
+
+          let entry_flag = EntryFlags::from_bits_retain(entry_flag);
+          let version_size = if entry_flag.contains(EntryFlags::VERSIONED) {
+            VERSION_SIZE
+          } else {
+            0
+          };
           // Same as above, if we reached the end of the arena, we should discard the remaining.
-          let cks_offset = RECORD_FLAG_SIZE + readed + key_len + value_len;
+          let cks_offset =
+            RECORD_FLAG_SIZE + readed + ENTRY_FLAGS_SIZE + version_size + key_len + value_len;
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
