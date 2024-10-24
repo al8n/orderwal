@@ -90,6 +90,11 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   fn version(&self) -> u64 {
     0
   }
+
+  #[inline]
+  fn is_removed(&self) -> bool {
+    self.flag.contains(EntryFlags::REMOVED)
+  }
 }
 
 impl<K: Type + ?Sized, V: ?Sized> PartialEq for GenericPointer<K, V> {
@@ -308,6 +313,11 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V
   #[inline]
   fn version(&self) -> u64 {
     self.version
+  }
+
+  #[inline]
+  fn is_removed(&self) -> bool {
+    self.flag.contains(EntryFlags::REMOVED)
   }
 }
 

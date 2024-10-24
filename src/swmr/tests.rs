@@ -1,5 +1,5 @@
 use core::cmp;
-use std::{collections::BTreeMap, thread::spawn};
+use std::thread::spawn;
 
 use dbutils::{
   equivalent::{Comparable, Equivalent},
@@ -13,7 +13,7 @@ use super::*;
 const MB: u32 = 1024 * 1024;
 
 macro_rules! expand_unit_tests {
-  ($prefix:literal: $wal:ty { $($name:ident), +$(,)? }) => {
+  ($prefix:literal: $wal:ty { $($name:ident $({ $($tt:tt)* })?), +$(,)? }) => {
     $(
       paste::paste! {
         #[test]
@@ -40,19 +40,61 @@ macro_rules! expand_unit_tests {
       }
     )*
   };
+  (move $prefix:literal: $wal:ty { $($name:ident $($block:expr)?), +$(,)? }) => {
+    $(
+      paste::paste! {
+        #[test]
+        fn [< test_ $prefix _ $name _inmemory >]() {
+          $name($crate::Builder::new().with_capacity(MB).alloc::<_, _, $wal>().unwrap());
+        }
+
+        #[test]
+        fn [< test_ $prefix _ $name _map_anon >]() {
+          $name($crate::Builder::new().with_capacity(MB).map_anon::<_, _, $wal>().unwrap());
+        }
+
+        #[test]
+        #[cfg_attr(miri, ignore)]
+        fn [< test_ $prefix _ $name _map_file >]() {
+          let dir = ::tempfile::tempdir().unwrap();
+          let p = dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file"));
+          let wal = unsafe {
+            $crate::Builder::new()
+              .with_create_new(true)
+                .with_read(true)
+                .with_write(true)
+                .with_capacity(MB as u32)
+                .map_mut::<_, _, $wal, _>(
+              &p,
+            )
+            .unwrap()
+          };
+
+          let res = $name(wal);
+
+          $(
+            {
+              let f = |p, res| { $block(p, res) };
+              f(p, res);
+            }
+          )?
+        }
+      }
+    )*
+  };
 }
 
 #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
 
-// #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
-#[cfg(test)]
+#[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
 mod insert;
 
 #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
 mod iters;
 
-#[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
+// #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
+#[cfg(test)]
 mod get;
 
 type GenericOrderWalLinkedTable<K, V> = GenericOrderWal<K, V, LinkedTable<K, V>>;

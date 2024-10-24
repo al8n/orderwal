@@ -78,7 +78,7 @@ where
 
 impl<P> memtable::BaseTable for MultipleVersionTable<P>
 where
-  P: Send + Ord,
+  P: Send + Ord + std::fmt::Debug,
 {
   type Pointer = P;
 
@@ -133,7 +133,7 @@ where
 
 impl<P> memtable::MultipleVersionMemtable for MultipleVersionTable<P>
 where
-  P: Send + Ord + WithVersion,
+  P: Send + Ord + WithVersion + std::fmt::Debug,
 {
   type MultipleVersionItem<'a>
     = VersionedEntry<'a, P, ()>

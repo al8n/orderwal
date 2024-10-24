@@ -29,7 +29,10 @@ pub struct GenericOrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
 }
 
 unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for GenericOrderWal<K, V, M, S> {}
-unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync for GenericOrderWal<K, V, M, S> {}
+unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync
+  for GenericOrderWal<K, V, M, S>
+{
+}
 
 impl<K: ?Sized, V: ?Sized, P, S> GenericOrderWal<K, V, P, S> {
   #[inline]

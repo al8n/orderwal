@@ -2,6 +2,16 @@ mod reader;
 mod wal;
 mod writer;
 
+// #[cfg(all(
+//   test,
+//   any(
+//     all_tests,
+//     test_swmr_generic_constructor,
+//     test_swmr_generic_insert,
+//     test_swmr_generic_get,
+//     test_swmr_generic_iters,
+//   )
+// ))]
 #[cfg(test)]
 mod tests;
 

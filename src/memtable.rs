@@ -33,7 +33,7 @@ pub trait MultipleVersionMemtableEntry<'a>: MemtableEntry<'a> {
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait BaseTable {
   /// The pointer type.
-  type Pointer;
+  type Pointer: std::fmt::Debug;
 
   /// The configuration options for the memtable.
   type Options;

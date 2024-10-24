@@ -307,7 +307,7 @@ where
   fn first(
     &self,
     version: u64,
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -316,7 +316,7 @@ where
     self
       .as_wal()
       .first(version)
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -324,14 +324,14 @@ where
   fn last(
     &self,
     version: u64,
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
   where
     K: Type,
     V: Type,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
   {
     MultipleVersionWalReader::last(self.as_wal(), version)
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -370,7 +370,7 @@ where
     &'a self,
     version: u64,
     key: &Q,
-  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type,
     V: Type,
@@ -381,7 +381,7 @@ where
     self
       .as_wal()
       .get(version, &Query::new(key))
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Gets the value associated with the key.
@@ -393,7 +393,7 @@ where
     &self,
     version: u64,
     key: &[u8],
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -404,7 +404,7 @@ where
     self
       .as_wal()
       .get(version, Slice::<K>::ref_cast(key))
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -414,7 +414,7 @@ where
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type + Ord,
     V: Type,
@@ -425,7 +425,7 @@ where
     self
       .as_wal()
       .upper_bound(version, bound.map(Query::ref_cast))
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -438,7 +438,7 @@ where
     &self,
     version: u64,
     bound: Bound<&[u8]>,
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -449,7 +449,7 @@ where
     self
       .as_wal()
       .upper_bound(version, bound.map(Slice::ref_cast))
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -459,7 +459,7 @@ where
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<GenericEntry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
     K: Type + Ord,
     V: Type,
@@ -470,7 +470,7 @@ where
     self
       .as_wal()
       .lower_bound(version, bound.map(Query::ref_cast))
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -483,7 +483,7 @@ where
     &self,
     version: u64,
     bound: Bound<&[u8]>,
-  ) -> Option<GenericEntry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
   where
     K: Type,
     V: Type,
@@ -495,7 +495,7 @@ where
     self
       .as_wal()
       .lower_bound(version, bound.map(Slice::ref_cast))
-      .map(|ent| GenericEntry::with_version(ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 }
 

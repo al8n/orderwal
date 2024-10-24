@@ -19,8 +19,10 @@ use super::{
   internal_iter::*,
   memtable::{BaseTable, Memtable, MultipleVersionMemtable},
   options::Options,
-  Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, STATUS_SIZE, VERSION_SIZE,
+  Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, RECORD_FLAG_SIZE, VERSION_SIZE,
 };
+
+const ENTRY_FLAGS_SIZE: usize = core::mem::size_of::<EntryFlags>();
 
 bitflags::bitflags! {
   /// The flags for each entry.
@@ -530,29 +532,21 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     }
 
     let res = {
-      // 1 byte for entry flag
-      let klen = 1
-        + if version.is_some() {
-          kb.len() + VERSION_SIZE
-        } else {
-          kb.len()
-        };
-
+      let klen = kb.len();
       let (vlen, remove) = vb.as_ref().map(|vb| (vb.len(), false)).unwrap_or((0, true));
-      self
-        .check(
-          klen,
-          vlen,
-          self.maximum_key_size(),
-          self.maximum_value_size(),
-          self.read_only(),
-        )
-        .map_err(Either::Right)?;
+      let encoded_entry_meta = check(
+        klen,
+        vlen,
+        version.is_some(),
+        self.maximum_key_size(),
+        self.maximum_value_size(),
+        self.read_only(),
+      )
+      .map_err(Either::Right)?;
 
-      let (len_size, kvlen, elen) = entry_size(klen as u32, vlen as u32);
       let allocator = self.allocator();
       let is_ondisk = allocator.is_ondisk();
-      let buf = allocator.alloc_bytes(elen);
+      let buf = allocator.alloc_bytes(encoded_entry_meta.entry_size);
       let mut cks = self.hasher().build_checksumer();
 
       match buf {
@@ -565,34 +559,36 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
             cks.update(&[flag]);
 
             buf.put_u8_unchecked(Flags::empty().bits());
-            let written = buf.put_u64_varint_unchecked(kvlen);
+            let written = buf.put_u64_varint_unchecked(encoded_entry_meta.packed_kvlen);
             debug_assert_eq!(
-              written, len_size,
+              written, encoded_entry_meta.packed_kvlen_size,
               "the precalculated size should be equal to the written size"
             );
 
-            let ko = STATUS_SIZE + written;
-            let entry_flag = if remove {
+            let entry_flag = if !remove {
               EntryFlags::empty()
             } else {
               EntryFlags::REMOVED
             };
             buf.put_u8_unchecked(entry_flag.bits());
-            let ptr = if let Some(version) = version {
-              buf.put_u64_le_unchecked(version);
-              buf.as_mut_ptr().add(ko + VERSION_SIZE)
-            } else {
-              buf.as_mut_ptr().add(ko)
-            };
-            buf.set_len(ko + klen + vlen);
 
-            kb.write_once(&mut VacantBuffer::new(klen, NonNull::new_unchecked(ptr)))
+            if let Some(version) = version {
+              buf.put_u64_le_unchecked(version);
+            }
+
+            let ko = encoded_entry_meta.key_offset();
+            let ptr = buf.as_mut_ptr().add(ko);
+            buf.set_len(encoded_entry_meta.entry_size as usize - VERSION_SIZE);
+
+            let mut key_buf = VacantBuffer::new(klen, NonNull::new_unchecked(ptr));
+            kb.write_once(&mut key_buf)
               .map_err(Among::Left)?;
+            println!("encoded key {:?}", key_buf.as_slice());
 
             if let Some(vb) = vb {
-              let vo = ko + klen;
+              let vo = encoded_entry_meta.value_offset();
               vb.write_once(&mut VacantBuffer::new(
-                vlen,
+                encoded_entry_meta.vlen as usize,
                 NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
               ))
               .map_err(Among::Middle)?;
@@ -609,12 +605,12 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
             if self.options().sync() && is_ondisk {
               allocator
-                .flush_header_and_range(buf.offset(), elen as usize)
+                .flush_header_and_range(buf.offset(), encoded_entry_meta.entry_size as usize)
                 .map_err(|e| Among::Right(e.into()))?;
             }
 
             buf.detach();
-            let ptr = buf.as_ptr().add(ko);
+            let ptr = buf.as_ptr().add(encoded_entry_meta.entry_flag_offset() as usize);
             Ok((
               buf.buffer_offset(),
               Pointer::new(entry_flag, klen, vlen, ptr),
@@ -679,8 +675,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
           let batch_meta_size = encoded_u64_varint_len(batch_meta);
           let allocator = self.allocator();
           let remaining = allocator.remaining() as u64;
-          let total_size =
-            STATUS_SIZE as u64 + batch_meta_size as u64 + batch_encoded_size + CHECKSUM_SIZE as u64;
+          let total_size = RECORD_FLAG_SIZE as u64
+            + batch_meta_size as u64
+            + batch_encoded_size
+            + CHECKSUM_SIZE as u64;
           if total_size > remaining {
             return Err(Error::insufficient_space(total_size, remaining as u32));
           }
@@ -798,21 +796,6 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
         }
         Among::Right(e)
       })
-  }
-
-  #[inline]
-  fn check(
-    &self,
-    klen: usize,
-    vlen: usize,
-    max_key_size: u32,
-    max_value_size: u32,
-    ro: bool,
-  ) -> Result<(), Error<Self::Memtable>>
-  where
-    Self::Memtable: BaseTable,
-  {
-    check(klen, vlen, max_key_size, max_value_size, ro)
   }
 
   #[inline]
@@ -945,7 +928,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
         // we reached the end of the arena, if we have any remaining, then if means two possibilities:
         // 1. the remaining is a partial entry, but it does not be persisted to the disk, so following the write-ahead log principle, we should discard it.
         // 2. our file may be corrupted, so we discard the remaining.
-        if cursor + STATUS_SIZE > allocated {
+        if cursor + RECORD_FLAG_SIZE > allocated {
           if !ro && cursor < allocated {
             arena.rewind(ArenaPosition::Start(cursor as u32));
             arena.flush()?;
@@ -957,17 +940,20 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
         let flag = Flags::from_bits_retain(header);
 
         if !flag.contains(Flags::BATCHING) {
-          let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
-            #[cfg(feature = "tracing")]
-            tracing::error!(err=%e);
+          let (readed, encoded_len) =
+            arena
+              .get_u64_varint(cursor + RECORD_FLAG_SIZE)
+              .map_err(|e| {
+                #[cfg(feature = "tracing")]
+                tracing::error!(err=%e);
 
-            Error::corrupted(e)
-          })?;
+                Error::corrupted(e)
+              })?;
           let (key_len, value_len) = split_lengths(encoded_len);
           let key_len = key_len as usize;
           let value_len = value_len as usize;
           // Same as above, if we reached the end of the arena, we should discard the remaining.
-          let cks_offset = STATUS_SIZE + readed + key_len + value_len;
+          let cks_offset = RECORD_FLAG_SIZE + readed + key_len + value_len;
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
@@ -998,7 +984,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
             break;
           }
 
-          let ptr = arena.get_pointer(cursor + STATUS_SIZE + readed);
+          let ptr = arena.get_pointer(cursor + RECORD_FLAG_SIZE + readed);
 
           let flag = EntryFlags::from_bits_retain(*ptr);
           let pointer: <Self::Memtable as BaseTable>::Pointer =
@@ -1016,17 +1002,20 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
 
           cursor += cks_offset + CHECKSUM_SIZE;
         } else {
-          let (readed, encoded_len) = arena.get_u64_varint(cursor + STATUS_SIZE).map_err(|e| {
-            #[cfg(feature = "tracing")]
-            tracing::error!(err=%e);
+          let (readed, encoded_len) =
+            arena
+              .get_u64_varint(cursor + RECORD_FLAG_SIZE)
+              .map_err(|e| {
+                #[cfg(feature = "tracing")]
+                tracing::error!(err=%e);
 
-            Error::corrupted(e)
-          })?;
+                Error::corrupted(e)
+              })?;
 
           let (num_entries, encoded_data_len) = split_lengths(encoded_len);
 
           // Same as above, if we reached the end of the arena, we should discard the remaining.
-          let cks_offset = STATUS_SIZE + readed + encoded_data_len as usize;
+          let cks_offset = RECORD_FLAG_SIZE + readed + encoded_data_len as usize;
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
@@ -1061,7 +1050,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
             let klen = klen as usize;
             let vlen = vlen as usize;
 
-            let ptr = arena.get_pointer(cursor + STATUS_SIZE + readed + sub_cursor + kvlen);
+            let ptr = arena.get_pointer(cursor + RECORD_FLAG_SIZE + readed + sub_cursor + kvlen);
             let flag = EntryFlags::from_bits_retain(*ptr);
             let ptr: <Self::Memtable as BaseTable>::Pointer = Pointer::new(flag, klen, vlen, ptr);
 
@@ -1121,20 +1110,66 @@ pub(crate) const fn split_lengths(len: u64) -> (u32, u32) {
   ((len >> 32) as u32, len as u32)
 }
 
-/// - The first `usize` is the length of the encoded `klen + vlen`
-/// - The second `u64` is encoded `klen + vlen`
-/// - The third `u32` is the full entry size
-#[inline]
-pub(crate) const fn entry_size(key_len: u32, value_len: u32) -> (usize, u64, u32) {
-  let len = merge_lengths(key_len, value_len);
-  let len_size = encoded_u64_varint_len(len);
-  let elen = STATUS_SIZE as u32 + len_size as u32 + key_len + value_len + CHECKSUM_SIZE as u32;
+struct EncodedEntryMeta {
+  packed_kvlen_size: usize,
+  packed_kvlen: u64,
+  entry_size: u32,
+  klen: u32,
+  vlen: u32,
+  versioned: bool,
+}
 
-  (len_size, len, elen)
+impl EncodedEntryMeta {
+  #[inline]
+  const fn new(key_len: u32, value_len: u32, versioned: bool) -> Self {
+    let len = merge_lengths(key_len, value_len);
+    let len_size = encoded_u64_varint_len(len);
+    let version_size = if versioned { VERSION_SIZE } else { 0 };
+    let elen = RECORD_FLAG_SIZE as u32
+      + len_size as u32
+      + ENTRY_FLAGS_SIZE as u32
+      + version_size as u32
+      + key_len
+      + value_len
+      + CHECKSUM_SIZE as u32;
+
+    Self {
+      packed_kvlen_size: len_size,
+      packed_kvlen: len,
+      entry_size: elen,
+      klen: key_len,
+      vlen: value_len,
+      versioned,
+    }
+  }
+
+  #[inline]
+  const fn entry_flag_offset(&self) -> usize {
+    RECORD_FLAG_SIZE + self.packed_kvlen_size
+  }
+
+  #[inline]
+  const fn version_offset(&self) -> usize {
+    self.entry_flag_offset() + ENTRY_FLAGS_SIZE
+  }
+
+  #[inline]
+  const fn key_offset(&self) -> usize {
+    if self.versioned {
+      self.version_offset() + VERSION_SIZE
+    } else {
+      self.version_offset()
+    }
+  }
+
+  #[inline]
+  const fn value_offset(&self) -> usize {
+    self.key_offset() + self.klen as usize
+  }
 }
 
 #[inline]
-pub(crate) const fn min_u64(a: u64, b: u64) -> u64 {
+const fn min_u64(a: u64, b: u64) -> u64 {
   if a < b {
     a
   } else {
@@ -1143,13 +1178,14 @@ pub(crate) const fn min_u64(a: u64, b: u64) -> u64 {
 }
 
 #[inline]
-pub(crate) const fn check<T: BaseTable>(
+const fn check<T: BaseTable>(
   klen: usize,
   vlen: usize,
+  versioned: bool,
   max_key_size: u32,
   max_value_size: u32,
   ro: bool,
-) -> Result<(), Error<T>> {
+) -> Result<EncodedEntryMeta, Error<T>> {
   if ro {
     return Err(Error::read_only());
   }
@@ -1165,20 +1201,28 @@ pub(crate) const fn check<T: BaseTable>(
     return Err(Error::value_too_large(vlen as u64, max_value_size));
   }
 
-  let (_, _, elen) = entry_size(klen as u32, vlen as u32);
-
-  if elen == u32::MAX {
+  let encoded_entry_meta = EncodedEntryMeta::new(klen as u32, vlen as u32, versioned);
+  if encoded_entry_meta.entry_size == u32::MAX {
+    let version_size = if versioned { VERSION_SIZE } else { 0 };
     return Err(Error::entry_too_large(
-      elen as u64,
-      min_u64(max_key_size as u64 + max_value_size as u64, u32::MAX as u64),
+      encoded_entry_meta.entry_size as u64,
+      min_u64(
+        RECORD_FLAG_SIZE as u64
+          + 10
+          + ENTRY_FLAGS_SIZE as u64
+          + version_size as u64
+          + max_key_size as u64
+          + max_value_size as u64,
+        u32::MAX as u64,
+      ),
     ));
   }
 
-  Ok(())
+  Ok(encoded_entry_meta)
 }
 
 #[inline]
-pub(crate) fn check_batch_entry<T: BaseTable>(
+fn check_batch_entry<T: BaseTable>(
   klen: usize,
   vlen: usize,
   max_key_size: u32,

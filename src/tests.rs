@@ -2,10 +2,14 @@ use core::ops::Bound;
 
 use dbutils::{checksum::Crc32, Ascend};
 
-use crate::{base::{Pointer, Reader, Writer}, error::Error, sealed::WithoutVersion, Builder};
+use crate::{
+  base::{Pointer, Reader, Writer},
+  error::Error,
+  sealed::WithoutVersion,
+  Builder,
+};
 
 const MB: usize = 1024 * 1024;
-
 
 macro_rules! expand_unit_tests {
   ($wal:ident { $($name:ident), +$(,)? }) => {
@@ -419,7 +423,9 @@ macro_rules! common_unittests {
   }
 }
 
-pub(crate) fn construct_inmemory<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>()
+pub(crate) fn construct_inmemory<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>()
 where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
@@ -432,7 +438,9 @@ where
   wal.insert(b"key1", b"value1").unwrap();
 }
 
-pub(crate) fn construct_map_anon<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>()
+pub(crate) fn construct_map_anon<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>()
 where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
@@ -444,8 +452,11 @@ where
   wal.insert(b"key1", b"value1").unwrap();
 }
 
-pub(crate) fn construct_map_file<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(prefix: &str)
-where
+pub(crate) fn construct_map_file<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  prefix: &str,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   let dir = ::tempfile::tempdir().unwrap();
@@ -488,7 +499,9 @@ where
   );
 }
 
-pub(crate) fn construct_with_small_capacity_inmemory<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>()
+pub(crate) fn construct_with_small_capacity_inmemory<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>()
 where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
@@ -501,7 +514,9 @@ where
   }
 }
 
-pub(crate) fn construct_with_small_capacity_map_anon<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>()
+pub(crate) fn construct_with_small_capacity_map_anon<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>()
 where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
@@ -514,8 +529,11 @@ where
   }
 }
 
-pub(crate) fn construct_with_small_capacity_map_file<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(prefix: &str)
-where
+pub(crate) fn construct_with_small_capacity_map_file<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  prefix: &str,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   let dir = ::tempfile::tempdir().unwrap();
@@ -539,8 +557,11 @@ where
   }
 }
 
-pub(crate) fn insert_to_full<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_to_full<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   let mut full = false;
@@ -559,8 +580,11 @@ where
   assert!(full);
 }
 
-pub(crate) fn insert<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -585,8 +609,11 @@ where
   }
 }
 
-pub(crate) fn insert_with_key_builder<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_with_key_builder<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -611,8 +638,11 @@ where
   }
 }
 
-pub(crate) fn insert_with_value_builder<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_with_value_builder<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -637,8 +667,11 @@ where
   }
 }
 
-pub(crate) fn insert_with_builders<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_with_builders<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -666,8 +699,9 @@ where
   }
 }
 
-pub(crate) fn iter<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn iter<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -706,8 +740,11 @@ where
   }
 }
 
-pub(crate) fn bounds<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn bounds<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -784,8 +821,9 @@ where
   assert_eq!(lower_unbounded, 0u32.to_be_bytes());
 }
 
-pub(crate) fn range<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn range<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -829,8 +867,9 @@ where
   }
 }
 
-pub(crate) fn keys<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn keys<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -869,8 +908,11 @@ where
   }
 }
 
-pub(crate) fn range_keys<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn range_keys<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -909,8 +951,11 @@ where
   }
 }
 
-pub(crate) fn values<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn values<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -949,8 +994,11 @@ where
   }
 }
 
-pub(crate) fn range_values<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn range_values<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -990,8 +1038,9 @@ where
   }
 }
 
-pub(crate) fn first<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn first<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -1008,8 +1057,9 @@ where
   assert_eq!(value, 0u32.to_be_bytes());
 }
 
-pub(crate) fn last<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn last<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -1026,8 +1076,11 @@ where
   assert_eq!(value, 99u32.to_be_bytes());
 }
 
-pub(crate) fn get_or_insert<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn get_or_insert<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -1052,8 +1105,11 @@ where
   }
 }
 
-pub(crate) fn get_or_insert_with_value_builder<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn get_or_insert_with_value_builder<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   for i in 0..100u32 {
@@ -1090,8 +1146,11 @@ where
   }
 }
 
-pub(crate) fn insert_batch<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_batch<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   const N: u32 = 100;
@@ -1128,8 +1187,11 @@ where
   );
 }
 
-pub(crate) fn insert_batch_with_key_builder<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_batch_with_key_builder<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   const N: u32 = 100;
@@ -1155,8 +1217,11 @@ where
   }
 }
 
-pub(crate) fn insert_batch_with_value_builder<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_batch_with_value_builder<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   const N: u32 = 100;
@@ -1181,8 +1246,11 @@ where
   }
 }
 
-pub(crate) fn insert_batch_with_builders<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn insert_batch_with_builders<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   const N: u32 = 100;
@@ -1208,8 +1276,11 @@ where
   }
 }
 
-pub(crate) fn zero_reserved<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn zero_reserved<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   unsafe {
@@ -1221,8 +1292,11 @@ where
   }
 }
 
-pub(crate) fn reserved<W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>>(wal: &mut W)
-where
+pub(crate) fn reserved<
+  W: Writer<Comparator = Ascend, Checksumer = Crc32, Pointer = Pointer<Ascend>>,
+>(
+  wal: &mut W,
+) where
   W::Pointer: WithoutVersion + Ord + 'static,
 {
   unsafe {

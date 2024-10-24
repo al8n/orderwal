@@ -48,14 +48,14 @@ where
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = GenericEntry<'a, K, V, M::Item<'a>>;
+  type Item = Entry<'a, K, V, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -72,7 +72,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -120,14 +120,14 @@ where
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = GenericKey<'a, K, M::Item<'a>>;
+  type Item = Key<'a, K, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -143,7 +143,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -190,14 +190,14 @@ where
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = GenericValue<'a, V, M::Item<'a>>;
+  type Item = Value<'a, V, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -213,7 +213,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -284,14 +284,14 @@ where
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
 {
-  type Item = GenericEntry<'a, K, V, B::Item<'a>>;
+  type Item = Entry<'a, K, V, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -312,7 +312,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -382,14 +382,14 @@ where
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
 {
-  type Item = GenericKey<'a, K, B::Item<'a>>;
+  type Item = Key<'a, K, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -409,7 +409,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -483,14 +483,14 @@ where
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
 {
-  type Item = GenericValue<'a, V, B::Item<'a>>;
+  type Item = Value<'a, V, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -511,7 +511,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -563,14 +563,14 @@ where
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = GenericEntry<'a, K, V, M::Item<'a>>;
+  type Item = Entry<'a, K, V, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -587,7 +587,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -635,14 +635,14 @@ where
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = GenericKey<'a, K, M::Item<'a>>;
+  type Item = Key<'a, K, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -658,7 +658,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -705,14 +705,14 @@ where
   M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = GenericValue<'a, V, M::Item<'a>>;
+  type Item = Value<'a, V, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -728,7 +728,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -799,14 +799,14 @@ where
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + WithVersion + CheapClone + 'static,
 {
-  type Item = GenericEntry<'a, K, V, B::Item<'a>>;
+  type Item = Entry<'a, K, V, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -827,7 +827,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericEntry::with_version_in(ent, self.version))
+      .map(|ent| Entry::with_version_in(ent, self.version))
   }
 }
 
@@ -898,14 +898,14 @@ where
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + WithVersion + CheapClone + 'static,
 {
-  type Item = GenericKey<'a, K, B::Item<'a>>;
+  type Item = Key<'a, K, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -925,7 +925,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericKey::with_version_in(ent, self.version))
+      .map(|ent| Key::with_version_in(ent, self.version))
   }
 }
 
@@ -1000,14 +1000,14 @@ where
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + WithVersion + CheapClone + 'static,
 {
-  type Item = GenericValue<'a, V, B::Item<'a>>;
+  type Item = Value<'a, V, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 
@@ -1028,7 +1028,7 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| GenericValue::with_version_in(ent, self.version))
+      .map(|ent| Value::with_version_in(ent, self.version))
   }
 }
 

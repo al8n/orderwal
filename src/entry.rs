@@ -58,7 +58,7 @@ where
 
   #[inline]
   fn len(&self) -> usize {
-    self.size() as usize
+    self.size()
   }
 
   #[inline]
@@ -75,7 +75,7 @@ where
 
   #[inline]
   fn len(&self) -> usize {
-    self.size() as usize
+    self.size()
   }
 
   #[inline]
@@ -131,7 +131,7 @@ where
 
   #[inline]
   fn len(&self) -> usize {
-    self.size() as usize
+    self.size()
   }
 
   #[inline]
@@ -148,7 +148,7 @@ where
 
   #[inline]
   fn len(&self) -> usize {
-    self.size() as usize
+    self.size()
   }
 
   #[inline]

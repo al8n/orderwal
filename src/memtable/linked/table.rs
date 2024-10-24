@@ -39,7 +39,7 @@ where
 
 impl<P> memtable::BaseTable for Table<P>
 where
-  P: Send + Ord,
+  P: Send + Ord + std::fmt::Debug,
 {
   type Pointer = P;
 
@@ -94,7 +94,7 @@ where
 
 impl<P> memtable::Memtable for Table<P>
 where
-  P: Send + Ord + WithoutVersion,
+  P: Send + Ord + WithoutVersion + std::fmt::Debug,
 {
   #[inline]
   fn len(&self) -> usize {

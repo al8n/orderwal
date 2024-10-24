@@ -26,7 +26,7 @@ pub use dbutils::checksum::XxHash3;
 #[cfg_attr(docsrs, doc(cfg(feature = "xxhash64")))]
 pub use dbutils::checksum::XxHash64;
 
-const STATUS_SIZE: usize = mem::size_of::<u8>();
+const RECORD_FLAG_SIZE: usize = mem::size_of::<Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;
 const MAGIC_TEXT: [u8; 6] = *b"ordwal";
@@ -39,24 +39,22 @@ const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 
 // #[cfg(all(
 //   test,
-//   // any(
-//   //   all_tests,
-//   //   test_unsync_constructor,
-//   //   test_unsync_insert,
-//   //   test_unsync_get,
-//   //   test_unsync_iters,
-//   //   test_swmr_constructor,
-//   //   test_swmr_insert,
-//   //   test_swmr_get,
-//   //   test_swmr_iters,
-//   //   test_swmr_generic_constructor,
-//   //   test_swmr_generic_insert,
-//   //   test_swmr_generic_get,
-//   //   test_swmr_generic_iters,
-//   // )
+//   any(
+//     all_tests,
+//     test_unsync_constructor,
+//     test_unsync_insert,
+//     test_unsync_get,
+//     test_unsync_iters,
+//     test_swmr_constructor,
+//     test_swmr_insert,
+//     test_swmr_get,
+//     test_swmr_iters,
+//     test_swmr_generic_constructor,
+//     test_swmr_generic_insert,
+//     test_swmr_generic_get,
+//     test_swmr_generic_iters,
+//   )
 // ))]
-// #[macro_use]
-// #[cfg(test)]
 // mod tests;
 
 /// Error types.
@@ -94,7 +92,7 @@ pub mod types {
           impl<F> $name<F> {
             #[doc = "Creates a new `" $name "` with the given size and builder closure which requires `FnOnce`."]
             #[inline]
-            pub const fn once<E>(size: u32, f: F) -> Self
+            pub const fn once<E>(size: usize, f: F) -> Self
             where
               F: for<'a> FnOnce(&mut dbutils::buffer::VacantBuffer<'a>) -> Result<(), E>,
             {
@@ -108,9 +106,9 @@ pub mod types {
 
   dbutils::builder!(
     /// A value builder for the wal, which requires the value size for accurate allocation and a closure to build the value.
-    pub ValueBuilder(u32);
+    pub ValueBuilder;
     /// A key builder for the wal, which requires the key size for accurate allocation and a closure to build the key.
-    pub KeyBuilder(u32);
+    pub KeyBuilder;
   );
 
   builder_ext!(ValueBuilder, KeyBuilder,);
