@@ -14,11 +14,11 @@ use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 use super::{
   batch::{Batch, EncodedBatchEntryMeta},
   checksum::{BuildChecksumer, Checksumer},
-  entry::BufWriter,
   error::Error,
   internal_iter::*,
   memtable::{BaseTable, Memtable, MultipleVersionMemtable},
   options::Options,
+  types::BufWriter,
   Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, RECORD_FLAG_SIZE, VERSION_SIZE,
 };
 
@@ -473,8 +473,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     vb: VE,
   ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
   where
-    KE: super::entry::BufWriterOnce,
-    VE: super::entry::BufWriterOnce,
+    KE: super::types::BufWriterOnce,
+    VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
@@ -488,26 +488,26 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     kb: KE,
   ) -> Result<(), Either<KE::Error, Error<Self::Memtable>>>
   where
-    KE: super::entry::BufWriterOnce,
+    KE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     struct Noop;
 
-    impl super::entry::BufWriterOnce for Noop {
+    impl super::types::BufWriterOnce for Noop {
       type Error = ();
 
       #[inline(never)]
       #[cold]
-      fn len(&self) -> usize {
+      fn encoded_len(&self) -> usize {
         0
       }
 
       #[inline(never)]
       #[cold]
-      fn write_once(self, _: &mut VacantBuffer<'_>) -> Result<(), Self::Error> {
-        Ok(())
+      fn write_once(self, _: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
+        Ok(0)
       }
     }
 
@@ -523,8 +523,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     vb: Option<VE>,
   ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
   where
-    KE: super::entry::BufWriterOnce,
-    VE: super::entry::BufWriterOnce,
+    KE: super::types::BufWriterOnce,
+    VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
@@ -534,8 +534,11 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     }
 
     let res = {
-      let klen = kb.len();
-      let (vlen, remove) = vb.as_ref().map(|vb| (vb.len(), false)).unwrap_or((0, true));
+      let klen = kb.encoded_len();
+      let (vlen, remove) = vb
+        .as_ref()
+        .map(|vb| (vb.encoded_len(), false))
+        .unwrap_or((0, true));
       let encoded_entry_meta = check(
         klen,
         vlen,
@@ -583,16 +586,30 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
             let ptr = buf.as_mut_ptr().add(ko);
             buf.set_len(encoded_entry_meta.entry_size as usize - VERSION_SIZE);
 
-            let mut key_buf = VacantBuffer::new(klen, NonNull::new_unchecked(ptr));
-            kb.write_once(&mut key_buf).map_err(Among::Left)?;
+            let mut key_buf = VacantBuffer::new(
+              encoded_entry_meta.klen as usize,
+              NonNull::new_unchecked(ptr),
+            );
+            let written = kb.write_once(&mut key_buf).map_err(Among::Left)?;
+            debug_assert_eq!(
+              written, encoded_entry_meta.klen as usize,
+              "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
+              encoded_entry_meta.klen, written,
+            );
 
             if let Some(vb) = vb {
               let vo = encoded_entry_meta.value_offset();
-              vb.write_once(&mut VacantBuffer::new(
+              let mut value_buf = VacantBuffer::new(
                 encoded_entry_meta.vlen as usize,
                 NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
-              ))
-              .map_err(Among::Middle)?;
+              );
+              let written = vb.write_once(&mut value_buf).map_err(Among::Middle)?;
+
+              debug_assert_eq!(
+                written, encoded_entry_meta.vlen as usize,
+                "the actual bytes written to the value buffer not equal to the expected size, expected {} but got {}.",
+                encoded_entry_meta.vlen, written,
+              );
             }
 
             let cks = {

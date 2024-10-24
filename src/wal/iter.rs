@@ -5,11 +5,11 @@ use dbutils::{equivalent::Comparable, traits::Type, CheapClone};
 use crate::{
   memtable::{BaseTable, MultipleVersionMemtable},
   sealed::WithVersion,
+  types::{Entry, Key, Value},
 };
 
 use super::{
   super::{internal_iter::Iter as BaseIter, sealed::Pointer},
-  entry::*,
   GenericQueryRange, Query,
 };
 

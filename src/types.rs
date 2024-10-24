@@ -1,208 +1,14 @@
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalent::{Comparable, Equivalent},
-  traits::{KeyRef, MaybeStructured, Type, TypeRef},
+use dbutils::traits::{KeyRef, Type};
+pub use dbutils::{
+  buffer::{BufWriter, BufWriterOnce},
+  traits::MaybeStructured,
 };
-use rarena_allocator::either::Either;
 
 use crate::{
   memtable::MemtableEntry,
   sealed::{Pointer, WithVersion, WithoutVersion},
+  ty_ref,
 };
-
-use super::ty_ref;
-
-impl<'a, T: ?Sized> From<MaybeStructured<'a, T>> for Generic<'a, T> {
-  #[inline]
-  fn from(value: MaybeStructured<'a, T>) -> Self {
-    match value.data() {
-      Either::Left(val) => Self {
-        data: Either::Left(val),
-      },
-      Either::Right(val) => Self {
-        data: Either::Right(val),
-      },
-    }
-  }
-}
-
-impl<'a, T: ?Sized> From<Generic<'a, T>> for MaybeStructured<'a, T> {
-  #[inline]
-  fn from(value: Generic<'a, T>) -> Self {
-    match value.data() {
-      Either::Left(val) => Self::from(val),
-      Either::Right(val) => unsafe { Self::from_slice(val) },
-    }
-  }
-}
-
-/// A wrapper around a generic type that can be used to construct for insertion.
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct Generic<'a, T: ?Sized> {
-  data: Either<&'a T, &'a [u8]>,
-}
-
-impl<'a, T: 'a> PartialEq<T> for Generic<'a, T>
-where
-  T: ?Sized + PartialEq + Type + for<'b> Equivalent<T::Ref<'b>>,
-{
-  #[inline]
-  fn eq(&self, other: &T) -> bool {
-    match &self.data {
-      Either::Left(val) => (*val).eq(other),
-      Either::Right(val) => {
-        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
-        other.equivalent(&ref_)
-      }
-    }
-  }
-}
-
-impl<'a, T: 'a> PartialEq for Generic<'a, T>
-where
-  T: ?Sized + PartialEq + Type + for<'b> Equivalent<T::Ref<'b>>,
-{
-  #[inline]
-  fn eq(&self, other: &Self) -> bool {
-    match (&self.data, &other.data) {
-      (Either::Left(val), Either::Left(other_val)) => val.eq(other_val),
-      (Either::Right(val), Either::Right(other_val)) => val.eq(other_val),
-      (Either::Left(val), Either::Right(other_val)) => {
-        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(other_val) };
-        val.equivalent(&ref_)
-      }
-      (Either::Right(val), Either::Left(other_val)) => {
-        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
-        other_val.equivalent(&ref_)
-      }
-    }
-  }
-}
-
-impl<'a, T: 'a> Eq for Generic<'a, T> where T: ?Sized + Eq + Type + for<'b> Equivalent<T::Ref<'b>> {}
-
-impl<'a, T: 'a> PartialOrd for Generic<'a, T>
-where
-  T: ?Sized + Ord + Type + for<'b> Comparable<T::Ref<'b>>,
-  for<'b> T::Ref<'b>: Comparable<T> + Ord,
-{
-  #[inline]
-  fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl<'a, T: 'a> PartialOrd<T> for Generic<'a, T>
-where
-  T: ?Sized + PartialOrd + Type + for<'b> Comparable<T::Ref<'b>>,
-{
-  #[inline]
-  fn partial_cmp(&self, other: &T) -> Option<core::cmp::Ordering> {
-    match &self.data {
-      Either::Left(val) => (*val).partial_cmp(other),
-      Either::Right(val) => {
-        let ref_ = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
-        Some(other.compare(&ref_).reverse())
-      }
-    }
-  }
-}
-
-impl<'a, T: 'a> Ord for Generic<'a, T>
-where
-  T: ?Sized + Ord + Type + for<'b> Comparable<T::Ref<'b>>,
-  for<'b> T::Ref<'b>: Comparable<T> + Ord,
-{
-  #[inline]
-  fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-    match (&self.data, &other.data) {
-      (Either::Left(val), Either::Left(other_val)) => (*val).cmp(other_val),
-      (Either::Right(val), Either::Right(other_val)) => {
-        let this = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
-        let other = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(other_val) };
-        this.cmp(&other)
-      }
-      (Either::Left(val), Either::Right(other_val)) => {
-        let other = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(other_val) };
-        other.compare(*val).reverse()
-      }
-      (Either::Right(val), Either::Left(other_val)) => {
-        let this = unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(val) };
-        this.compare(*other_val)
-      }
-    }
-  }
-}
-
-impl<'a, T: 'a + Type + ?Sized> Generic<'a, T> {
-  /// Returns the encoded length.
-  #[inline]
-  pub fn encoded_len(&self) -> usize {
-    match &self.data {
-      Either::Left(val) => val.encoded_len(),
-      Either::Right(val) => val.len(),
-    }
-  }
-
-  /// Encodes the generic into the buffer.
-  ///
-  /// ## Panics
-  /// - if the buffer is not large enough.
-  #[inline]
-  pub fn encode(&self, buf: &mut [u8]) -> Result<usize, T::Error> {
-    match &self.data {
-      Either::Left(val) => val.encode(buf),
-      Either::Right(val) => {
-        buf.copy_from_slice(val);
-        Ok(buf.len())
-      }
-    }
-  }
-
-  /// Encodes the generic into the given buffer.
-  ///
-  /// ## Panics
-  /// - if the buffer is not large enough.
-  #[inline]
-  pub fn encode_to_buffer(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, T::Error> {
-    match &self.data {
-      Either::Left(val) => val.encode_to_buffer(buf),
-      Either::Right(val) => {
-        buf.put_slice_unchecked(val);
-        Ok(buf.len())
-      }
-    }
-  }
-}
-
-impl<'a, T: 'a + ?Sized> Generic<'a, T> {
-  /// Returns the value contained in the generic.
-  #[inline]
-  pub const fn data(&self) -> Either<&'a T, &'a [u8]> {
-    self.data
-  }
-
-  /// Creates a new generic from bytes for querying or inserting into the [`GenericOrderWal`](crate::swmr::GenericOrderWal).
-  ///
-  /// ## Safety
-  /// - the `slice` must the same as the one returned by [`T::encode`](Type::encode).
-  #[inline]
-  pub const unsafe fn from_slice(slice: &'a [u8]) -> Self {
-    Self {
-      data: Either::Right(slice),
-    }
-  }
-}
-
-impl<'a, T: 'a + ?Sized> From<&'a T> for Generic<'a, T> {
-  #[inline]
-  fn from(value: &'a T) -> Self {
-    Self {
-      data: Either::Left(value),
-    }
-  }
-}
 
 /// The reference to an entry in the generic WALs.
 pub struct Entry<'a, K, V, E>
@@ -639,3 +445,31 @@ where
     &self.value
   }
 }
+
+macro_rules! builder_ext {
+  ($($name:ident),+ $(,)?) => {
+    $(
+      paste::paste! {
+        impl<F> $name<F> {
+          #[doc = "Creates a new `" $name "` with the given size and builder closure which requires `FnOnce`."]
+          #[inline]
+          pub const fn once<E>(size: usize, f: F) -> Self
+          where
+            F: for<'a> FnOnce(&mut dbutils::buffer::VacantBuffer<'a>) -> Result<(), E>,
+          {
+            Self { size, f }
+          }
+        }
+      }
+    )*
+  };
+}
+
+dbutils::builder!(
+  /// A value builder for the wal, which requires the value size for accurate allocation and a closure to build the value.
+  pub ValueBuilder;
+  /// A key builder for the wal, which requires the key size for accurate allocation and a closure to build the key.
+  pub KeyBuilder;
+);
+
+builder_ext!(ValueBuilder, KeyBuilder,);

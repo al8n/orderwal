@@ -91,7 +91,10 @@ where
     .collect::<Vec<_>>();
 
   for (person, val) in output.iter() {
-    batch.push(BatchEntry::new(Generic::from(person), Generic::from(val)));
+    batch.push(BatchEntry::new(
+      MaybeStructured::from(person),
+      MaybeStructured::from(val),
+    ));
   }
 
   let rp1 = Person::random();
@@ -149,7 +152,7 @@ where
         buf.set_len(person.encoded_len());
         person.encode(buf).map(|_| ())
       }),
-      Generic::from(val),
+      MaybeStructured::from(val),
     ));
   }
 

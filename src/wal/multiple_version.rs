@@ -5,7 +5,7 @@ use dbutils::{
   buffer::VacantBuffer,
   checksum::BuildChecksumer,
   equivalent::Comparable,
-  traits::{KeyRef, Type},
+  traits::{KeyRef, MaybeStructured, Type},
 };
 use rarena_allocator::Allocator;
 use ref_cast::RefCast;
@@ -13,15 +13,14 @@ use skl::either::Either;
 
 use crate::{
   batch::Batch,
-  entry::BufWriter,
   error::Error,
   memtable::{self, MultipleVersionMemtable},
   sealed::{Constructable, GenericPointer, MultipleVersionWalReader, Pointer, Wal, WithVersion},
-  types::{KeyBuilder, ValueBuilder},
+  types::{BufWriter, Entry, KeyBuilder, ValueBuilder},
   Options,
 };
 
-use super::{entry::*, iter::*, GenericQueryRange, Query, Slice};
+use super::{iter::*, GenericQueryRange, Query, Slice};
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<K, V>
@@ -558,8 +557,8 @@ where
   fn insert_with_key_builder<'a, E>(
     &'a mut self,
     version: u64,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
-    value: impl Into<Generic<'a, V>>,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
+    value: impl Into<MaybeStructured<'a, V>>,
   ) -> Result<(), Among<E, V::Error, Error<Self::Memtable>>>
   where
     K: Type,
@@ -578,8 +577,8 @@ where
   fn insert_with_value_builder<'a, E>(
     &'a mut self,
     version: u64,
-    key: impl Into<Generic<'a, K>>,
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), E>>,
+    key: impl Into<MaybeStructured<'a, K>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
   ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     K: Type + 'a,
@@ -596,8 +595,8 @@ where
   fn insert_with_builders<KE, VE>(
     &mut self,
     version: u64,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
-    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), VE>>,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, VE>>,
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     K: Type,
@@ -613,8 +612,8 @@ where
   fn insert<'a>(
     &mut self,
     version: u64,
-    key: impl Into<Generic<'a, K>>,
-    value: impl Into<Generic<'a, V>>,
+    key: impl Into<MaybeStructured<'a, K>>,
+    value: impl Into<MaybeStructured<'a, V>>,
   ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     K: Type + 'a,
@@ -633,7 +632,7 @@ where
   fn remove_with_builder<KE>(
     &mut self,
     version: u64,
-    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<(), KE>>,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     K: Type,
@@ -648,7 +647,7 @@ where
   fn remove<'a>(
     &mut self,
     version: u64,
-    key: impl Into<Generic<'a, K>>,
+    key: impl Into<MaybeStructured<'a, K>>,
   ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
   where
     K: Type + 'a,
@@ -667,8 +666,8 @@ where
   where
     B: Batch<
       <Self::Memtable as memtable::BaseTable>::Pointer,
-      Key = Generic<'a, K>,
-      Value = Generic<'a, V>,
+      Key = MaybeStructured<'a, K>,
+      Value = MaybeStructured<'a, V>,
     >,
     K: Type + 'a,
     V: Type + 'a,
@@ -685,7 +684,7 @@ where
     batch: &'a mut B,
   ) -> Result<(), Among<<B::Key as BufWriter>::Error, V::Error, Error<Self::Memtable>>>
   where
-    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Value = Generic<'a, V>>,
+    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Value = MaybeStructured<'a, V>>,
     B::Key: BufWriter,
     K: Type + 'a,
     V: Type + 'a,
@@ -702,7 +701,7 @@ where
     batch: &'a mut B,
   ) -> Result<(), Among<K::Error, <B::Value as BufWriter>::Error, Error<Self::Memtable>>>
   where
-    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = Generic<'a, K>>,
+    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = MaybeStructured<'a, K>>,
     B::Value: BufWriter,
     K: Type + 'a,
     V: Type + 'a,

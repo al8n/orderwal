@@ -3,7 +3,7 @@ use crate::{
   VERSION_SIZE,
 };
 
-use super::entry::BufWriter;
+use super::types::BufWriter;
 
 pub(crate) struct EncodedBatchEntryMeta {
   /// The output of `merge_lengths(klen, vlen)`
@@ -131,7 +131,7 @@ impl<K, V, P> BatchEntry<K, V, P> {
   where
     K: BufWriter,
   {
-    self.key.len()
+    self.key.encoded_len()
   }
 
   /// Returns the length of the value.
@@ -140,7 +140,7 @@ impl<K, V, P> BatchEntry<K, V, P> {
   where
     V: BufWriter,
   {
-    self.value.as_ref().map_or(0, |v| v.len())
+    self.value.as_ref().map_or(0, |v| v.encoded_len())
   }
 
   /// Returns the key.
@@ -169,8 +169,8 @@ impl<K, V, P> BatchEntry<K, V, P> {
   {
     // 1 for entry flag
     1 + match self.version {
-      Some(_) => self.key.len() + VERSION_SIZE,
-      None => self.key.len(),
+      Some(_) => self.key.encoded_len() + VERSION_SIZE,
+      None => self.key.encoded_len(),
     }
   }
 

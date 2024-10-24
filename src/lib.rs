@@ -13,6 +13,7 @@ pub use among;
 #[cfg(feature = "std")]
 extern crate std;
 
+use dbutils::traits::{Type, TypeRef};
 pub use dbutils::{
   checksum::{self, Crc32},
   Ascend, CheapClone, Comparator, Descend,
@@ -63,7 +64,8 @@ pub mod error;
 mod builder;
 pub use builder::Builder;
 
-mod entry;
+/// Types
+pub mod types;
 
 mod options;
 pub use options::Options;
@@ -81,39 +83,6 @@ pub mod iter {
   pub use super::wal::iter::*;
 }
 
-/// Types
-pub mod types {
-  pub use super::wal::entry::*;
-
-  macro_rules! builder_ext {
-    ($($name:ident),+ $(,)?) => {
-      $(
-        paste::paste! {
-          impl<F> $name<F> {
-            #[doc = "Creates a new `" $name "` with the given size and builder closure which requires `FnOnce`."]
-            #[inline]
-            pub const fn once<E>(size: usize, f: F) -> Self
-            where
-              F: for<'a> FnOnce(&mut dbutils::buffer::VacantBuffer<'a>) -> Result<(), E>,
-            {
-              Self { size, f }
-            }
-          }
-        }
-      )*
-    };
-  }
-
-  dbutils::builder!(
-    /// A value builder for the wal, which requires the value size for accurate allocation and a closure to build the value.
-    pub ValueBuilder;
-    /// A key builder for the wal, which requires the key size for accurate allocation and a closure to build the key.
-    pub KeyBuilder;
-  );
-
-  builder_ext!(ValueBuilder, KeyBuilder,);
-}
-
 mod internal_iter;
 /// The memory table implementation.
 pub mod memtable;
@@ -128,4 +97,9 @@ bitflags::bitflags! {
     /// Second bit: 1 indicates batching, 0 indicates single entry
     const BATCHING = 0b00000010;
   }
+}
+
+#[inline]
+fn ty_ref<T: ?Sized + Type>(src: &[u8]) -> T::Ref<'_> {
+  unsafe { <T::Ref<'_> as TypeRef<'_>>::from_slice(src) }
 }

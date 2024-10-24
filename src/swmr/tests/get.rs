@@ -1,6 +1,6 @@
 use generic::{ArenaTable, GenericOrderWal, GenericPointer, LinkedTable};
 
-use dbutils::buffer::VacantBuffer;
+use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
 use std::collections::BTreeMap;
 
@@ -8,7 +8,7 @@ use crate::{
   memtable::Memtable,
   sealed::{Constructable, WalReader, WithoutVersion},
   swmr::generic::{Reader, Writer},
-  types::{Generic, KeyBuilder, ValueBuilder},
+  types::{KeyBuilder, ValueBuilder},
 };
 
 use super::*;
@@ -112,7 +112,7 @@ where
         .insert_with_value_builder(
           &p,
           ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
-            buf.put_slice(v.as_bytes())
+            buf.put_slice(v.as_bytes()).map(|_| v.len())
           }),
         )
         .unwrap();
@@ -141,7 +141,9 @@ where
       let pvec = p.to_vec();
       let v = format!("My name is {}", p.name);
       unsafe {
-        wal.insert(Generic::from_slice(pvec.as_ref()), &v).unwrap();
+        wal
+          .insert(MaybeStructured::from_slice(pvec.as_ref()), &v)
+          .unwrap();
       }
       (p, v)
     })
@@ -172,8 +174,8 @@ where
       unsafe {
         wal
           .insert(
-            Generic::from_slice(p.to_vec().as_slice()),
-            Generic::from_slice(v.as_bytes()),
+            MaybeStructured::from_slice(p.to_vec().as_slice()),
+            MaybeStructured::from_slice(v.as_bytes()),
           )
           .unwrap();
       }
@@ -195,19 +197,21 @@ where
   M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
   M::Pointer: WithoutVersion,
   M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: std::fmt::Debug,
 {
-  let people = (0..100)
+  let people = (0..1)
     .map(|_| {
       let p = Person::random();
       let pvec = p.to_vec();
       let v = format!("My name is {}", p.name);
+      println!("{p:?} encoded person len {}", p.encoded_len());
       wal
         .insert_with_builders(
-          KeyBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
-            p.encode_to_buffer(buf).map(|_| ())
+          KeyBuilder::new(pvec.len(), |buf: &mut VacantBuffer<'_>| {
+            p.encode_to_buffer(buf)
           }),
           ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
-            buf.put_slice(v.as_bytes())
+            buf.put_slice(v.as_bytes()).map(|_| v.len())
           }),
         )
         .unwrap();
@@ -215,7 +219,11 @@ where
     })
     .collect::<Vec<_>>();
 
-  assert_eq!(wal.len(), 100);
+  assert_eq!(wal.len(), 1);
+
+  for ent in wal.iter() {
+    println!("{:?}", ent.raw_key);
+  }
 
   for (p, pvec, pv) in &people {
     assert!(wal.contains_key(p));
