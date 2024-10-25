@@ -14,7 +14,7 @@ use super::{reader::GenericOrderWalReader, wal::OrderCore};
 #[cfg(all(
   test,
   any(
-    all_tests,
+    all_orderwal_tests,
     test_swmr_constructor,
     test_swmr_insert,
     test_swmr_get,
@@ -86,10 +86,10 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{unsync::GenericOrderWal, Wal, Builder};
+  /// use orderwal::{base::GenericOrderWal, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = Builder::new().with_capacity(100).alloc::<GenericOrderWal>().unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<[u8], [u8], GenericOrderWal<_, _>>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```

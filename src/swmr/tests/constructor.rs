@@ -1,4 +1,4 @@
-use generic::{GenericPointer, Reader, Writer};
+use base::{GenericPointer, Reader, Writer};
 
 use crate::{memtable::Memtable, sealed::WithoutVersion};
 
@@ -39,13 +39,31 @@ where
 expand_unit_tests!(
   "linked": GenericOrderWal<Person, String, LinkedTable<Person, String>> {
     zero_reserved,
-    reserved,
+  }
+);
+
+expand_unit_tests!(
+  "linked": GenericOrderWal<Person, String, LinkedTable<Person, String>> {
+    reserved({
+      crate::Builder::new()
+        .with_capacity(MB)
+        .with_reserved(4)
+    }),
   }
 );
 
 expand_unit_tests!(
   "arena": GenericOrderWal<Person, String, ArenaTable<Person, String>> {
     zero_reserved,
-    reserved,
+  }
+);
+
+expand_unit_tests!(
+  "arena": GenericOrderWal<Person, String, ArenaTable<Person, String>> {
+    reserved({
+      crate::Builder::new()
+        .with_capacity(MB)
+        .with_reserved(4)
+    }),
   }
 );

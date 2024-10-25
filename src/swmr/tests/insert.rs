@@ -1,5 +1,5 @@
+use base::{GenericPointer, Reader, Writer};
 use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
-use generic::{GenericPointer, Reader, Writer};
 
 use crate::{
   batch::BatchEntry,

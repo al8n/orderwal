@@ -55,9 +55,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Crc32};
+  /// use orderwal::{Builder, Crc32, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_checksumer(Crc32::new());
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_checksumer(Crc32::new());
   /// ```
   #[inline]
   pub fn with_checksumer<NS>(self, cks: NS) -> Builder<M, NS> {
@@ -73,9 +73,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Options};
+  /// use orderwal::{Builder, Options, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_options(Options::default());
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_options(Options::default());
   /// ```
   #[inline]
   pub fn with_options(self, opts: Options) -> Self {
@@ -91,9 +91,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Options};
+  /// use orderwal::{Builder, multiple_version::{ArenaTable, ArenaTableOptions}};
   ///
-  /// let opts = Builder::new().with_options(Options::default());
+  /// let opts = Builder::<ArenaTable<[u8], [u8]>>::new().with_memtable_options(ArenaTableOptions::default());
   /// ```
   #[inline]
   pub fn with_memtable_options(self, opts: M::Options) -> Self {
@@ -109,9 +109,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Options};
+  /// use orderwal::{Builder, multiple_version::{LinkedTable, ArenaTable}};
   ///
-  /// let opts = Builder::new().with_options(Options::default());
+  /// let opts = Builder::<ArenaTable<[u8], [u8]>>::new().change_memtable::<LinkedTable<[u8], [u8]>>();
   /// ```
   #[inline]
   pub fn change_memtable<NM>(self) -> Builder<NM, S>
@@ -131,9 +131,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Options};
+  /// use orderwal::{Builder, multiple_version::{LinkedTable, ArenaTable, ArenaTableOptions}};
   ///
-  /// let opts = Builder::new().change_memtable_with_options(Options::default());
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().change_memtable_with_options::<ArenaTable<[u8], [u8]>>(ArenaTableOptions::default().with_capacity(1000));
   /// ```
   #[inline]
   pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, S>
@@ -157,9 +157,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_reserved(8);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_reserved(8);
   /// ```
   #[inline]
   pub const fn with_reserved(mut self, reserved: u32) -> Self {
@@ -177,9 +177,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_reserved(8);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_reserved(8);
   ///
   /// assert_eq!(opts.reserved(), 8);
   /// ```
@@ -202,9 +202,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_lock_meta(false);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_lock_meta(false);
   /// ```
   #[inline]
   pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
@@ -222,9 +222,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_lock_meta(false);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_lock_meta(false);
   /// assert_eq!(opts.lock_meta(), false);
   /// ```
   #[inline]
@@ -239,9 +239,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_magic_version(1);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]
@@ -256,9 +256,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_capacity(1000);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_capacity(1000);
   /// assert_eq!(options.capacity(), 1000);
   /// ```
   #[inline]
@@ -273,9 +273,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_maximum_key_size(1024);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
@@ -290,9 +290,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_maximum_value_size(1024);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
   #[inline]
@@ -307,9 +307,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new();
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new();
   /// assert_eq!(options.sync(), true);
   /// ```
   #[inline]
@@ -326,9 +326,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_capacity(100);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_capacity(100);
   /// assert_eq!(options.capacity(), 100);
   /// ```
   #[inline]
@@ -342,9 +342,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_maximum_key_size(1024);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
@@ -358,9 +358,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_maximum_value_size(1024);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
   #[inline]
@@ -376,9 +376,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_sync(false);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_sync(false);
   /// assert_eq!(options.sync(), false);
   /// ```
   #[inline]
@@ -394,9 +394,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::new().with_magic_version(1);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]
@@ -418,9 +418,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_read(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_read(true);
   /// ```
   #[inline]
   pub fn with_read(mut self, read: bool) -> Self {
@@ -439,9 +439,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_write(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true);
   /// ```
   #[inline]
   pub fn with_write(mut self, write: bool) -> Self {
@@ -484,9 +484,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_append(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_append(true);
   /// ```
   #[inline]
   pub fn with_append(mut self, append: bool) -> Self {
@@ -505,9 +505,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_write(true).with_truncate(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true).with_truncate(true);
   /// ```
   #[inline]
   pub fn with_truncate(mut self, truncate: bool) -> Self {
@@ -528,9 +528,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_write(true).with_create(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true).with_create(true);
   /// ```
   #[inline]
   pub fn with_create(mut self, val: bool) -> Self {
@@ -559,9 +559,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new()
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new()
   ///   .with_write(true)
   ///   .with_create_new(true);
   /// ```
@@ -580,7 +580,7 @@ where
   /// ## Example
   ///
   /// ```
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
   /// let stack = Builder::new().with_stack(true);
   /// ```
@@ -603,9 +603,9 @@ where
   /// ## Example
   ///
   /// ```
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_huge(Some(8));
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_huge(Some(8));
   /// ```
   #[inline]
   pub fn with_huge(mut self, page_bits: Option<u8>) -> Self {
@@ -624,9 +624,9 @@ where
   /// ## Example
   ///
   /// ```
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_populate(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_populate(true);
   /// ```
   #[inline]
   pub fn with_populate(mut self, populate: bool) -> Self {
@@ -644,9 +644,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_read(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_read(true);
   /// assert_eq!(opts.read(), true);
   /// ```
   #[inline]
@@ -659,9 +659,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_write(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true);
   /// assert_eq!(opts.write(), true);
   /// ```
   #[inline]
@@ -674,9 +674,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_append(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_append(true);
   /// assert_eq!(opts.append(), true);
   /// ```
   #[inline]
@@ -689,9 +689,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_truncate(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_truncate(true);
   /// assert_eq!(opts.truncate(), true);
   /// ```
   #[inline]
@@ -704,9 +704,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_create(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_create(true);
   /// assert_eq!(opts.create(), true);
   /// ```
   #[inline]
@@ -719,9 +719,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_create_new(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_create_new(true);
   /// assert_eq!(opts.create_new(), true);
   /// ```
   #[inline]
@@ -734,9 +734,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_stack(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_stack(true);
   /// assert_eq!(opts.stack(), true);
   /// ```
   #[inline]
@@ -749,9 +749,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_huge(Some(8));
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_huge(Some(8));
   /// assert_eq!(opts.huge(), Some(8));
   /// ```
   #[inline]
@@ -764,9 +764,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::Builder;
+  /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let opts = Builder::new().with_populate(true);
+  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_populate(true);
   /// assert_eq!(opts.populate(), true);
   /// ```
   #[inline]
@@ -784,11 +784,11 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder};
+  /// use orderwal::{base::GenericOrderWal, Builder};
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .alloc::<OrderWal>()
+  ///   .alloc::<[u8], [u8], GenericOrderWal<_, _>>()
   ///   .unwrap();
   /// ```
   pub fn alloc<K, V, W>(self) -> Result<W, Error<W::Memtable>>
@@ -816,11 +816,11 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder};
+  /// use orderwal::{base::GenericOrderWal, Builder};
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .map_anon::<OrderWal>()
+  ///   .map_anon::<[u8], [u8], GenericOrderWal<_, _>>()
   ///   .unwrap();
   /// ```
   pub fn map_anon<K, V, W>(self) -> Result<W, Error<W::Memtable>>
@@ -856,7 +856,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder};
+  /// use orderwal::{base::GenericOrderWalReader, Builder};
   ///
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir.path().join("map.wal");
@@ -864,13 +864,13 @@ where
   /// # let wal = unsafe {
   /// #  Builder::new()
   /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<OrderWal, _>(&path)
+  /// #  .map_mut::<[u8], [u8], orderwal::base::GenericOrderWal<_, _>, _>(&path)
   /// #  .unwrap()
   /// # };
   ///
   /// let wal = unsafe {
   ///   Builder::new()
-  ///     .map::<OrderWal, _>(&path)
+  ///     .map::<[u8], [u8], GenericOrderWalReader<_, _>, _>(&path)
   ///     .unwrap()
   /// };
   pub unsafe fn map<K, V, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
@@ -900,7 +900,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder};
+  /// use orderwal::{base::GenericOrderWalReader, Builder};
   ///
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir.path().join("map_with_path_builder.wal");
@@ -908,13 +908,13 @@ where
   /// # let wal = unsafe {
   /// #  Builder::new()
   /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<OrderWal, _>(&path)
+  /// #  .map_mut::<[u8], [u8], orderwal::base::GenericOrderWal<_, _>, _>(&path)
   /// #  .unwrap()
   /// # };
   ///
   /// let wal = unsafe {
   ///   Builder::new()
-  ///     .map_with_path_builder::<OrderWal, _, ()>(|| Ok(path))
+  ///     .map_with_path_builder::<[u8], [u8], GenericOrderWalReader<_, _>, _, ()>(|| Ok(path))
   ///     .unwrap()
   /// };
   pub unsafe fn map_with_path_builder<K, V, W, PB, E>(
@@ -960,7 +960,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder};
+  /// use orderwal::{base::GenericOrderWal, Builder};
   ///
   /// let dir = tempfile::tempdir().unwrap();
   /// let path = dir.path().join("map_mut_with_path_builder_example.wal");
@@ -971,7 +971,7 @@ where
   ///     .with_read(true)
   ///     .with_write(true)
   ///     .with_capacity(1000)
-  ///     .map_mut::<OrderWal, _>(&path)
+  ///     .map_mut::<[u8], [u8], GenericOrderWal<_, _>, _>(&path)
   ///     .unwrap()
   /// };
   /// ```
@@ -1002,7 +1002,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{swmr::OrderWal, Builder};
+  /// use orderwal::{base::GenericOrderWal, Builder};
   ///
   /// let dir = tempfile::tempdir().unwrap();
   ///  
@@ -1012,7 +1012,7 @@ where
   ///     .with_read(true)
   ///     .with_write(true)
   ///     .with_capacity(1000)
-  ///     .map_mut_with_path_builder::<OrderWal, _, ()>(
+  ///     .map_mut_with_path_builder::<[u8], [u8], GenericOrderWal<_, _>, _, ()>(
   ///       || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
   ///     )
   ///     .unwrap()

@@ -2,29 +2,31 @@ mod reader;
 mod wal;
 mod writer;
 
-// #[cfg(all(
-//   test,
-//   any(
-//     all_tests,
-//     test_swmr_generic_constructor,
-//     test_swmr_generic_insert,
-//     test_swmr_generic_get,
-//     test_swmr_generic_iters,
-//   )
-// ))]
-#[cfg(test)]
+#[cfg(all(
+  test,
+  any(
+    all_orderwal_tests,
+    test_swmr_constructor,
+    test_swmr_insert,
+    test_swmr_get,
+    test_swmr_iters,
+  )
+))]
 mod tests;
 
-/// The ordered write-ahead log only supports generic.
-pub mod generic {
+/// The ordered write-ahead log without multiple version support.
+pub mod base {
   use dbutils::checksum::Crc32;
 
   use super::{reader, writer};
   use crate::memtable::{arena::Table as BaseArenaTable, linked::Table as BaseLinkedTable};
 
-  pub use crate::wal::{
-    base::{Reader, Writer},
-    GenericPointer,
+  pub use crate::{
+    memtable::arena::TableOptions as ArenaTableOptions,
+    wal::{
+      base::{Reader, Writer},
+      GenericPointer,
+    },
   };
 
   /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`linked::Table`](BaseLinkedTable).
@@ -50,14 +52,16 @@ pub mod generic {
   /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
   /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type GenericOrderWal<K, V, M, S = Crc32> = writer::GenericOrderWal<K, V, M, S>;
+  pub type GenericOrderWal<K, V, M = LinkedTable<K, V>, S = Crc32> =
+    writer::GenericOrderWal<K, V, M, S>;
 
   /// Immutable reader for the generic ordered write-ahead log [`GenericOrderWal`].
-  pub type GenericOrderWalReader<K, V, M, S = Crc32> = reader::GenericOrderWalReader<K, V, M, S>;
+  pub type GenericOrderWalReader<K, V, M = LinkedTable<K, V>, S = Crc32> =
+    reader::GenericOrderWalReader<K, V, M, S>;
 }
 
 /// A multiple version ordered write-ahead log implementation for multiple threads environments.
-pub mod generic_multiple_version {
+pub mod multiple_version {
   use dbutils::checksum::Crc32;
 
   use super::{reader, writer};
@@ -65,9 +69,12 @@ pub mod generic_multiple_version {
     arena::MultipleVersionTable as BaseArenaTable, linked::MultipleVersionTable as BaseLinkedTable,
   };
 
-  pub use crate::wal::{
-    multiple_version::{Reader, Writer},
-    GenericVersionPointer,
+  pub use crate::{
+    memtable::arena::TableOptions as ArenaTableOptions,
+    wal::{
+      multiple_version::{Reader, Writer},
+      GenericVersionPointer,
+    },
   };
 
   /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`linked::MultipleVersionTable`](BaseLinkedTable).
@@ -91,8 +98,10 @@ pub mod generic_multiple_version {
   /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
   /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type GenericOrderWal<K, V, M, S = Crc32> = writer::GenericOrderWal<K, V, M, S>;
+  pub type GenericOrderWal<K, V, M = LinkedTable<K, V>, S = Crc32> =
+    writer::GenericOrderWal<K, V, M, S>;
 
   /// Immutable reader for the multiple versioned generic ordered write-ahead log [`GenericOrderWal`].
-  pub type GenericOrderWalReader<K, V, M, S = Crc32> = reader::GenericOrderWalReader<K, V, M, S>;
+  pub type GenericOrderWalReader<K, V, M = LinkedTable<K, V>, S = Crc32> =
+    reader::GenericOrderWalReader<K, V, M, S>;
 }

@@ -183,12 +183,12 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test (Unix)
-      run: RUSTFLAGS="--cfg all_tests" cargo test --all-features
+      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --all-features
       if: matrix.os != 'windows-latest'
     - name: Run test (Windows)
       shell: pwsh
       run: |
-        $env:RUSTFLAGS="--cfg all_tests"
+        $env:RUSTFLAGS="--cfg all_orderwal_tests"
         cargo test --all-features
       if: matrix.os == 'windows-latest'
 
@@ -246,10 +246,10 @@ jobs:
           - swmr_iters
           - swmr_get
           - swmr_constructor
-          - swmr_generic_insert
-          - swmr_generic_iters
-          - swmr_generic_get
-          - swmr_generic_constructor
+          - swmr_insert
+          - swmr_iters
+          - swmr_get
+          - swmr_constructor
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -303,10 +303,10 @@ jobs:
   #         - swmr_iters
   #         - swmr_get
   #         - swmr_constructor
-  #         - swmr_generic_insert
-  #         - swmr_generic_iters
-  #         - swmr_generic_get
-  #         - swmr_generic_constructor
+  #         - swmr_insert
+  #         - swmr_iters
+  #         - swmr_get
+  #         - swmr_constructor
   #       # Exclude invalid combinations
   #       exclude:
   #         - os: ubuntu-latest
@@ -433,7 +433,7 @@ jobs:
       - name: Run tarpaulin
         uses: actions-rs/cargo@v1
         env:
-          RUSTFLAGS: "--cfg all_tests"
+          RUSTFLAGS: "--cfg all_orderwal_tests"
         with:
           command: tarpaulin
           args: --all-features --run-types tests --run-types doctests --workspace --out xml

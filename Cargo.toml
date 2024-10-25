@@ -71,17 +71,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(all_tests)',
-  'cfg(test_unsync_constructor)',
-  'cfg(test_unsync_insert)',
-  'cfg(test_unsync_iters)',
-  'cfg(test_unsync_get)',
+  'cfg(all_orderwal_tests)',
   'cfg(test_swmr_constructor)',
   'cfg(test_swmr_insert)',
   'cfg(test_swmr_iters)',
   'cfg(test_swmr_get)',
-  'cfg(test_swmr_generic_constructor)',
-  'cfg(test_swmr_generic_insert)',
-  'cfg(test_swmr_generic_iters)',
-  'cfg(test_swmr_generic_get)',
 ] }

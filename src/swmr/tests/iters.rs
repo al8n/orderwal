@@ -1,7 +1,7 @@
 use core::ops::Bound;
 use std::collections::BTreeMap;
 
-use generic::{GenericOrderWal, GenericPointer, Reader, Writer};
+use base::{GenericOrderWal, GenericPointer, Reader, Writer};
 
 use crate::{memtable::Memtable, sealed::WithoutVersion};
 

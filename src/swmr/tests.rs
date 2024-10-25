@@ -1,12 +1,12 @@
 use core::cmp;
 use std::thread::spawn;
 
+use base::{ArenaTable, GenericOrderWal, GenericOrderWalReader, LinkedTable};
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
   traits::{KeyRef, Type, TypeRef},
 };
-use generic::{ArenaTable, GenericOrderWal, GenericOrderWalReader, LinkedTable};
 
 use super::*;
 
@@ -18,12 +18,19 @@ macro_rules! expand_unit_tests {
       paste::paste! {
         #[test]
         fn [< test_ $prefix _ $name _inmemory >]() {
-          $name(&mut $crate::Builder::new().with_capacity(MB).alloc::<_, _, $wal>().unwrap());
+          $name(&mut $crate::Builder::new()
+            .with_capacity(MB)
+            .alloc::<_, _, $wal>()
+            .unwrap()
+          );
         }
 
         #[test]
         fn [< test_ $prefix _ $name _map_anon >]() {
-          $name(&mut $crate::Builder::new().with_capacity(MB).map_anon::<_, _, $wal>().unwrap());
+          $name(&mut $crate::Builder::new()
+            .with_capacity(MB)
+            .map_anon::<_, _, $wal>().unwrap()
+          );
         }
 
         #[test]
@@ -31,8 +38,15 @@ macro_rules! expand_unit_tests {
         fn [< test_ $prefix _ $name _map_file >]() {
           let dir = ::tempfile::tempdir().unwrap();
           $name(
-            &mut unsafe { $crate::Builder::new().with_create_new(true).with_read(true).with_write(true).with_capacity(MB as u32).map_mut::<_, _, $wal, _>(
-              dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file")),
+            &mut unsafe {
+              $crate::Builder::new()
+                .with_create_new(true)
+                .with_read(true)
+                .with_write(true)
+                .with_capacity(MB as u32)
+                .map_mut::<_, _, $wal, _>(
+                  dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file")
+                ),
             )
             .unwrap() },
           );
@@ -82,32 +96,55 @@ macro_rules! expand_unit_tests {
       }
     )*
   };
+  ($prefix:literal: $wal:ty { $($name:ident($builder:expr) $({ $($tt:tt)* })?), +$(,)? }) => {
+    $(
+      paste::paste! {
+        #[test]
+        fn [< test_ $prefix _ $name _inmemory >]() {
+          $name(&mut $builder.alloc::<_, _, $wal>().unwrap());
+        }
+
+        #[test]
+        fn [< test_ $prefix _ $name _map_anon >]() {
+          $name(&mut $builder
+            .map_anon::<_, _, $wal>().unwrap()
+          );
+        }
+
+        #[test]
+        #[cfg_attr(miri, ignore)]
+        fn [< test_ $prefix _ $name _map_file >]() {
+          let dir = ::tempfile::tempdir().unwrap();
+          $name(
+            &mut unsafe {
+              $builder
+                .with_create_new(true)
+                .with_read(true)
+                .with_write(true)
+                .with_capacity(MB as u32)
+                .map_mut::<_, _, $wal, _>(
+                  dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file")
+                ),
+            )
+            .unwrap() },
+          );
+        }
+      }
+    )*
+  };
 }
 
-// #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
-#[cfg(test)]
+#[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
 mod constructor;
 
-// #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
-#[cfg(test)]
+#[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
 mod insert;
 
-// #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
-#[cfg(test)]
+#[cfg(all(test, any(test_swmr_iters, all_orderwal_tests)))]
 mod iters;
 
-// #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
-#[cfg(test)]
+#[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
 mod get;
-
-#[test]
-fn t() {
-  let size = core::mem::size_of::<crate::wal::Query<'_, Person, Person>>();
-  println!("size: {}", size);
-
-  let psize = core::mem::size_of::<Person>();
-  println!("psize: {}", psize);
-}
 
 type GenericOrderWalLinkedTable<K, V> = GenericOrderWal<K, V, LinkedTable<K, V>>;
 type GenericOrderWalArenaTable<K, V> = GenericOrderWal<K, V, ArenaTable<K, V>>;

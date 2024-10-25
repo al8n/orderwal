@@ -41,7 +41,7 @@ const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 // #[cfg(all(
 //   test,
 //   any(
-//     all_tests,
+//     all_orderwal_tests,
 //     test_unsync_constructor,
 //     test_unsync_insert,
 //     test_unsync_get,
@@ -50,10 +50,10 @@ const VERSION_SIZE: usize = core::mem::size_of::<u64>();
 //     test_swmr_insert,
 //     test_swmr_get,
 //     test_swmr_iters,
-//     test_swmr_generic_constructor,
-//     test_swmr_generic_insert,
-//     test_swmr_generic_get,
-//     test_swmr_generic_iters,
+//     test_swmr_constructor,
+//     test_swmr_insert,
+//     test_swmr_get,
+//     test_swmr_iters,
 //   )
 // ))]
 // mod tests;

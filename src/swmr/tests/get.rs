@@ -1,4 +1,4 @@
-use generic::{GenericOrderWal, GenericPointer};
+use base::{GenericOrderWal, GenericPointer};
 
 use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
