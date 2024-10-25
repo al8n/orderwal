@@ -330,45 +330,45 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    // insert_batch_with_key_builder |p, (rp1, data, rp2)| {
-    //   let map = unsafe {
-    //     Builder::new()
-    //       .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
-    //       .unwrap()
-    //   };
+    insert_batch_with_key_builder |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .unwrap()
+      };
 
-    //   for (p, val) in data {
-    //     assert_eq!(map.get(&p).unwrap().value(), &val);
-    //   }
-    //   assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-    //   assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-    // },
-    // insert_batch_with_value_builder |p, (rp1, data, rp2)| {
-    //   let map = unsafe {
-    //     Builder::new()
-    //       .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
-    //       .unwrap()
-    //   };
+      for (p, val) in data {
+        assert_eq!(map.get(&p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
+    },
+    insert_batch_with_value_builder |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .unwrap()
+      };
 
-    //   for (p, val) in data {
-    //     assert_eq!(map.get(&p).unwrap().value(), &val);
-    //   }
-    //   assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-    //   assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-    // },
-    // insert_batch_with_builders |p, (rp1, data, rp2)| {
-    //   let map = unsafe {
-    //     Builder::new()
-    //       .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
-    //       .unwrap()
-    //   };
+      for (p, val) in data {
+        assert_eq!(map.get(&p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
+    },
+    insert_batch_with_builders |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .unwrap()
+      };
 
-    //   for (p, val) in data {
-    //     assert_eq!(map.get(&p).unwrap().value(), &val);
-    //   }
-    //   assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-    //   assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-    // }
+      for (p, val) in data {
+        assert_eq!(map.get(&p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
+    }
   }
 );
 
