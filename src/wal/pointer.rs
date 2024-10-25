@@ -455,5 +455,5 @@ const fn usize_to_addr<T>(addr: usize) -> *const T {
 #[cfg(miri)]
 #[inline]
 fn usize_to_addr<T>(addr: usize) -> *const T {
-  core::ptr::with_exposed_provenance(addr)
+  core::ptr::null().with_addr(addr)
 }
