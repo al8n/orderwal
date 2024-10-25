@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use crate::{
   memtable::Memtable,
   sealed::WithoutVersion,
-  swmr::generic::{Reader, Writer},
+  swmr::base::{Reader, Writer},
   types::{KeyBuilder, ValueBuilder},
 };
 
