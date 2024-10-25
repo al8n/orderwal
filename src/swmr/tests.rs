@@ -87,7 +87,8 @@ macro_rules! expand_unit_tests {
 #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
 mod constructor;
 
-#[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
+// #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
+#[cfg(test)]
 mod insert;
 
 #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]

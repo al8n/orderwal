@@ -1,50 +1,16 @@
-use crate::{
-  sealed::{EntryFlags, WithVersion, WithoutVersion},
-  VERSION_SIZE,
+use super::{
+  sealed::{WithVersion, WithoutVersion},
+  types::{BufWriter, EncodedEntryMeta, EntryFlags},
 };
-
-use super::types::BufWriter;
-
-pub(crate) struct EncodedBatchEntryMeta {
-  /// The output of `merge_lengths(klen, vlen)`
-  pub(crate) kvlen: u64,
-  /// the length of `encoded_u64_varint(merge_lengths(klen, vlen))`
-  pub(crate) kvlen_size: usize,
-  /// The key length, including version if present.
-  pub(crate) klen: usize,
-  pub(crate) vlen: usize,
-}
-
-impl EncodedBatchEntryMeta {
-  #[inline]
-  pub(crate) const fn new(klen: usize, vlen: usize, kvlen: u64, kvlen_size: usize) -> Self {
-    Self {
-      klen,
-      vlen,
-      kvlen,
-      kvlen_size,
-    }
-  }
-
-  #[inline]
-  pub(crate) const fn zero() -> Self {
-    Self {
-      klen: 0,
-      vlen: 0,
-      kvlen: 0,
-      kvlen_size: 0,
-    }
-  }
-}
 
 /// An entry can be inserted into the WALs through [`Batch`](super::batch::Batch).
 pub struct BatchEntry<K, V, P> {
   pub(crate) key: K,
   pub(crate) value: Option<V>,
   pub(crate) flag: EntryFlags,
-  pub(crate) meta: EncodedBatchEntryMeta,
+  pub(crate) meta: EncodedEntryMeta,
   pointer: Option<P>,
-  version: Option<u64>,
+  pub(crate) version: Option<u64>,
 }
 
 impl<K, V, P> BatchEntry<K, V, P>
@@ -58,7 +24,7 @@ where
       key,
       value: Some(value),
       flag: EntryFlags::empty(),
-      meta: EncodedBatchEntryMeta::zero(),
+      meta: EncodedEntryMeta::batch_zero(false),
       pointer: None,
       version: None,
     }
@@ -71,7 +37,7 @@ where
       key,
       value: None,
       flag: EntryFlags::REMOVED,
-      meta: EncodedBatchEntryMeta::zero(),
+      meta: EncodedEntryMeta::batch_zero(false),
       pointer: None,
       version: None,
     }
@@ -88,8 +54,8 @@ where
     Self {
       key,
       value: Some(value),
-      flag: EntryFlags::empty(),
-      meta: EncodedBatchEntryMeta::zero(),
+      flag: EntryFlags::empty() | EntryFlags::VERSIONED,
+      meta: EncodedEntryMeta::batch_zero(true),
       pointer: None,
       version: Some(version),
     }
@@ -101,8 +67,8 @@ where
     Self {
       key,
       value: None,
-      flag: EntryFlags::REMOVED,
-      meta: EncodedBatchEntryMeta::zero(),
+      flag: EntryFlags::REMOVED | EntryFlags::VERSIONED,
+      meta: EncodedEntryMeta::batch_zero(true),
       pointer: None,
       version: Some(version),
     }
@@ -167,11 +133,7 @@ impl<K, V, P> BatchEntry<K, V, P> {
     K: BufWriter,
     V: BufWriter,
   {
-    // 1 for entry flag
-    1 + match self.version {
-      Some(_) => self.key.encoded_len() + VERSION_SIZE,
-      None => self.key.encoded_len(),
-    }
+    self.key.encoded_len()
   }
 
   #[inline]
@@ -190,12 +152,12 @@ impl<K, V, P> BatchEntry<K, V, P> {
   }
 
   #[inline]
-  pub(crate) fn set_encoded_meta(&mut self, meta: EncodedBatchEntryMeta) {
+  pub(crate) fn set_encoded_meta(&mut self, meta: EncodedEntryMeta) {
     self.meta = meta;
   }
 
   #[inline]
-  pub(crate) fn encoded_meta(&self) -> &EncodedBatchEntryMeta {
+  pub(crate) fn encoded_meta(&self) -> &EncodedEntryMeta {
     &self.meta
   }
 }

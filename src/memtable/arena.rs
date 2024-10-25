@@ -18,7 +18,7 @@ impl Default for TableOptions {
   #[inline]
   fn default() -> Self {
     Self {
-      capacity: 2048,
+      capacity: 8192,
       map_anon: false,
       max_height: Height::try_from(20u8).unwrap(),
     }
@@ -27,6 +27,8 @@ impl Default for TableOptions {
 
 impl TableOptions {
   /// Sets the capacity of the table.
+  ///
+  /// Default is `8KB`.
   #[inline]
   pub const fn with_capacity(mut self, capacity: u32) -> Self {
     self.capacity = capacity;

@@ -7,14 +7,13 @@ use dbutils::{
 };
 
 use crate::{
-  sealed::{EntryFlags, Pointer, WithVersion, WithoutVersion},
+  sealed::{Pointer, WithVersion, WithoutVersion},
+  types::EntryFlags,
   VERSION_SIZE,
 };
 
 const PTR_SIZE: usize = mem::size_of::<usize>();
 const U32_SIZE: usize = mem::size_of::<u32>();
-const ENTRY_FLAGS_SIZE: usize = mem::size_of::<EntryFlags>();
-
 #[doc(hidden)]
 pub struct GenericPointer<K: ?Sized, V: ?Sized> {
   /// The pointer to the start of the entry.
@@ -60,8 +59,8 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   #[inline]
   fn new(flag: EntryFlags, klen: usize, vlen: usize, ptr: *const u8) -> Self {
     Self {
-      key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE) },
-      value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + klen) },
+      key_ptr: unsafe { ptr.add(EntryFlags::SIZE) },
+      value_ptr: unsafe { ptr.add(EntryFlags::SIZE + klen) },
       ptr,
       key_len: klen,
       value_len: vlen,
@@ -356,10 +355,10 @@ where
   pub(crate) fn new(flag: EntryFlags, key_len: usize, value_len: usize, ptr: *const u8) -> Self {
     Self {
       flag,
-      key_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + VERSION_SIZE) },
-      value_ptr: unsafe { ptr.add(ENTRY_FLAGS_SIZE + VERSION_SIZE + key_len) },
+      key_ptr: unsafe { ptr.add(EntryFlags::SIZE + VERSION_SIZE) },
+      value_ptr: unsafe { ptr.add(EntryFlags::SIZE + VERSION_SIZE + key_len) },
       version: unsafe {
-        let slice = slice::from_raw_parts(ptr.add(ENTRY_FLAGS_SIZE), VERSION_SIZE);
+        let slice = slice::from_raw_parts(ptr.add(EntryFlags::SIZE), VERSION_SIZE);
         u64::from_le_bytes(slice.try_into().unwrap())
       },
       ptr,

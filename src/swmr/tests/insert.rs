@@ -1,11 +1,11 @@
-use dbutils::buffer::VacantBuffer;
+use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 use generic::{GenericPointer, Reader, Writer};
 
 use crate::{
   batch::BatchEntry,
   memtable::Memtable,
   sealed::WithoutVersion,
-  types::{Generic, KeyBuilder, ValueBuilder},
+  types::{KeyBuilder, ValueBuilder},
   Builder,
 };
 
@@ -150,7 +150,7 @@ where
     batch.push(BatchEntry::new(
       KeyBuilder::new(person.encoded_len(), |buf: &mut VacantBuffer<'_>| {
         buf.set_len(person.encoded_len());
-        person.encode(buf).map(|_| ())
+        person.encode(buf)
       }),
       MaybeStructured::from(val),
     ));
@@ -209,7 +209,7 @@ where
     batch.push(BatchEntry::new(
       person.into(),
       ValueBuilder::new(val.len(), |buf: &mut VacantBuffer<'_>| {
-        buf.put_slice(val.as_bytes())
+        buf.put_slice(val.as_bytes()).map(|_| val.len())
       }),
     ));
   }
@@ -267,10 +267,10 @@ where
     batch.push(BatchEntry::new(
       KeyBuilder::new(person.encoded_len(), |buf: &mut VacantBuffer<'_>| {
         buf.set_len(person.encoded_len());
-        person.encode(buf).map(|_| ())
+        person.encode(buf)
       }),
       ValueBuilder::new(val.len(), |buf: &mut VacantBuffer<'_>| {
-        buf.put_slice(val.as_bytes())
+        buf.put_slice(val.as_bytes()).map(|_| val.len())
       }),
     ));
   }

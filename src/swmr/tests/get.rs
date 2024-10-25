@@ -1,4 +1,4 @@
-use generic::{ArenaTable, GenericOrderWal, GenericPointer, LinkedTable};
+use generic::{GenericOrderWal, GenericPointer};
 
 use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use crate::{
   memtable::Memtable,
-  sealed::{Constructable, WalReader, WithoutVersion},
+  sealed::WithoutVersion,
   swmr::generic::{Reader, Writer},
   types::{KeyBuilder, ValueBuilder},
 };

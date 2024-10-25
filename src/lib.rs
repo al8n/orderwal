@@ -88,6 +88,8 @@ mod internal_iter;
 pub mod memtable;
 
 mod sealed;
+mod utils;
+use utils::*;
 
 bitflags::bitflags! {
   /// The flags for each atomic write.
