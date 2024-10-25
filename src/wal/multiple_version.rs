@@ -291,7 +291,6 @@ where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     MultipleVersionRangeValues::new(
@@ -337,12 +336,13 @@ where
   #[inline]
   fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
-    K: Type,
+    K: Type + 'a,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
-    self.as_wal().contains_key(version, &Query::new(key))
+    self
+      .as_wal()
+      .contains_key(version, Query::<K, Q>::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -354,7 +354,6 @@ where
   where
     K: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
   {
@@ -371,15 +370,14 @@ where
     key: &Q,
   ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
-    K: Type,
+    K: Type + 'a,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
       .as_wal()
-      .get(version, &Query::new(key))
+      .get(version, Query::<K, Q>::ref_cast(key))
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -397,7 +395,7 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
@@ -442,12 +440,11 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     self
       .as_wal()
-      .upper_bound(version, bound.map(Slice::ref_cast))
+      .upper_bound(version, bound.map(Slice::<K>::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -487,13 +484,12 @@ where
     K: Type,
     V: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
   {
     self
       .as_wal()
-      .lower_bound(version, bound.map(Slice::ref_cast))
+      .lower_bound(version, bound.map(Slice::<K>::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
   }
 }

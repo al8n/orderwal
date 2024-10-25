@@ -114,7 +114,6 @@ where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -215,15 +214,14 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key<'a, 'b, Q>(&'a self, key: &'b Q) -> bool
+  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
-    K: Type,
+    K: Type + 'a,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self.as_wal().contains_key(&Query::new(key))
+    self.as_wal().contains_key(Query::<K, Q>::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -235,7 +233,7 @@ where
   where
     K: Type,
     for<'a> K::Ref<'a>: KeyRef<'a, K>,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -244,19 +242,21 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, 'b, Q>(
+  fn get<'a, Q>(
     &'a self,
-    key: &'b Q,
+    key: &Q,
   ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
-    K: Type,
+    K: Type + 'a,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
-    self.as_wal().get(&Query::new(key)).map(Entry::new)
+    self
+      .as_wal()
+      .get(Query::<K, Q>::ref_cast(key))
+      .map(Entry::new)
   }
 
   /// Gets the value associated with the key.
@@ -271,8 +271,7 @@ where
   where
     K: Type,
     V: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+    for<'b> K::Ref<'b>: KeyRef<'b, K> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
@@ -282,21 +281,20 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn upper_bound<'a, 'b, Q>(
+  fn upper_bound<'a, Q>(
     &'a self,
-    bound: Bound<&'b Q>,
+    bound: Bound<&Q>,
   ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
-    K: Type + Ord,
+    K: Type + 'a,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
     self
       .as_wal()
-      .upper_bound(bound.map(Query::ref_cast))
+      .upper_bound(bound.map(Query::<K, Q>::ref_cast))
       .map(Entry::new)
   }
 
@@ -311,37 +309,35 @@ where
     bound: Bound<&[u8]>,
   ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
-    K: Type,
+    K: Type + 'a,
     V: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+    for<'b> K::Ref<'b>: KeyRef<'b, K> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
     self
       .as_wal()
-      .upper_bound(bound.map(Slice::ref_cast))
+      .upper_bound(bound.map(Slice::<K>::ref_cast))
       .map(Entry::new)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
-  fn lower_bound<'a, 'b, Q>(
+  fn lower_bound<'a, Q>(
     &'a self,
-    bound: Bound<&'b Q>,
+    bound: Bound<&Q>,
   ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
   where
-    K: Type + Ord,
+    K: Type + 'a,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
     self
       .as_wal()
-      .lower_bound(bound.map(Query::ref_cast))
+      .lower_bound(bound.map(Query::<K, Q>::ref_cast))
       .map(Entry::new)
   }
 
@@ -358,14 +354,13 @@ where
   where
     K: Type,
     V: Type,
-    K::Ref<'a>: KeyRef<'a, K> + Ord,
-    Slice<K>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer>,
+    for<'b> K::Ref<'b>: KeyRef<'b, K> + Ord,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithoutVersion,
     Self::Memtable: Memtable,
   {
     self
       .as_wal()
-      .lower_bound(bound.map(Slice::ref_cast))
+      .lower_bound(bound.map(Slice::<K>::ref_cast))
       .map(Entry::new)
   }
 }

@@ -134,7 +134,7 @@ where
   {
     self
       .map
-      .insert(ele.version(), &ele, &())
+      .insert(ele.version().unwrap_or(0), &ele, &())
       .map(|_| ())
       .map_err(|e| match e {
         Among::Right(e) => e,
@@ -146,7 +146,7 @@ where
   where
     Self::Pointer: Pointer + Ord + 'static,
   {
-    match self.map.get_or_remove(key.version(), &key) {
+    match self.map.get_or_remove(key.version().unwrap_or(0), &key) {
       Err(Either::Right(e)) => Err(e),
       Err(Either::Left(_)) => unreachable!(),
       _ => Ok(()),

@@ -233,7 +233,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer>,
   B: BaseTable + 'a,
   B::Pointer: Pointer + 'a,
 {
@@ -248,7 +247,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer>,
   B: BaseTable + 'a,
   B::Pointer: Pointer + 'a,
 {
@@ -279,7 +277,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer>,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
@@ -301,7 +298,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer>,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
@@ -322,7 +318,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer>,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
@@ -335,7 +330,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'a,
   B::Pointer: Pointer + 'a,
 {
@@ -348,7 +342,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'a,
   B::Pointer: Pointer + 'a,
 {
@@ -377,7 +370,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
@@ -398,7 +390,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
@@ -418,7 +409,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
@@ -432,7 +422,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'a,
   B::Pointer: Pointer + 'a,
 {
@@ -447,7 +436,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'a,
   B::Pointer: Pointer + 'a,
 {
@@ -478,7 +466,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
@@ -500,7 +487,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
@@ -521,7 +507,7 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
+
   B: BaseTable + 'static,
   B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + CheapClone + 'static,
@@ -748,9 +734,8 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: WithVersion + 'a,
+  B::Pointer: Pointer + WithVersion + 'a,
 {
   iter: BaseIter<'a, B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
   version: Option<u64>,
@@ -763,9 +748,8 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: WithVersion + 'a,
+  B::Pointer: Pointer + WithVersion + 'a,
 {
   #[inline]
   pub(super) fn new(
@@ -794,7 +778,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + WithVersion + CheapClone + 'static,
@@ -816,7 +799,7 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
+
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
@@ -837,7 +820,7 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
+
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
@@ -851,9 +834,9 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'a,
   B::Pointer: WithVersion + 'a,
+  B::Pointer: Pointer + WithVersion + 'a,
 {
   iter: BaseIter<'a, B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
   version: Option<u64>,
@@ -864,9 +847,8 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: WithVersion + 'a,
+  B::Pointer: Pointer + WithVersion + 'a,
 {
   #[inline]
   pub(super) fn new(
@@ -893,7 +875,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + WithVersion + CheapClone + 'static,
@@ -914,7 +895,7 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
+
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
@@ -934,7 +915,6 @@ where
   R: RangeBounds<Q> + 'a,
   K: Type + Ord + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
@@ -949,9 +929,8 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: WithVersion + 'a,
+  B::Pointer: Pointer + WithVersion + 'a,
 {
   iter: BaseIter<'a, B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
   version: Option<u64>,
@@ -964,9 +943,8 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: WithVersion + 'a,
+  B::Pointer: Pointer + WithVersion + 'a,
 {
   #[inline]
   pub(super) fn new(
@@ -995,7 +973,6 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
   B::Pointer: Pointer + WithVersion + CheapClone + 'static,
@@ -1017,7 +994,7 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
+
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
@@ -1038,7 +1015,7 @@ where
   K: Type + Ord + ?Sized,
   V: ?Sized + Type,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  for<'b> Query<'b, K, Q>: Comparable<B::Pointer> + Ord,
+
   B: MultipleVersionMemtable + 'static,
   B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,

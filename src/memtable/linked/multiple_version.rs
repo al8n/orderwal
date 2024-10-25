@@ -117,7 +117,7 @@ where
   where
     Self::Pointer: Pointer + Ord + 'static,
   {
-    self.0.insert_unchecked(ele.version(), ele, ());
+    self.0.insert_unchecked(ele.version().unwrap_or(0), ele, ());
     Ok(())
   }
 
@@ -126,7 +126,7 @@ where
   where
     Self::Pointer: crate::sealed::Pointer + Ord + 'static,
   {
-    self.0.remove_unchecked(key.version(), key);
+    self.0.remove_unchecked(key.version().unwrap_or(0), key);
     Ok(())
   }
 }

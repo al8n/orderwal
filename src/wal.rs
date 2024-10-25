@@ -3,7 +3,7 @@ pub(crate) mod iter;
 pub(crate) mod multiple_version;
 
 mod query;
-use query::*;
+pub(crate) use query::*;
 
 mod pointer;
 pub use pointer::*;

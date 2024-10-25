@@ -94,8 +94,8 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericPointer<K, V> {
   }
 
   #[inline]
-  fn version(&self) -> u64 {
-    0
+  fn version(&self) -> Option<u64> {
+    None
   }
 }
 
@@ -289,8 +289,8 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::Pointer for GenericVersionPointer<K, V
   }
 
   #[inline]
-  fn version(&self) -> u64 {
-    self.version
+  fn version(&self) -> Option<u64> {
+    Some(self.version)
   }
 
   #[inline]

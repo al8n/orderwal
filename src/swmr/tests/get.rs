@@ -204,7 +204,6 @@ where
       let p = Person::random();
       let pvec = p.to_vec();
       let v = format!("My name is {}", p.name);
-      println!("{p:?} encoded person len {}", p.encoded_len());
       wal
         .insert_with_builders(
           KeyBuilder::new(pvec.len(), |buf: &mut VacantBuffer<'_>| {
@@ -220,10 +219,6 @@ where
     .collect::<Vec<_>>();
 
   assert_eq!(wal.len(), 1);
-
-  for ent in wal.iter() {
-    println!("{:?}", ent.raw_key);
-  }
 
   for (p, pvec, pv) in &people {
     assert!(wal.contains_key(p));

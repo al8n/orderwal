@@ -84,19 +84,30 @@ macro_rules! expand_unit_tests {
   };
 }
 
-#[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
+// #[cfg(all(test, any(test_swmr_generic_constructor, all_tests)))]
+#[cfg(test)]
 mod constructor;
 
 // #[cfg(all(test, any(test_swmr_generic_insert, all_tests)))]
 #[cfg(test)]
 mod insert;
 
-#[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
+// #[cfg(all(test, any(test_swmr_generic_iters, all_tests)))]
+#[cfg(test)]
 mod iters;
 
 // #[cfg(all(test, any(test_swmr_generic_get, all_tests)))]
 #[cfg(test)]
 mod get;
+
+#[test]
+fn t() {
+  let size = core::mem::size_of::<crate::wal::Query<'_, Person, Person>>();
+  println!("size: {}", size);
+
+  let psize = core::mem::size_of::<Person>();
+  println!("psize: {}", psize);
+}
 
 type GenericOrderWalLinkedTable<K, V> = GenericOrderWal<K, V, LinkedTable<K, V>>;
 type GenericOrderWalArenaTable<K, V> = GenericOrderWal<K, V, ArenaTable<K, V>>;

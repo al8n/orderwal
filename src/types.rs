@@ -78,11 +78,10 @@ impl EncodedEntryMeta {
     let len_size = encoded_u64_varint_len(len);
     let version_size = if versioned { VERSION_SIZE } else { 0 };
     let elen = len_size as u32
-      + ENTRY_FLAGS_SIZE as u32
+      + EntryFlags::SIZE as u32
       + version_size as u32
       + key_len as u32
-      + value_len as u32
-      + CHECKSUM_SIZE as u32;
+      + value_len as u32;
 
     Self {
       packed_kvlen_size: len_size,
@@ -138,7 +137,11 @@ impl EncodedEntryMeta {
 
   #[inline]
   pub(crate) const fn checksum_offset(&self) -> usize {
-    self.entry_size as usize - CHECKSUM_SIZE
+    if self.batch {
+      self.value_offset() + self.vlen
+    } else {
+      self.entry_size as usize - CHECKSUM_SIZE
+    }
   }
 }
 
@@ -243,7 +246,7 @@ where
       key: ty_ref::<K>(raw_key),
       value: ty_ref::<V>(ptr.as_value_slice().unwrap()),
       version: if query_version.is_some() {
-        Some(ptr.version())
+        Some(ptr.version().unwrap_or(0))
       } else {
         None
       },
@@ -385,7 +388,7 @@ where
       raw_key,
       key: ty_ref::<K>(raw_key),
       version: if query_version.is_some() {
-        Some(ptr.version())
+        Some(ptr.version().unwrap_or(0))
       } else {
         None
       },
@@ -514,7 +517,7 @@ where
       raw_key,
       value: ty_ref::<V>(ptr.as_value_slice().unwrap()),
       version: if query_version.is_some() {
-        Some(ptr.version())
+        Some(ptr.version().unwrap_or(0))
       } else {
         None
       },

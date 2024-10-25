@@ -31,7 +31,7 @@ pub trait Pointer: Sized + Copy {
 
   fn as_value_slice<'a>(&self) -> Option<&'a [u8]>;
 
-  fn version(&self) -> u64;
+  fn version(&self) -> Option<u64>;
 
   #[inline]
   fn is_removed(&self) -> bool {
@@ -1004,7 +1004,6 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           }
 
           let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
-
           if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
             return Err(Error::corrupted("checksum mismatch"));
           }
@@ -1025,9 +1024,12 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
           let pointer: <Self::Memtable as BaseTable>::Pointer =
             Pointer::new(flag, key_len, value_len, ptr);
 
-          let version = pointer.version();
-          minimum_version = minimum_version.min(version);
-          maximum_version = maximum_version.max(version);
+          if flag.contains(EntryFlags::VERSIONED) {
+            if let Some(version) = pointer.version() {
+              minimum_version = minimum_version.min(version);
+              maximum_version = maximum_version.max(version);
+            }
+          }
 
           if flag.contains(EntryFlags::REMOVED) {
             set.remove(pointer).map_err(Error::memtable)?;
@@ -1048,10 +1050,11 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
               })?;
 
           let (num_entries, encoded_data_len) = split_lengths(encoded_len);
-
           // Same as above, if we reached the end of the arena, we should discard the remaining.
           let cks_offset = RECORD_FLAG_SIZE + readed + encoded_data_len as usize;
-          if cks_offset + CHECKSUM_SIZE > allocated {
+          let total_size = cks_offset + CHECKSUM_SIZE;
+
+          if total_size > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
               return Err(Error::corrupted("file is truncated"));
@@ -1064,7 +1067,6 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
 
             break;
           }
-
           let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
           let mut batch_data_buf = arena.get_bytes(cursor, cks_offset);
           if cks != checksumer.checksum_one(batch_data_buf) {
@@ -1091,8 +1093,10 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
 
             let ent_len = if flag.contains(EntryFlags::VERSIONED) {
               let version = ptr.version();
-              minimum_version = minimum_version.min(version);
-              maximum_version = maximum_version.max(version);
+              if let Some(version) = version {
+                minimum_version = minimum_version.min(version);
+                maximum_version = maximum_version.max(version);
+              }
               kvlen + EntryFlags::SIZE + VERSION_SIZE + klen + vlen
             } else {
               kvlen + EntryFlags::SIZE + klen + vlen
@@ -1114,7 +1118,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
             encoded_data_len, sub_cursor,
           );
 
-          cursor += cks_offset + CHECKSUM_SIZE;
+          cursor += total_size;
         }
       }
     }
