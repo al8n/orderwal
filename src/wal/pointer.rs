@@ -181,7 +181,7 @@ where
 
 impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericPointer<K, V> {
   unsafe fn from_slice(src: &'a [u8]) -> Self {
-    let ptr = usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()) as *const u8;
+    let ptr = usize_to_addr(usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()));
     let mut offset = PTR_SIZE;
     let flag = EntryFlags::from_bits_retain(src[offset]);
     offset += 1;
@@ -407,7 +407,7 @@ where
 
 impl<'a, K: ?Sized, V: ?Sized> TypeRef<'a> for GenericVersionPointer<K, V> {
   unsafe fn from_slice(src: &'a [u8]) -> Self {
-    let ptr = usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()) as *const u8;
+    let ptr = usize_to_addr(usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()));
     let mut offset = PTR_SIZE;
     let flag = EntryFlags::from_bits_retain(src[offset]);
     offset += 1;
@@ -445,3 +445,15 @@ impl<K: ?Sized, V: ?Sized> WithVersion for GenericVersionPointer<K, V> {}
 impl<K: ?Sized, V: ?Sized> crate::sealed::GenericPointer<K, V> for GenericVersionPointer<K, V> {}
 impl<K: ?Sized, V: ?Sized> WithoutVersion for GenericPointer<K, V> {}
 impl<K: ?Sized, V: ?Sized> crate::sealed::GenericPointer<K, V> for GenericPointer<K, V> {}
+
+#[cfg(not(miri))]
+#[inline]
+const fn usize_to_addr<T>(addr: usize) -> *const T {
+  addr as *const T
+}
+
+#[cfg(miri)]
+#[inline]
+fn usize_to_addr<T>(addr: usize) -> *const T {
+  core::ptr::with_exposed_provenance(addr)
+}
