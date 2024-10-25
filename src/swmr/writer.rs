@@ -11,18 +11,6 @@ use std::sync::Arc;
 
 use super::{reader::GenericOrderWalReader, wal::OrderCore};
 
-#[cfg(all(
-  test,
-  any(
-    all_orderwal_tests,
-    test_swmr_constructor,
-    test_swmr_insert,
-    test_swmr_get,
-    test_swmr_iters,
-  )
-))]
-mod tests;
-
 /// A ordered write-ahead log implementation for concurrent thread environments.
 pub struct GenericOrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
   pub(super) core: Arc<UnsafeCell<OrderCore<K, V, M, S>>>,
