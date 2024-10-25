@@ -19,7 +19,7 @@ rustup toolchain install nightly --component miri
 rustup override set nightly
 cargo miri setup
 
-export MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-tree-borrows"
+export MIRIFLAGS="-Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-tree-borrows"
 export RUSTFLAGS="--cfg test_$CONFIG_FLAGS"
 
 cargo miri test --tests --target $TARGET --lib

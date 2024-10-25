@@ -446,14 +446,7 @@ impl<K: ?Sized, V: ?Sized> crate::sealed::GenericPointer<K, V> for GenericVersio
 impl<K: ?Sized, V: ?Sized> WithoutVersion for GenericPointer<K, V> {}
 impl<K: ?Sized, V: ?Sized> crate::sealed::GenericPointer<K, V> for GenericPointer<K, V> {}
 
-#[cfg(not(miri))]
 #[inline]
 const fn usize_to_addr<T>(addr: usize) -> *const T {
   addr as *const T
-}
-
-#[cfg(miri)]
-#[inline]
-fn usize_to_addr<T>(addr: usize) -> *const T {
-  core::ptr::null::<T>().with_addr(addr)
 }
