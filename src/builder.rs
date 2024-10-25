@@ -582,7 +582,7 @@ where
   /// ```
   /// use orderwal::{Builder, multiple_version::LinkedTable};
   ///
-  /// let stack = Builder::new().with_stack(true);
+  /// let stack = Builder::<LinkedTable<[u8], [u8]>>::new().with_stack(true);
   /// ```
   #[inline]
   pub fn with_stack(mut self, stack: bool) -> Self {
