@@ -36,7 +36,6 @@ crossbeam-skiplist = { version = "0.1", default-features = false, package = "cro
 crossbeam-skiplist-mvcc = { version = "0.1" }
 skl = { version = "0.18", default-features = false, features = ["alloc"] }
 paste = "1"
-thiserror = "1"
 
 bytes = { version = "1", default-features = false, optional = true }
 smallvec = { version = "1", default-features = false, optional = true, features = ["const_generics"] }

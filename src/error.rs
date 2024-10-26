@@ -5,10 +5,9 @@ use derive_where::derive_where;
 use crate::memtable::BaseTable;
 
 /// The batch error type.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum BatchError {
   /// Returned when the expected batch encoding size does not match the actual size.
-  #[error("the expected batch encoding size ({expected}) does not match the actual size {actual}")]
   EncodedSizeMismatch {
     /// The expected size.
     expected: u32,
@@ -16,9 +15,31 @@ pub enum BatchError {
     actual: u32,
   },
   /// Larger encoding size than the expected batch encoding size.
-  #[error("larger encoding size than the expected batch encoding size {0}")]
   LargerEncodedSize(u32),
 }
+
+impl core::fmt::Display for BatchError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    match self {
+      Self::EncodedSizeMismatch { expected, actual } => {
+        write!(
+          f,
+          "the expected batch encoding size ({}) does not match the actual size {}",
+          expected, actual
+        )
+      }
+      Self::LargerEncodedSize(size) => {
+        write!(
+          f,
+          "larger encoding size than the expected batch encoding size {}",
+          size
+        )
+      }
+    }
+  }
+}
+
+impl core::error::Error for BatchError {}
 
 /// The error type.
 #[derive_where(Debug; T::Error)]
