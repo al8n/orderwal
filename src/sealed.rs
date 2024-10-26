@@ -426,14 +426,14 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
   #[inline]
   fn insert_pointer(
-    &mut self,
+    &self,
     ptr: <Self::Memtable as BaseTable>::Pointer,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    let t = self.memtable_mut();
+    let t = self.memtable();
     if !ptr.is_removed() {
       t.insert(ptr).map_err(Error::memtable)
     } else {
@@ -443,7 +443,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
 
   #[inline]
   fn insert_pointers(
-    &mut self,
+    &self,
     mut ptrs: impl Iterator<Item = <Self::Memtable as BaseTable>::Pointer>,
   ) -> Result<(), Error<Self::Memtable>>
   where
@@ -934,7 +934,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let mut set = <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable::new(memtable_opts)
+    let set = <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable::new(memtable_opts)
       .map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
