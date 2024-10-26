@@ -372,7 +372,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   /// ## Safety
   /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
   /// - This method is not thread-safe, so be careful when using it.
-  unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]
+  #[allow(clippy::mut_from_ref)]
+  unsafe fn reserved_slice_mut<'a>(&'a self) -> &'a mut [u8]
   where
     Self::Allocator: 'a,
   {
@@ -454,7 +455,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   fn insert<KE, VE>(
-    &mut self,
+    &self,
     version: Option<u64>,
     kb: KE,
     vb: VE,
@@ -470,7 +471,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   fn remove<KE>(
-    &mut self,
+    &self,
     version: Option<u64>,
     kb: KE,
   ) -> Result<(), Either<KE::Error, Error<Self::Memtable>>>
@@ -504,7 +505,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   fn update<KE, VE>(
-    &mut self,
+    &self,
     version: Option<u64>,
     kb: KE,
     vb: Option<VE>,
@@ -638,7 +639,7 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   fn insert_batch<W, B>(
-    &mut self,
+    &self,
     batch: &mut B,
   ) -> Result<
     (),
@@ -885,7 +886,7 @@ pub trait Constructable<K: ?Sized, V: ?Sized>: Sized {
 
   fn as_wal(&self) -> &Self::Wal;
 
-  fn as_wal_mut(&mut self) -> &mut Self::Wal;
+  // fn as_wal_mut(&mut self) -> &mut Self::Wal;
 
   fn new_in(
     arena: Self::Allocator,

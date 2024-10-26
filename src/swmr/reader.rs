@@ -1,4 +1,3 @@
-use core::cell::UnsafeCell;
 use std::sync::Arc;
 
 use rarena_allocator::sync::Arena;
@@ -23,7 +22,7 @@ where
 {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn new(wal: Arc<UnsafeCell<OrderCore<K, V, P, S>>>) -> Self {
+  pub(super) fn new(wal: Arc<OrderCore<K, V, P, S>>) -> Self {
     Self(GenericOrderWal::construct(wal))
   }
 }
@@ -47,15 +46,15 @@ where
     self.0.as_wal()
   }
 
-  #[inline]
-  fn as_wal_mut(&mut self) -> &mut Self::Wal {
-    self.0.as_wal_mut()
-  }
+  // #[inline]
+  // fn as_wal_mut(&mut self) -> &mut Self::Wal {
+  //   self.0.as_wal_mut()
+  // }
 
   #[inline]
   fn from_core(core: Self::Wal) -> Self {
     Self(GenericOrderWal {
-      core: Arc::new(UnsafeCell::new(core)),
+      core: Arc::new(core),
     })
   }
 }

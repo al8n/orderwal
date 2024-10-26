@@ -527,7 +527,7 @@ where
   where
     Self::Allocator: 'a,
   {
-    self.as_wal_mut().reserved_slice_mut()
+    self.as_wal().reserved_slice_mut()
   }
 
   /// Flushes the to disk.
@@ -562,7 +562,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert(Some(version), kb, value.into())
+    self.as_wal().insert(Some(version), kb, value.into())
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -582,7 +582,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert(Some(version), key.into(), vb)
+    self.as_wal().insert(Some(version), key.into(), vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -600,7 +600,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert(Some(version), kb, vb)
+    self.as_wal().insert(Some(version), kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
@@ -618,7 +618,7 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
-      .as_wal_mut()
+      .as_wal()
       .insert(Some(version), key.into(), value.into())
   }
 
@@ -635,7 +635,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().remove(Some(version), kb)
+    self.as_wal().remove(Some(version), kb)
   }
 
   /// Removes a key-value pair from the WAL.
@@ -650,7 +650,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().remove(Some(version), key.into())
+    self.as_wal().remove(Some(version), key.into())
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -670,7 +670,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert_batch::<Self, _>(batch)
+    self.as_wal().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -687,7 +687,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert_batch::<Self, _>(batch)
+    self.as_wal().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -704,7 +704,7 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert_batch::<Self, _>(batch)
+    self.as_wal().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -720,6 +720,6 @@ where
     Self::Checksumer: BuildChecksumer,
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
-    self.as_wal_mut().insert_batch::<Self, _>(batch)
+    self.as_wal().insert_batch::<Self, _>(batch)
   }
 }

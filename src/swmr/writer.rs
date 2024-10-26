@@ -6,14 +6,13 @@ use crate::{
 use dbutils::{checksum::Crc32, traits::Type};
 use rarena_allocator::{sync::Arena, Allocator};
 
-use core::cell::UnsafeCell;
 use std::sync::Arc;
 
 use super::{reader::GenericOrderWalReader, wal::OrderCore};
 
 /// A ordered write-ahead log implementation for concurrent thread environments.
 pub struct GenericOrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
-  pub(super) core: Arc<UnsafeCell<OrderCore<K, V, M, S>>>,
+  pub(super) core: Arc<OrderCore<K, V, M, S>>,
 }
 
 unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for GenericOrderWal<K, V, M, S> {}
@@ -24,7 +23,7 @@ unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync
 
 impl<K: ?Sized, V: ?Sized, P, S> GenericOrderWal<K, V, P, S> {
   #[inline]
-  pub(super) const fn construct(core: Arc<UnsafeCell<OrderCore<K, V, P, S>>>) -> Self {
+  pub(super) const fn construct(core: Arc<OrderCore<K, V, P, S>>) -> Self {
     Self { core }
   }
 }
@@ -45,18 +44,18 @@ where
 
   #[inline]
   fn as_wal(&self) -> &Self::Wal {
-    unsafe { &*self.core.get() }
+    &self.core
   }
 
-  #[inline]
-  fn as_wal_mut(&mut self) -> &mut Self::Wal {
-    unsafe { &mut *self.core.get() }
-  }
+  // #[inline]
+  // fn as_wal_mut(&mut self) -> &mut Self::Wal {
+  //   unsafe { &mut *self.core.get() }
+  // }
 
   #[inline]
   fn from_core(core: Self::Wal) -> Self {
     Self {
-      core: Arc::new(UnsafeCell::new(core)),
+      core: Arc::new(core),
     }
   }
 }
