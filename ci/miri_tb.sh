@@ -28,5 +28,5 @@ cargo miri setup
 export MIRIFLAGS="-Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-tree-borrows -Zmiri-ignore-leaks"
 export RUSTFLAGS="--cfg test_$CONFIG_FLAGS"
 
-cargo miri test --tests --target $TARGET --lib -- --test-threads 1 2>&1 | ts -i '%.s  '
+cargo miri test --tests --target $TARGET --lib 2>&1 | ts -i '%.s  '
 
