@@ -67,12 +67,12 @@ pub trait BaseTable {
     Self: Sized;
 
   /// Inserts a pointer into the memtable.
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
+  fn insert(&self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 
   /// Removes the pointer associated with the key.
-  fn remove(&mut self, key: Self::Pointer) -> Result<(), Self::Error>
+  fn remove(&self, key: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Pointer + Ord + 'static;
 }

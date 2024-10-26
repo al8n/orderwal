@@ -74,7 +74,7 @@ where
   }
 
   #[inline]
-  fn insert(&mut self, ele: Self::Pointer) -> Result<(), Self::Error>
+  fn insert(&self, ele: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: Ord + 'static,
   {
@@ -83,7 +83,7 @@ where
   }
 
   #[inline]
-  fn remove(&mut self, key: Self::Pointer) -> Result<(), Self::Error>
+  fn remove(&self, key: Self::Pointer) -> Result<(), Self::Error>
   where
     Self::Pointer: crate::sealed::Pointer + Ord + 'static,
   {
