@@ -1,7 +1,6 @@
 use crate::{
   memtable::{BaseTable, Memtable, MultipleVersionMemtable},
-  sealed::{self, Constructable, WithVersion},
-  wal::{GenericPointer, GenericVersionPointer},
+  sealed::{Constructable, WithVersion},
 };
 use dbutils::{checksum::Crc32, traits::Type};
 use rarena_allocator::{sync::Arena, Allocator};
@@ -28,13 +27,12 @@ impl<K: ?Sized, V: ?Sized, P, S> GenericOrderWal<K, V, P, S> {
   }
 }
 
-impl<K, V, M, S> Constructable<K, V> for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> Constructable for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable + 'static,
-  M::Pointer: sealed::Pointer + Ord + Send + 'static,
+  M: BaseTable<Key = K, Value = V> + 'static,
 {
   type Allocator = Arena;
   type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
@@ -46,11 +44,6 @@ where
   fn as_wal(&self) -> &Self::Wal {
     &self.core
   }
-
-  // #[inline]
-  // fn as_wal_mut(&mut self) -> &mut Self::Wal {
-  //   unsafe { &mut *self.core.get() }
-  // }
 
   #[inline]
   fn from_core(core: Self::Wal) -> Self {
@@ -65,8 +58,7 @@ where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable + 'static,
-  M::Pointer: sealed::Pointer + Ord + Send + 'static,
+  M: BaseTable<Key = K, Value = V> + 'static,
 {
   /// Returns the path of the WAL if it is backed by a file.
   ///
@@ -89,8 +81,7 @@ impl<K, V, M, S> crate::wal::base::Writer<K, V> for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
-  M: Memtable<Pointer = GenericPointer<K, V>> + 'static,
-  GenericPointer<K, V>: Ord,
+  M: Memtable<Key = K, Value = V> + 'static,
   S: 'static,
 {
   #[inline]
@@ -103,8 +94,9 @@ impl<K, V, M, S> crate::wal::multiple_version::Writer<K, V> for GenericOrderWal<
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
-  M: MultipleVersionMemtable<Pointer = GenericVersionPointer<K, V>> + WithVersion + 'static,
-  GenericVersionPointer<K, V>: Ord,
+  M: MultipleVersionMemtable<Key = K, Value = V> + 'static,
+  for<'a> M::MultipleVersionItem<'a>: WithVersion,
+  for<'a> M::Item<'a>: WithVersion,
   S: 'static,
 {
   #[inline]

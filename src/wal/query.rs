@@ -10,6 +10,8 @@ use dbutils::{
 };
 use ref_cast::RefCast;
 
+use super::KeyPointer;
+
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
 pub struct Slice<K: ?Sized> {
@@ -17,26 +19,24 @@ pub struct Slice<K: ?Sized> {
   data: [u8],
 }
 
-impl<K, P> Equivalent<P> for Slice<K>
+impl<K> Equivalent<KeyPointer<K>> for Slice<K>
 where
   K: Type + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  P: crate::sealed::Pointer,
 {
-  fn equivalent(&self, key: &P) -> bool {
-    self.data.eq(key.as_key_slice())
+  fn equivalent(&self, key: &KeyPointer<K>) -> bool {
+    self.data.eq(key.as_slice())
   }
 }
 
-impl<K, P> Comparable<P> for Slice<K>
+impl<K> Comparable<KeyPointer<K>> for Slice<K>
 where
   K: Type + ?Sized,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  P: crate::sealed::Pointer,
 {
-  fn compare(&self, p: &P) -> cmp::Ordering {
+  fn compare(&self, p: &KeyPointer<K>) -> cmp::Ordering {
     unsafe {
-      let kr: K::Ref<'_> = TypeRef::from_slice(p.as_key_slice());
+      let kr: K::Ref<'_> = TypeRef::from_slice(p.as_slice());
       let or: K::Ref<'_> = TypeRef::from_slice(&self.data);
       KeyRef::compare(&kr, &or).reverse()
     }
@@ -86,63 +86,26 @@ where
   key: Q,
 }
 
-// impl<K, Q> Query<K, Q>
-// where
-//   K: ?Sized,
-//   Q: ?Sized,
-// {
-//   #[inline]
-//   pub(super) const fn new(key: &'a Q) -> Self {
-//     Self {
-//       key,
-//       _k: PhantomData,
-//     }
-//   }
-
-//   #[inline]
-//   pub(super) fn ref_cast(from: &Q) -> &Self {
-//     if false {
-//       ::ref_cast::__private::assert_trivial::<PhantomData<K>>();
-//     }
-//     #[cfg(debug_assertions)]
-//     {
-//       #[allow(unused_imports)]
-//       use ::ref_cast::__private::LayoutUnsized;
-//       ::ref_cast::__private::assert_layout::<Self, Q>(
-//         "Query",
-//         ::ref_cast::__private::Layout::<Self>::SIZE,
-//         ::ref_cast::__private::Layout::<Q>::SIZE,
-//         ::ref_cast::__private::Layout::<Self>::ALIGN,
-//         ::ref_cast::__private::Layout::<Q>::ALIGN,
-//       );
-//     }
-//     // We can do this because of Query is transparent.
-//     unsafe { &*(from as *const Q as *const Self) }
-//   }
-// }
-
-impl<'a, K, Q, P> Equivalent<P> for Query<'a, K, Q>
+impl<'a, K, Q> Equivalent<KeyPointer<K>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   Q: ?Sized + Equivalent<K::Ref<'a>>,
-  P: crate::sealed::Pointer,
 {
   #[inline]
-  fn equivalent(&self, p: &P) -> bool {
-    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
+  fn equivalent(&self, p: &KeyPointer<K>) -> bool {
+    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_slice()) };
     Equivalent::equivalent(&self.key, &kr)
   }
 }
 
-impl<'a, K, Q, P> Comparable<P> for Query<'a, K, Q>
+impl<'a, K, Q> Comparable<KeyPointer<K>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
-  P: crate::sealed::Pointer,
 {
   #[inline]
-  fn compare(&self, p: &P) -> cmp::Ordering {
-    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_key_slice()) };
+  fn compare(&self, p: &KeyPointer<K>) -> cmp::Ordering {
+    let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_slice()) };
     Comparable::compare(&self.key, &kr)
   }
 }

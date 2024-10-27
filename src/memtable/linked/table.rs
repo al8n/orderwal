@@ -1,30 +1,27 @@
 use core::{convert::Infallible, ops::RangeBounds};
 
-use crossbeam_skiplist::{set::Entry, SkipSet};
+use crossbeam_skiplist::{map::Entry, SkipMap};
 use dbutils::equivalent::Comparable;
 
-use crate::{memtable, sealed::WithoutVersion};
+use crate::{memtable, sealed::WithoutVersion, wal::{KeyPointer, ValuePointer}};
 
-/// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
-pub struct Table<P>(SkipSet<P>);
+/// An memory table implementation based on [`crossbeam_skiplist::SkipMap`].
+pub struct Table<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);
 
-impl<P> Default for Table<P> {
+impl<K: ?Sized, V: ?Sized> Default for Table<K, V> {
   #[inline]
   fn default() -> Self {
-    Self(SkipSet::new())
+    Self(SkipMap::new())
   }
 }
 
-impl<'a, P> memtable::MemtableEntry<'a> for Entry<'a, P>
+impl<'a, K, V> memtable::MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
-  P: Ord,
+  K: ?Sized,
+  V: ?Sized,
 {
-  type Pointer = P;
-
-  #[inline]
-  fn pointer(&self) -> &Self::Pointer {
-    self
-  }
+  type Key = K;
+  type Value = V;
 
   #[inline]
   fn next(&mut self) -> Option<Self> {
@@ -35,33 +32,49 @@ where
   fn prev(&mut self) -> Option<Self> {
     Entry::prev(self)
   }
+
+  #[inline]
+  fn key(&self) -> KeyPointer<K> {
+    *self.key()
+  }
+
+  #[inline]
+  fn value(&self) -> ValuePointer<V> {
+    *self.value()
+  }
 }
 
-impl<P> memtable::BaseTable for Table<P>
+impl<K, V> WithoutVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>>
 where
-  P: Send + Ord + std::fmt::Debug,
-{
-  type Pointer = P;
+  K: ?Sized,
+  V: ?Sized,
+{}
 
+impl<K, V> memtable::BaseTable for Table<K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+  KeyPointer<K>: Send + Ord + std::fmt::Debug + 'static,
+{
+  type Key = K;
+  type Value = V;
   type Item<'a>
-    = Entry<'a, P>
+    = Entry<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    Self::Pointer: 'a,
     Self: 'a;
 
   type Iterator<'a>
-    = crossbeam_skiplist::set::Iter<'a, P>
+    = crossbeam_skiplist::map::Iter<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    Self::Pointer: 'a,
     Self: 'a;
 
   type Range<'a, Q, R>
-    = crossbeam_skiplist::set::Range<'a, Q, R, Self::Pointer>
+    = crossbeam_skiplist::map::Range<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
   type Options = ();
   type Error = Infallible;
@@ -70,31 +83,33 @@ where
   where
     Self: Sized,
   {
-    Ok(Self(SkipSet::new()))
+    Ok(Self(SkipMap::new()))
   }
 
   #[inline]
-  fn insert(&self, ele: Self::Pointer) -> Result<(), Self::Error>
+  fn insert(&self, _: Option<u64>, kp: KeyPointer<Self::Key>, vp: ValuePointer<Self::Value>) -> Result<(), Self::Error>
   where
-    Self::Pointer: Ord + 'static,
+    KeyPointer<Self::Key>: Ord + 'static,
   {
-    self.0.insert(ele);
+    self.0.insert(kp, vp);
     Ok(())
   }
 
   #[inline]
-  fn remove(&self, key: Self::Pointer) -> Result<(), Self::Error>
+  fn remove(&self, _: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
   where
-    Self::Pointer: crate::sealed::Pointer + Ord + 'static,
+    KeyPointer<Self::Key>: Ord + 'static,
   {
     self.0.remove(&key);
     Ok(())
   }
 }
 
-impl<P> memtable::Memtable for Table<P>
+impl<K, V> memtable::Memtable for Table<K, V>
 where
-  P: Send + Ord + WithoutVersion + std::fmt::Debug,
+  K: ?Sized,
+  V: ?Sized,
+  KeyPointer<K>: Ord + Send + std::fmt::Debug + 'static,
 {
   #[inline]
   fn len(&self) -> usize {
@@ -104,7 +119,7 @@ where
   #[inline]
   fn upper_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.0.upper_bound(bound)
   }
@@ -112,7 +127,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.0.lower_bound(bound)
   }
@@ -130,7 +145,7 @@ where
   #[inline]
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<P>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.0.get(key)
   }
@@ -138,9 +153,9 @@ where
   #[inline]
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<P>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
-    self.0.contains(key)
+    self.0.contains_key(key)
   }
 
   #[inline]
@@ -152,7 +167,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<P>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.0.range(range)
   }

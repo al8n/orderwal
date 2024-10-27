@@ -1,21 +1,24 @@
+use crate::{memtable::BaseTable, wal::{KeyPointer, ValuePointer}};
+
 use super::{
   sealed::{WithVersion, WithoutVersion},
   types::{BufWriter, EncodedEntryMeta, EntryFlags},
 };
 
 /// An entry can be inserted into the WALs through [`Batch`].
-pub struct BatchEntry<K, V, P> {
+pub struct BatchEntry<K, V, M: BaseTable> {
   pub(crate) key: K,
   pub(crate) value: Option<V>,
   pub(crate) flag: EntryFlags,
   pub(crate) meta: EncodedEntryMeta,
-  pointer: Option<P>,
+  pointers: Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
   pub(crate) version: Option<u64>,
 }
 
-impl<K, V, P> BatchEntry<K, V, P>
+impl<K, V, M> BatchEntry<K, V, M>
 where
-  P: WithoutVersion,
+  M: BaseTable,
+  for<'a> M::Item<'a>: WithoutVersion,
 {
   /// Creates a new entry.
   #[inline]
@@ -25,7 +28,7 @@ where
       value: Some(value),
       flag: EntryFlags::empty(),
       meta: EncodedEntryMeta::batch_zero(false),
-      pointer: None,
+      pointers: None,
       version: None,
     }
   }
@@ -38,15 +41,16 @@ where
       value: None,
       flag: EntryFlags::REMOVED,
       meta: EncodedEntryMeta::batch_zero(false),
-      pointer: None,
+      pointers: None,
       version: None,
     }
   }
 }
 
-impl<K, V, P> BatchEntry<K, V, P>
+impl<K, V, M> BatchEntry<K, V, M>
 where
-  P: WithVersion,
+  M: BaseTable,
+  for<'a> M::Item<'a>: WithVersion,
 {
   /// Creates a new entry with version.
   #[inline]
@@ -56,7 +60,7 @@ where
       value: Some(value),
       flag: EntryFlags::empty() | EntryFlags::VERSIONED,
       meta: EncodedEntryMeta::batch_zero(true),
-      pointer: None,
+      pointers: None,
       version: Some(version),
     }
   }
@@ -69,7 +73,7 @@ where
       value: None,
       flag: EntryFlags::REMOVED | EntryFlags::VERSIONED,
       meta: EncodedEntryMeta::batch_zero(true),
-      pointer: None,
+      pointers: None,
       version: Some(version),
     }
   }
@@ -90,7 +94,10 @@ where
   }
 }
 
-impl<K, V, P> BatchEntry<K, V, P> {
+impl<K, V, M> BatchEntry<K, V, M>
+where
+  M: BaseTable,
+{
   /// Returns the length of the key.
   #[inline]
   pub fn key_len(&self) -> usize
@@ -142,13 +149,13 @@ impl<K, V, P> BatchEntry<K, V, P> {
   }
 
   #[inline]
-  pub(crate) fn take_pointer(&mut self) -> Option<P> {
-    self.pointer.take()
+  pub(crate) fn take_pointer(&mut self) -> Option<(KeyPointer<K>, Option<ValuePointer<V>>)> {
+    self.pointers.take()
   }
 
   #[inline]
-  pub(crate) fn set_pointer(&mut self, pointer: P) {
-    self.pointer = Some(pointer);
+  pub(crate) fn set_pointer(&mut self, kp: KeyPointer<K>, vp: Option<ValuePointer<V>>) {
+    self.pointers = Some((kp, vp));
   }
 
   #[inline]
@@ -163,19 +170,19 @@ impl<K, V, P> BatchEntry<K, V, P> {
 }
 
 /// A trait for batch insertions.
-pub trait Batch<P> {
+pub trait Batch<M: BaseTable> {
   /// Any type that can be converted into a key.
   type Key;
   /// Any type that can be converted into a value.
   type Value;
 
   /// The iterator type.
-  type IterMut<'a>: Iterator<Item = &'a mut BatchEntry<Self::Key, Self::Value, P>>
+  type IterMut<'a>: Iterator<Item = &'a mut BatchEntry<Self::Key, Self::Value, M>>
   where
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    P: 'a;
+    M: 'a;
 
   /// Returns an iterator over the keys and values.
   fn iter_mut<'a>(&'a mut self) -> Self::IterMut<'a>
@@ -183,12 +190,13 @@ pub trait Batch<P> {
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    P: 'a;
+    M: 'a;
 }
 
-impl<K, V, P, T> Batch<P> for T
+impl<K, V, M, T> Batch<M> for T
 where
-  for<'a> &'a mut T: IntoIterator<Item = &'a mut BatchEntry<K, V, P>>,
+  M: BaseTable,
+  for<'a> &'a mut T: IntoIterator<Item = &'a mut BatchEntry<K, V, M>>,
 {
   type Key = K;
   type Value = V;
@@ -199,14 +207,14 @@ where
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    P: 'a;
+    M: 'a;
 
   fn iter_mut<'a>(&'a mut self) -> Self::IterMut<'a>
   where
     Self: 'a,
     Self::Key: 'a,
     Self::Value: 'a,
-    P: 'a,
+    M: 'a,
   {
     IntoIterator::into_iter(self)
   }

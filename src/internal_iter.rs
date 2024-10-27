@@ -2,23 +2,22 @@ use core::{iter::FusedIterator, marker::PhantomData};
 
 use dbutils::CheapClone;
 
-use crate::{
-  memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable},
-  sealed::WithVersion,
-};
-
-use super::sealed::Pointer;
+use crate::memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable};
 
 /// Iterator over the entries in the WAL.
-pub struct Iter<'a, I, M: BaseTable> {
+pub struct Iter<'a, I, M>
+where
+  M: BaseTable + 'a,
+{
   iter: I,
   version: Option<u64>,
-  head: Option<M::Pointer>,
-  tail: Option<M::Pointer>,
+  head: Option<M::Item<'a>>,
+  tail: Option<M::Item<'a>>,
   _m: PhantomData<&'a ()>,
 }
 
-impl<I, M: BaseTable> Iter<'_, I, M> {
+impl<I, M: BaseTable> Iter<'_, I, M>
+{
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: I) -> Self {
     Self {
@@ -40,7 +39,6 @@ impl<I, M: BaseTable> Iter<'_, I, M> {
 impl<'a, I, M> Iterator for Iter<'a, I, M>
 where
   M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
   I: Iterator<Item = M::Item<'a>>,
 {
   type Item = M::Item<'a>;
@@ -56,7 +54,6 @@ where
 impl<'a, I, M> DoubleEndedIterator for Iter<'a, I, M>
 where
   M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -70,21 +67,26 @@ where
 impl<'a, I, M> FusedIterator for Iter<'a, I, M>
 where
   M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// Iterator over the entries in the WAL.
-pub struct MultipleVersionBaseIter<'a, I, M: BaseTable> {
+pub struct MultipleVersionBaseIter<'a, I, M>
+where
+  M: MultipleVersionMemtable + 'a,
+{
   iter: I,
   version: u64,
-  head: Option<M::Pointer>,
-  tail: Option<M::Pointer>,
+  head: Option<M::MultipleVersionItem<'a>>,
+  tail: Option<M::MultipleVersionItem<'a>>,
   _m: PhantomData<&'a ()>,
 }
 
-impl<I, M: BaseTable> MultipleVersionBaseIter<'_, I, M> {
+impl<I, M> MultipleVersionBaseIter<'_, I, M>
+where
+  M: MultipleVersionMemtable,
+{
   #[inline]
   pub(super) fn new(version: u64, iter: I) -> Self {
     Self {
@@ -105,8 +107,7 @@ impl<I, M: BaseTable> MultipleVersionBaseIter<'_, I, M> {
 
 impl<'a, I, M> Iterator for MultipleVersionBaseIter<'a, I, M>
 where
-  M: MultipleVersionMemtable + 'static,
-  M::Pointer: Pointer + WithVersion + CheapClone + 'static,
+  M: MultipleVersionMemtable + 'a,
   I: Iterator<Item = M::MultipleVersionItem<'a>>,
 {
   type Item = M::MultipleVersionItem<'a>;
@@ -121,8 +122,7 @@ where
 
 impl<'a, I, M> DoubleEndedIterator for MultipleVersionBaseIter<'a, I, M>
 where
-  M: MultipleVersionMemtable + 'static,
-  M::Pointer: Pointer + WithVersion + CheapClone + 'static,
+  M: MultipleVersionMemtable + 'a,
   I: DoubleEndedIterator<Item = M::MultipleVersionItem<'a>>,
 {
   #[inline]
@@ -135,8 +135,7 @@ where
 
 impl<'a, I, M> FusedIterator for MultipleVersionBaseIter<'a, I, M>
 where
-  M: MultipleVersionMemtable + 'static,
-  M::Pointer: Pointer + WithVersion + CheapClone + 'static,
+  M: MultipleVersionMemtable + 'a,
   I: FusedIterator<Item = M::MultipleVersionItem<'a>>,
 {
 }

@@ -18,8 +18,7 @@ impl<K, V, M, S> Wal<K, V, S> for OrderCore<K, V, M, S>
 where
   K: ?Sized,
   V: ?Sized,
-  M: BaseTable,
-  M::Pointer: Ord + Send + 'static,
+  M: BaseTable<Key = K, Value = V>, 
 {
   type Allocator = Arena;
   type Memtable = M;

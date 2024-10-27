@@ -33,7 +33,7 @@ derive-where = "1"
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false, features = ["memmap"] }
 crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132" }
-crossbeam-skiplist-mvcc = { version = "0.1" }
+crossbeam-skiplist-mvcc = { version = "0.1", path = "../crossbeam-skiplist-mvcc" }
 skl = { version = "0.18", default-features = false, features = ["alloc"] }
 paste = "1"
 

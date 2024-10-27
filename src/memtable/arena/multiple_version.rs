@@ -6,31 +6,24 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use skl::{
-  either::Either,
-  versioned::{
+  either::Either, versioned::{
     sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry},
     VersionedMap as _,
-  },
-  Options, VersionedContainer as _,
+  }, Options, VersionedContainer as _
 };
 
-use crate::{
-  memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry},
-  sealed::{Pointer, WithVersion},
-};
+use crate::{memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry}, sealed::WithVersion, wal::{KeyPointer, ValuePointer}};
 
 use super::TableOptions;
 
-impl<'a, P> MemtableEntry<'a> for Entry<'a, P, ()>
+impl<'a, K, V> MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
-  P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithVersion,
+  K: ?Sized + Type + Ord,
+  for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
+  V: ?Sized + Type,
 {
-  type Pointer = P;
-
-  #[inline]
-  fn pointer(&self) -> &Self::Pointer {
-    self.key()
-  }
+  type Key = K;
+  type Value = V;
 
   #[inline]
   fn next(&mut self) -> Option<Self> {
@@ -41,19 +34,32 @@ where
   fn prev(&mut self) -> Option<Self> {
     Entry::prev(self)
   }
-}
-
-impl<'a, P> MemtableEntry<'a> for VersionedEntry<'a, P, ()>
-where
-  P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithVersion,
-{
-  type Pointer = P;
 
   #[inline]
-  fn pointer(&self) -> &Self::Pointer {
-    self.key()
+  fn key(&self) -> KeyPointer<K> {
+    *Entry::key(self)
   }
 
+  #[inline]
+  fn value(&self) -> ValuePointer<V> {
+    *Entry::value(self)
+  }
+}
+
+impl<K, V> WithVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized,
+  V: ?Sized,
+{}
+
+impl<'a, K, V> MemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized + Type + Ord,
+  for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
+  V: ?Sized + Type,
+{
+  type Key = K;
+  type Value = V;
   #[inline]
   fn next(&mut self) -> Option<Self> {
     VersionedEntry::next(self)
@@ -63,11 +69,23 @@ where
   fn prev(&mut self) -> Option<Self> {
     VersionedEntry::prev(self)
   }
+
+  #[inline]
+  fn key(&self) -> KeyPointer<K> {
+    *VersionedEntry::key(self)
+  }
+
+  #[inline]
+  fn value(&self) -> ValuePointer<V> {
+    *VersionedEntry::value(self)
+  }
 }
 
-impl<'a, P> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, P, ()>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
-  P: Type<Ref<'a> = P> + KeyRef<'a, P> + WithVersion,
+  K: ?Sized + Type + Ord,
+  for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
+  V: ?Sized + Type,
 {
   #[inline]
   fn version(&self) -> u64 {
@@ -75,36 +93,44 @@ where
   }
 }
 
+impl<K, V> WithVersion for VersionedEntry<'_, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized,
+  V: ?Sized,
+{}
+
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
-pub struct MultipleVersionTable<P> {
-  map: SkipMap<P, ()>,
+pub struct MultipleVersionTable<K: ?Sized, V: ?Sized> {
+  map: SkipMap<KeyPointer<K>, ValuePointer<V>>,
 }
 
-impl<P> BaseTable for MultipleVersionTable<P>
+impl<K, V> BaseTable for MultipleVersionTable<K, V>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + Clone + WithVersion,
+  K: ?Sized + Type + Ord,
+  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized + Type,
 {
-  type Pointer = P;
+  type Key = K;
+  type Value = V;
 
   type Item<'a>
-    = Entry<'a, Self::Pointer, ()>
-  where
-    Self::Pointer: 'a,
+    = Entry<'a, KeyPointer<K>, ValuePointer<V>>
+  where 
     Self: 'a;
 
   type Iterator<'a>
-    = Iter<'a, Self::Pointer, ()>
+    = Iter<'a, KeyPointer<K>, ValuePointer<V>>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, Self::Pointer, (), Q, R>
+    = Range<'a, KeyPointer<K>, ValuePointer<V>, Q, R>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<KeyPointer<K>>;
 
   type Options = TableOptions;
 
@@ -120,21 +146,21 @@ where
 
     if opts.map_anon() {
       arena_opts
-        .map_anon::<Self::Pointer, (), SkipMap<_, _>>()
+        .map_anon::<KeyPointer<K>, (), SkipMap<_, _>>()
         .map_err(skl::Error::IO)
     } else {
-      arena_opts.alloc::<Self::Pointer, (), SkipMap<_, _>>()
+      arena_opts.alloc::<KeyPointer<K>, (), SkipMap<_, _>>()
     }
     .map(|map| Self { map })
   }
 
-  fn insert(&self, ele: Self::Pointer) -> Result<(), Self::Error>
+  fn insert(&self, version: Option<u64>, kp: KeyPointer<K>, vp: ValuePointer<V>) -> Result<(), Self::Error>
   where
-    Self::Pointer: Pointer + Ord + 'static,
+    KeyPointer<K>: Ord + 'static,
   {
     self
       .map
-      .insert(ele.version().unwrap_or(0), &ele, &())
+      .insert(version.unwrap_or(0), &kp, &vp)
       .map(|_| ())
       .map_err(|e| match e {
         Among::Right(e) => e,
@@ -142,11 +168,11 @@ where
       })
   }
 
-  fn remove(&self, key: Self::Pointer) -> Result<(), Self::Error>
+  fn remove(&self, version: Option<u64>, key: KeyPointer<K>) -> Result<(), Self::Error>
   where
-    Self::Pointer: Pointer + Ord + 'static,
+    KeyPointer<K>: Ord + 'static,
   {
-    match self.map.get_or_remove(key.version().unwrap_or(0), &key) {
+    match self.map.get_or_remove(version.unwrap_or(0), &key) {
       Err(Either::Right(e)) => Err(e),
       Err(Either::Left(_)) => unreachable!(),
       _ => Ok(()),
@@ -154,33 +180,34 @@ where
   }
 }
 
-impl<P> MultipleVersionMemtable for MultipleVersionTable<P>
+impl<K, V> MultipleVersionMemtable for MultipleVersionTable<K, V>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + 'static + Clone + WithVersion,
+  K: ?Sized + Type + Ord,
+  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized + Type,
 {
   type MultipleVersionItem<'a>
-    = VersionedEntry<'a, Self::Pointer, ()>
+    = VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a;
 
   type AllIterator<'a>
-    = AllVersionsIter<'a, Self::Pointer, ()>
+    = AllVersionsIter<'a, KeyPointer<K>, ValuePointer<V>>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a;
 
   type AllRange<'a, Q, R>
-    = AllVersionsRange<'a, Self::Pointer, (), Q, R>
+    = AllVersionsRange<'a, KeyPointer<K>, ValuePointer<V>, Q, R>
   where
-    Self::Pointer: 'a,
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<KeyPointer<K>>;
 
   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.upper_bound(version, bound)
   }
@@ -191,14 +218,14 @@ where
     bound: Bound<&Q>,
   ) -> Option<Self::MultipleVersionItem<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.upper_bound_versioned(version, bound)
   }
 
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.lower_bound(version, bound)
   }
@@ -209,63 +236,65 @@ where
     bound: Bound<&Q>,
   ) -> Option<Self::MultipleVersionItem<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.lower_bound_versioned(version, bound)
   }
 
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Ord,
+    KeyPointer<K>: Ord,
   {
     self.map.first(version)
   }
 
   fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
   where
-    Self::Pointer: Ord,
+    KeyPointer<K>: Ord,
   {
     self.map.first_versioned(version)
   }
 
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Ord,
+    KeyPointer<K>: Ord,
   {
     self.map.last(version)
   }
 
   fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
   where
-    Self::Pointer: Ord,
+    KeyPointer<K>: Ord,
   {
     self.map.last_versioned(version)
   }
 
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
-    self.map.get(version, key)
+    self.map.get(version, key).inspect(|ent| {
+      println!("get arena: {:?} {:?}", ent.version(), ent.key());
+    })
   }
 
   fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionItem<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.get_versioned(version, key)
   }
 
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.contains_key(version, key)
   }
 
   fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.contains_key_versioned(version, key)
   }
@@ -281,7 +310,7 @@ where
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.range(version, range)
   }
@@ -289,7 +318,7 @@ where
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::AllRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<K>>,
   {
     self.map.range_all_versions(version, range)
   }

@@ -1,33 +1,29 @@
-use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
+use core::{iter::FusedIterator, ops::RangeBounds};
 
-use dbutils::{equivalent::Comparable, traits::Type, CheapClone};
+use dbutils::{equivalent::Comparable, traits::Type};
 
 use crate::{
-  internal_iter::MultipleVersionBaseIter,
   memtable::{BaseTable, MultipleVersionMemtable},
   sealed::WithVersion,
   types::{Entry, Key, MultipleVersionEntry, Value},
 };
 
 use super::{
-  super::{internal_iter::Iter as BaseIter, sealed::Pointer},
-  GenericQueryRange, Query,
+  super::internal_iter::{Iter as BaseIter, MultipleVersionBaseIter}, GenericQueryRange, Query
 };
 
 /// Iterator over the entries in the WAL.
-pub struct Iter<'a, K: ?Sized, V: ?Sized, I, M: BaseTable> {
+pub struct Iter<'a, I, M: BaseTable> {
   iter: BaseIter<'a, I, M>,
   version: Option<u64>,
-  _m: PhantomData<(&'a K, &'a V)>,
 }
 
-impl<'a, K: ?Sized, V: ?Sized, I, M: BaseTable> Iter<'a, K, V, I, M> {
+impl<'a, I, M: BaseTable> Iter<'a, I, M> {
   #[inline]
   pub(super) fn new(iter: BaseIter<'a, I, M>) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -35,21 +31,20 @@ impl<'a, K: ?Sized, V: ?Sized, I, M: BaseTable> Iter<'a, K, V, I, M> {
   #[inline]
   pub fn version(&self) -> u64
   where
-    M::Pointer: WithVersion,
+    M::Item<'a>: WithVersion,
   {
     self.version.unwrap()
   }
 }
 
-impl<'a, K, V, I, M> Iterator for Iter<'a, K, V, I, M>
+impl<'a, I, M> Iterator for Iter<'a, I, M>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M: BaseTable + 'a,
+  M::Key: Type + Ord,
+  M::Value: Type,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = Entry<'a, K, V, M::Item<'a>>;
+  type Item = Entry<'a, M::Key, M::Value, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -60,12 +55,11 @@ where
   }
 }
 
-impl<'a, K, V, I, M> DoubleEndedIterator for Iter<'a, K, V, I, M>
+impl<'a, I, M> DoubleEndedIterator for Iter<'a, I, M>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M: BaseTable + 'a,
+  M::Key: Type + Ord,
+  M::Value: Type,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -77,30 +71,27 @@ where
   }
 }
 
-impl<'a, K, V, I, M> FusedIterator for Iter<'a, K, V, I, M>
+impl<'a, I, M> FusedIterator for Iter<'a, I, M>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
   M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M::Key: Type + Ord,
+  M::Value: Type,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// Iterator over the keys in the WAL.
-pub struct Keys<'a, K: ?Sized, I, M: BaseTable> {
+pub struct Keys<'a, I, M: BaseTable> {
   iter: BaseIter<'a, I, M>,
   version: Option<u64>,
-  _m: PhantomData<&'a K>,
 }
 
-impl<'a, K: ?Sized, I, M: BaseTable> Keys<'a, K, I, M> {
+impl<'a, I, M: BaseTable> Keys<'a, I, M> {
   #[inline]
   pub(super) fn new(iter: BaseIter<'a, I, M>) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -108,20 +99,19 @@ impl<'a, K: ?Sized, I, M: BaseTable> Keys<'a, K, I, M> {
   #[inline]
   pub fn version(&self) -> u64
   where
-    M::Pointer: WithVersion,
+    M::Item<'a>: WithVersion,
   {
     self.version.unwrap()
   }
 }
 
-impl<'a, K, I, M> Iterator for Keys<'a, K, I, M>
+impl<'a, I, M> Iterator for Keys<'a, I, M>
 where
-  K: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M::Key: Type,
+  M: BaseTable + 'a,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = Key<'a, K, M::Item<'a>>;
+  type Item = Key<'a, M::Key, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -132,11 +122,10 @@ where
   }
 }
 
-impl<'a, K, I, M> DoubleEndedIterator for Keys<'a, K, I, M>
+impl<'a, I, M> DoubleEndedIterator for Keys<'a, I, M>
 where
-  K: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M::Key: Type,
+  M: BaseTable + 'a,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -148,29 +137,26 @@ where
   }
 }
 
-impl<'a, K, I, M> FusedIterator for Keys<'a, K, I, M>
+impl<'a, I, M> FusedIterator for Keys<'a, I, M>
 where
-  K: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M::Key: Type,
+  M: BaseTable + 'a,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// Iterator over the values in the WAL.
-pub struct Values<'a, V: ?Sized, I, M: BaseTable> {
+pub struct Values<'a, I, M: BaseTable> {
   iter: BaseIter<'a, I, M>,
   version: Option<u64>,
-  _m: PhantomData<&'a V>,
 }
 
-impl<'a, V: ?Sized, I, M: BaseTable> Values<'a, V, I, M> {
+impl<'a, I, M: BaseTable> Values<'a, I, M> {
   #[inline]
   pub(super) fn new(iter: BaseIter<'a, I, M>) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -178,20 +164,19 @@ impl<'a, V: ?Sized, I, M: BaseTable> Values<'a, V, I, M> {
   #[inline]
   pub fn version(&self) -> u64
   where
-    M::Pointer: WithVersion,
+    M::Item<'a>: WithVersion,
   {
     self.version.unwrap()
   }
 }
 
-impl<'a, V, I, M> Iterator for Values<'a, V, I, M>
+impl<'a, I, M> Iterator for Values<'a, I, M>
 where
-  V: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M: BaseTable + 'a,
+  M::Value: Type,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = Value<'a, V, M::Item<'a>>;
+  type Item = Value<'a, M::Value, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -202,11 +187,10 @@ where
   }
 }
 
-impl<'a, V, I, M> DoubleEndedIterator for Values<'a, V, I, M>
+impl<'a, I, M> DoubleEndedIterator for Values<'a, I, M>
 where
-  V: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M: BaseTable + 'a,
+  M::Value: Type,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -218,47 +202,40 @@ where
   }
 }
 
-impl<'a, V, I, M> FusedIterator for Values<'a, V, I, M>
+impl<'a, I, M> FusedIterator for Values<'a, I, M>
 where
-  V: ?Sized + Type,
-  M: BaseTable + 'static,
-  M::Pointer: Pointer + CheapClone + 'static,
+  M::Value: Type,
+  M: BaseTable + 'a,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
 
 /// An iterator over a subset of the entries in the WAL.
-pub struct Range<'a, K, V, R, Q, B>
+pub struct Range<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B::Key: Type + Ord,
   B: BaseTable + 'a,
-  B::Pointer: Pointer + 'a,
 {
-  iter: BaseIter<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
   version: Option<u64>,
-  _m: PhantomData<&'a V>,
 }
 
-impl<'a, K, V, R, Q, B> Range<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> Range<'a, R, Q, B>
 where
-  R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  R: RangeBounds<Q> + 'a, 
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
-  B::Pointer: Pointer + 'a,
+  B::Key: Type + Ord,
 {
   #[inline]
   pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
   ) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -266,23 +243,22 @@ where
   #[inline]
   pub fn version(&self) -> u64
   where
-    B::Pointer: WithVersion,
+    B::Item<'a>: WithVersion,
   {
     self.version.unwrap()
   }
 }
 
-impl<'a, K, V, R, Q, B> Iterator for Range<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> Iterator for Range<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
 {
-  type Item = Entry<'a, K, V, B::Item<'a>>;
+  type Item = Entry<'a, B::Key, B::Value, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -293,16 +269,15 @@ where
   }
 }
 
-impl<'a, K, V, R, Q, B> DoubleEndedIterator for Range<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> DoubleEndedIterator for Range<'a, R, Q, B>
 where
-  R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
+  R: RangeBounds<Q> + 'a, 
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -313,42 +288,39 @@ where
   }
 }
 
-impl<'a, K, V, R, Q, B> FusedIterator for Range<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> FusedIterator for Range<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: FusedIterator<Item = B::Item<'a>>,
 {
 }
 
 /// An iterator over the keys in a subset of the entries in the WAL.
-pub struct RangeKeys<'a, K, R, Q, B>
+pub struct RangeKeys<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
-  B::Pointer: Pointer + 'a,
+  B::Key: Type + Ord,
 {
-  iter: BaseIter<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
   version: Option<u64>,
 }
 
-impl<'a, K, R, Q, B> RangeKeys<'a, K, R, Q, B>
+impl<'a, R, Q, B> RangeKeys<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
-  B::Pointer: Pointer + 'a,
+  B::Key: Type + Ord,
 {
   #[inline]
   pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
   ) -> Self {
     Self {
       version: iter.version(),
@@ -360,22 +332,21 @@ where
   #[inline]
   pub fn version(&self) -> u64
   where
-    B::Pointer: WithVersion,
+    B::Item<'a>: WithVersion,
   {
     self.version.unwrap()
   }
 }
 
-impl<'a, K, R, Q, B> Iterator for RangeKeys<'a, K, R, Q, B>
+impl<'a, R, Q, B> Iterator for RangeKeys<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
 {
-  type Item = Key<'a, K, B::Item<'a>>;
+  type Item = Key<'a, B::Key, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -386,15 +357,14 @@ where
   }
 }
 
-impl<'a, K, R, Q, B> DoubleEndedIterator for RangeKeys<'a, K, R, Q, B>
+impl<'a, R, Q, B> DoubleEndedIterator for RangeKeys<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -405,49 +375,42 @@ where
   }
 }
 
-impl<'a, K, R, Q, B> FusedIterator for RangeKeys<'a, K, R, Q, B>
+impl<'a, R, Q, B> FusedIterator for RangeKeys<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: FusedIterator<Item = B::Item<'a>>,
 {
 }
 
 /// An iterator over the values in a subset of the entries in the WAL.
-pub struct RangeValues<'a, K, V, R, Q, B>
+pub struct RangeValues<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
-  B::Pointer: Pointer + 'a,
+  B::Key: Type + Ord,
 {
-  iter: BaseIter<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
   version: Option<u64>,
-  _m: PhantomData<&'a V>,
 }
 
-impl<'a, K, V, R, Q, B> RangeValues<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> RangeValues<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
-  B::Pointer: Pointer + 'a,
+  B::Key: Type + Ord,
 {
   #[inline]
   pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>, B>,
+    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
   ) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -455,23 +418,22 @@ where
   #[inline]
   pub fn version(&self) -> u64
   where
-    B::Pointer: WithVersion,
+    B::Item<'a>: WithVersion,
   {
     self.version.unwrap()
   }
 }
 
-impl<'a, K, V, R, Q, B> Iterator for RangeValues<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> Iterator for RangeValues<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: Iterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
 {
-  type Item = Value<'a, V, B::Item<'a>>;
+  type Item = Value<'a, B::Value, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -482,16 +444,15 @@ where
   }
 }
 
-impl<'a, K, V, R, Q, B> DoubleEndedIterator for RangeValues<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> DoubleEndedIterator for RangeValues<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -502,32 +463,29 @@ where
   }
 }
 
-impl<'a, K, V, R, Q, B> FusedIterator for RangeValues<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> FusedIterator for RangeValues<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: BaseTable + 'static,
-  B::Range<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>: FusedIterator<Item = B::Item<'a>>,
-  B::Pointer: Pointer + CheapClone + 'static,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: BaseTable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: FusedIterator<Item = B::Item<'a>>,
 {
 }
 
 /// Iterator over the entries in the WAL.
-pub struct MultipleVersionIter<'a, K: ?Sized, V: ?Sized, I, M: BaseTable> {
+pub struct MultipleVersionIter<'a, I, M: MultipleVersionMemtable> {
   iter: MultipleVersionBaseIter<'a, I, M>,
   version: u64,
-  _m: PhantomData<(&'a K, &'a V)>,
 }
 
-impl<'a, K: ?Sized, V: ?Sized, I, M: BaseTable> MultipleVersionIter<'a, K, V, I, M> {
+impl<'a, I, M: MultipleVersionMemtable> MultipleVersionIter<'a, I, M> {
   #[inline]
   pub(super) fn new(iter: MultipleVersionBaseIter<'a, I, M>) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -535,21 +493,20 @@ impl<'a, K: ?Sized, V: ?Sized, I, M: BaseTable> MultipleVersionIter<'a, K, V, I,
   #[inline]
   pub const fn version(&self) -> u64
   where
-    M::Pointer: WithVersion,
+    M::Item<'a>: WithVersion,
   {
     self.version
   }
 }
 
-impl<'a, K, V, I, M> Iterator for MultipleVersionIter<'a, K, V, I, M>
+impl<'a, I, M> Iterator for MultipleVersionIter<'a, I, M>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  M: MultipleVersionMemtable + 'static,
-  M::Pointer: Pointer + WithVersion + CheapClone + 'static,
+  M: MultipleVersionMemtable + 'a,
+  M::Key: Type + Ord,
+  M::Value: Type,
   I: Iterator<Item = M::MultipleVersionItem<'a>>,
 {
-  type Item = MultipleVersionEntry<'a, K, V, M::MultipleVersionItem<'a>>;
+  type Item = MultipleVersionEntry<'a, M::Key, M::Value, M::MultipleVersionItem<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -560,12 +517,11 @@ where
   }
 }
 
-impl<'a, K, V, I, M> DoubleEndedIterator for MultipleVersionIter<'a, K, V, I, M>
+impl<'a, I, M> DoubleEndedIterator for MultipleVersionIter<'a, I, M>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  M: MultipleVersionMemtable + 'static,
-  M::Pointer: Pointer + WithVersion + CheapClone + 'static,
+  M: MultipleVersionMemtable + 'a,
+  M::Key: Type + Ord,
+  M::Value: Type,
   I: DoubleEndedIterator<Item = M::MultipleVersionItem<'a>>,
 {
   #[inline]
@@ -577,56 +533,49 @@ where
   }
 }
 
-impl<'a, K, V, I, M> FusedIterator for MultipleVersionIter<'a, K, V, I, M>
+impl<'a, I, M> FusedIterator for MultipleVersionIter<'a, I, M>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  M: MultipleVersionMemtable + 'static,
-  M::Pointer: Pointer + WithVersion + CheapClone + 'static,
+  M: MultipleVersionMemtable + 'a,
+  M::Key: Type + Ord,
+  M::Value: Type,
   I: FusedIterator<Item = M::MultipleVersionItem<'a>>,
 {
 }
 
 /// An iterator over a subset of the entries in the WAL.
-pub struct MultipleVersionRange<'a, K, V, R, Q, B>
+pub struct MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: Pointer + WithVersion + 'a,
+  B::Key: Type + Ord,
 {
   iter: MultipleVersionBaseIter<
     'a,
-    B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>,
+    B::AllRange<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>,
     B,
   >,
   version: u64,
-  _m: PhantomData<&'a V>,
 }
 
-impl<'a, K, V, R, Q, B> MultipleVersionRange<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
-  B::Pointer: Pointer + WithVersion + 'a,
+  B::Key: Type + Ord,
 {
   #[inline]
   pub(super) fn new(
     iter: MultipleVersionBaseIter<
       'a,
-      B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>,
+      B::AllRange<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>,
       B,
     >,
   ) -> Self {
     Self {
       version: iter.version(),
       iter,
-      _m: PhantomData,
     }
   }
 
@@ -634,24 +583,23 @@ where
   #[inline]
   pub const fn version(&self) -> u64
   where
-    B::Pointer: WithVersion,
+    B::Item<'a>: WithVersion,
   {
     self.version
   }
 }
 
-impl<'a, K, V, R, Q, B> Iterator for MultipleVersionRange<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> Iterator for MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: MultipleVersionMemtable + 'static,
-  B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: MultipleVersionMemtable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::AllRange<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     Iterator<Item = B::MultipleVersionItem<'a>>,
-  B::Pointer: Pointer + WithVersion + CheapClone + 'static,
 {
-  type Item = MultipleVersionEntry<'a, K, V, B::MultipleVersionItem<'a>>;
+  type Item = MultipleVersionEntry<'a, B::Key, B::Value, B::MultipleVersionItem<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -662,16 +610,15 @@ where
   }
 }
 
-impl<'a, K, V, R, Q, B> DoubleEndedIterator for MultipleVersionRange<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> DoubleEndedIterator for MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: MultipleVersionMemtable + 'static,
-  B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: MultipleVersionMemtable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::AllRange<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::MultipleVersionItem<'a>>,
-  B::Pointer: Pointer + WithVersion + CheapClone + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -682,15 +629,14 @@ where
   }
 }
 
-impl<'a, K, V, R, Q, B> FusedIterator for MultipleVersionRange<'a, K, V, R, Q, B>
+impl<'a, R, Q, B> FusedIterator for MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
-  K: Type + Ord + ?Sized,
-  V: ?Sized + Type,
-  Q: ?Sized + Comparable<K::Ref<'a>>,
-  B: MultipleVersionMemtable + 'static,
-  B::AllRange<'a, Query<'a, K, Q>, GenericQueryRange<'a, K, Q, R>>:
+  Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
+  B: MultipleVersionMemtable + 'a,
+  B::Key: Type + Ord,
+  B::Value: Type,
+  B::AllRange<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::MultipleVersionItem<'a>>,
-  B::Pointer: Pointer + WithVersion + CheapClone + 'static,
 {
 }

@@ -12,7 +12,7 @@ use dbutils::{
 use crate::{
   memtable::{MemtableEntry, MultipleVersionMemtableEntry},
   merge_lengths,
-  sealed::{Pointer, WithVersion, WithoutVersion},
+  sealed::{WithVersion, WithoutVersion},
   ty_ref, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
 };
 
@@ -212,12 +212,11 @@ impl<'a, K, V, E> Entry<'a, K, V, E>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  E: MemtableEntry<'a>,
-  E::Pointer: Pointer + WithoutVersion,
+  E: MemtableEntry<'a> + WithoutVersion,
 {
   #[inline]
   pub(super) fn new(ent: E) -> Self {
-    Self::with_version_in(ent, None)
+    Self::new_in(ent, None, None)
   }
 }
 
@@ -225,12 +224,11 @@ impl<'a, K, V, E> Entry<'a, K, V, E>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  E: MemtableEntry<'a>,
-  E::Pointer: Pointer + WithVersion,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   #[inline]
   pub(super) fn with_version(ent: E, query_version: u64) -> Self {
-    Self::with_version_in(ent, Some(query_version))
+    Self::new_in(ent, Some(ent.version()), Some(query_version))
   }
 }
 
@@ -239,23 +237,17 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer,
 {
   #[inline]
-  pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
-    let ptr = ent.pointer();
-    let raw_key = ptr.as_key_slice();
-    let raw_value = ptr.as_value_slice().expect("value must be set on `Entry`");
+  pub(super) fn new_in(ent: E, version: Option<u64>, query_version: Option<u64>) -> Self {
+    let raw_key = ent.key().as_slice();
+    let raw_value = ent.value().as_slice();
     Self {
       raw_key,
       raw_value,
       key: OnceCell::new(),
       value: OnceCell::new(),
-      version: if query_version.is_some() {
-        Some(ptr.version().unwrap_or(0))
-      } else {
-        None
-      },
+      version,
       query_version,
       ent,
     }
@@ -268,7 +260,6 @@ where
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   V: ?Sized + Type,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -298,8 +289,7 @@ impl<'a, K, V, E> Entry<'a, K, V, E>
 where
   K: Type + ?Sized,
   V: ?Sized + Type,
-  E: MemtableEntry<'a>,
-  E::Pointer: WithVersion,
+  E: MemtableEntry<'a> + WithVersion,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -391,7 +381,6 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   E: MultipleVersionMemtableEntry<'a>,
-  E::Pointer: Pointer + WithVersion,
 {
   #[inline]
   pub(super) fn with_version(ent: E, query_version: u64) -> Self {
@@ -416,7 +405,6 @@ where
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   V: ?Sized + Type,
   E: MultipleVersionMemtableEntry<'a>,
-  E::Pointer: Pointer + WithVersion,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -447,7 +435,6 @@ where
   K: Type + ?Sized,
   V: ?Sized + Type,
   E: MultipleVersionMemtableEntry<'a>,
-  E::Pointer: WithVersion,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -534,7 +521,6 @@ impl<'a, K, E> Key<'a, K, E>
 where
   K: ?Sized + Type,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer,
 {
   #[inline]
   pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
@@ -559,7 +545,6 @@ where
   K: Type + Ord + ?Sized,
   for<'b> K::Ref<'b>: KeyRef<'b, K>,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -589,7 +574,6 @@ impl<'a, K, E> Key<'a, K, E>
 where
   K: Type + ?Sized,
   E: MemtableEntry<'a>,
-  E::Pointer: WithVersion,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -663,7 +647,7 @@ impl<'a, V, E> Value<'a, V, E>
 where
   V: ?Sized + Type,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer,
+  
 {
   #[inline]
   pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
@@ -687,7 +671,7 @@ impl<'a, V, E> Value<'a, V, E>
 where
   V: Type + ?Sized,
   E: MemtableEntry<'a>,
-  E::Pointer: Pointer,
+  
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -717,7 +701,6 @@ impl<'a, V, E> Value<'a, V, E>
 where
   V: Type + ?Sized,
   E: MemtableEntry<'a>,
-  E::Pointer: WithVersion,
 {
   /// Returns the version of the entry.
   #[inline]

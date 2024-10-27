@@ -2,16 +2,17 @@ mod reader;
 mod wal;
 mod writer;
 
-#[cfg(all(
-  test,
-  any(
-    all_orderwal_tests,
-    test_swmr_constructor,
-    test_swmr_insert,
-    test_swmr_get,
-    test_swmr_iters,
-  )
-))]
+// #[cfg(all(
+//   test,
+//   any(
+//     all_orderwal_tests,
+//     test_swmr_constructor,
+//     test_swmr_insert,
+//     test_swmr_get,
+//     test_swmr_iters,
+//   )
+// ))]
+#[cfg(test)]
 mod tests;
 
 /// The ordered write-ahead log without multiple version support.
@@ -23,17 +24,14 @@ pub mod base {
 
   pub use crate::{
     memtable::arena::TableOptions as ArenaTableOptions,
-    wal::{
-      base::{Reader, Writer},
-      GenericPointer,
-    },
+    wal::base::{Reader, Writer},
   };
 
   /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`linked::Table`](BaseLinkedTable).
-  pub type LinkedTable<K, V> = BaseLinkedTable<GenericPointer<K, V>>;
+  pub type LinkedTable<K, V> = BaseLinkedTable<K, V>;
 
   /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`arena::Table`](BaseArenaTable).
-  pub type ArenaTable<K, V> = BaseArenaTable<GenericPointer<K, V>>;
+  pub type ArenaTable<K, V> = BaseArenaTable<K, V>;
 
   /// A generic ordered write-ahead log implementation for multiple threads environments.
   ///
@@ -71,17 +69,14 @@ pub mod multiple_version {
 
   pub use crate::{
     memtable::arena::TableOptions as ArenaTableOptions,
-    wal::{
-      multiple_version::{Reader, Writer},
-      GenericVersionPointer,
-    },
+    wal::multiple_version::{Reader, Writer},
   };
 
   /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`linked::MultipleVersionTable`](BaseLinkedTable).
-  pub type LinkedTable<K, V> = BaseLinkedTable<GenericVersionPointer<K, V>>;
+  pub type LinkedTable<K, V> = BaseLinkedTable<K, V>;
 
   /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`arena::MultipleVersionTable`](BaseArenaTable).
-  pub type ArenaTable<K, V> = BaseArenaTable<GenericVersionPointer<K, V>>;
+  pub type ArenaTable<K, V> = BaseArenaTable<K, V>;
 
   /// A multiple versioned generic ordered write-ahead log implementation for multiple threads environments.
   ///

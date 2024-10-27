@@ -134,22 +134,19 @@ macro_rules! expand_unit_tests {
   };
 }
 
-#[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
-mod constructor;
-
-#[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
-mod insert;
-
-#[cfg(all(test, any(test_swmr_iters, all_orderwal_tests)))]
-mod iters;
-
-#[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
-mod get;
-
 type GenericOrderWalLinkedTable<K, V> = GenericOrderWal<K, V, LinkedTable<K, V>>;
 type GenericOrderWalArenaTable<K, V> = GenericOrderWal<K, V, ArenaTable<K, V>>;
 type GenericOrderWalReaderLinkedTable<K, V> = GenericOrderWalReader<K, V, LinkedTable<K, V>>;
 type GenericOrderWalReaderArenaTable<K, V> = GenericOrderWalReader<K, V, ArenaTable<K, V>>;
+
+type MultipleVersionGenericOrderWalLinkedTable<K, V> =
+  multiple_version::GenericOrderWal<K, V, multiple_version::LinkedTable<K, V>>;
+type MultipleVersionGenericOrderWalArenaTable<K, V> =
+  multiple_version::GenericOrderWal<K, V, multiple_version::ArenaTable<K, V>>;
+type MultipleVersionGenericOrderWalReaderLinkedTable<K, V> =
+  multiple_version::GenericOrderWalReader<K, V, multiple_version::LinkedTable<K, V>>;
+type MultipleVersionGenericOrderWalReaderArenaTable<K, V> =
+  multiple_version::GenericOrderWalReader<K, V, multiple_version::ArenaTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -310,3 +307,20 @@ impl PersonRef<'_> {
     Ok(buf)
   }
 }
+
+#[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
+mod constructor;
+
+#[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
+mod insert;
+
+#[cfg(all(test, any(test_swmr_iters, all_orderwal_tests)))]
+mod iters;
+
+#[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
+mod get;
+
+mod multiple_version_constructor;
+mod multiple_version_get;
+mod multiple_version_insert;
+mod multiple_version_iters;

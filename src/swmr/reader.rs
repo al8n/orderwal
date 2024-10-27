@@ -4,7 +4,7 @@ use rarena_allocator::sync::Arena;
 
 use crate::{
   memtable::BaseTable,
-  sealed::{self, Constructable, Immutable},
+  sealed::{Constructable, Immutable},
   swmr::wal::OrderCore,
 };
 
@@ -27,13 +27,12 @@ where
   }
 }
 
-impl<K, V, M, S> Constructable<K, V> for GenericOrderWalReader<K, V, M, S>
+impl<K, V, M, S> Constructable for GenericOrderWalReader<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable + 'static,
-  M::Pointer: sealed::Pointer + Ord + Send + 'static,
+  M: BaseTable<Key = K, Value = V> + 'static, 
 {
   type Allocator = Arena;
   type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
@@ -45,11 +44,6 @@ where
   fn as_wal(&self) -> &Self::Wal {
     self.0.as_wal()
   }
-
-  // #[inline]
-  // fn as_wal_mut(&mut self) -> &mut Self::Wal {
-  //   self.0.as_wal_mut()
-  // }
 
   #[inline]
   fn from_core(core: Self::Wal) -> Self {

@@ -6,17 +6,15 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use skl::{
-  either::Either,
-  map::{
+  either::Either, map::{
     sync::{Entry, Iter, Range, SkipMap},
     Map as _,
-  },
-  Arena as _, Container as _, Options,
+  }, Arena as _, Container as _, EntryRef, Options
 };
 
 use crate::{
   memtable::BaseTable,
-  sealed::{Pointer, WithoutVersion},
+  wal::{KeyPointer, ValuePointer},
 };
 
 use super::{
@@ -24,16 +22,14 @@ use super::{
   TableOptions,
 };
 
-impl<'a, P> MemtableEntry<'a> for Entry<'a, P, ()>
+impl<'a, K, V> MemtableEntry<'a> for Entry<'a, K, V>
 where
-  P: Type<Ref<'a> = P> + KeyRef<'a, P>,
+  K: ?Sized + Type + Ord,
+  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized + Type,
 {
-  type Pointer = P;
-
-  #[inline]
-  fn pointer(&self) -> &Self::Pointer {
-    self.key()
-  }
+  type Key = K;
+  type Value = V;
 
   #[inline]
   fn next(&mut self) -> Option<Self> {
@@ -44,38 +40,50 @@ where
   fn prev(&mut self) -> Option<Self> {
     Entry::prev(self)
   }
+
+  #[inline]
+  fn key(&self) -> KeyPointer<K> {
+    *EntryRef::key(self)
+  }
+
+  #[inline]
+  fn value(&self) -> ValuePointer<V> {
+    *EntryRef::value(self)
+  }
 }
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
-pub struct Table<P> {
-  map: SkipMap<P, ()>,
+pub struct Table<K: ?Sized, V: ?Sized> {
+  map: SkipMap<KeyPointer<K>, ValuePointer<V>>,
 }
 
-impl<P> BaseTable for Table<P>
+impl<K, V> BaseTable for Table<K, V>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + Clone + 'static,
+  K: ?Sized + Type + Ord,
+  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized,
 {
-  type Pointer = P;
-
+  type Key = K;
+  type Value = V;
   type Item<'a>
-    = Entry<'a, Self::Pointer, ()>
+    = Entry<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a;
 
   type Iterator<'a>
-    = Iter<'a, P, ()>
+    = Iter<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, P, (), Q, R>
+    = Range<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>, Q, R>
   where
-    Self::Pointer: 'a,
+    
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>;
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
   type Options = TableOptions;
   type Error = skl::Error;
@@ -90,27 +98,27 @@ where
 
     if opts.map_anon() {
       arena_opts
-        .map_anon::<Self::Pointer, (), SkipMap<_, _>>()
+        .map_anon::<KeyPointer<Self::Key>, (), SkipMap<_, _>>()
         .map_err(skl::Error::IO)
     } else {
-      arena_opts.alloc::<Self::Pointer, (), SkipMap<_, _>>()
+      arena_opts.alloc::<KeyPointer<Self::Key>, (), SkipMap<_, _>>()
     }
     .map(|map| Self { map })
   }
 
-  fn insert(&self, ele: Self::Pointer) -> Result<(), Self::Error>
+  fn insert(&self, _: Option<u64>, kp: KeyPointer<Self::Key>, vp: ValuePointer<Self::Value>) -> Result<(), Self::Error>
   where
-    Self::Pointer: Pointer + Ord + 'static,
+    KeyPointer<Self::Key>: Ord + 'static,
   {
-    self.map.insert(&ele, &()).map(|_| ()).map_err(|e| match e {
+    self.map.insert(&kp, &vp).map(|_| ()).map_err(|e| match e {
       Among::Right(e) => e,
       _ => unreachable!(),
     })
   }
 
-  fn remove(&self, key: Self::Pointer) -> Result<(), Self::Error>
+  fn remove(&self, _: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
   where
-    Self::Pointer: Pointer + Ord + 'static,
+    KeyPointer<Self::Key>: Ord + 'static,
   {
     match self.map.get_or_remove(&key) {
       Err(Either::Right(e)) => Err(e),
@@ -120,9 +128,11 @@ where
   }
 }
 
-impl<P> Memtable for Table<P>
+impl<K, V> Memtable for Table<K, V>
 where
-  for<'a> P: Type<Ref<'a> = P> + KeyRef<'a, P> + Clone + WithoutVersion + 'static,
+  K: ?Sized + Type + Ord,
+  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized + Type,
 {
   #[inline]
   fn len(&self) -> usize {
@@ -131,42 +141,42 @@ where
 
   fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.map.upper_bound(bound)
   }
 
   fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.map.lower_bound(bound)
   }
 
   fn first(&self) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Ord,
+    KeyPointer<Self::Key>: Ord,
   {
     self.map.first()
   }
 
   fn last(&self) -> Option<Self::Item<'_>>
   where
-    Self::Pointer: Ord,
+    KeyPointer<Self::Key>: Ord,
   {
     self.map.last()
   }
 
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.map.get(key)
   }
 
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.map.contains_key(key)
   }
@@ -178,7 +188,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<Self::Pointer>,
+    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     self.map.range(range)
   }

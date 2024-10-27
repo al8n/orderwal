@@ -6,7 +6,7 @@ use super::{
   error::Error,
   memtable::BaseTable,
   options::{arena_options, ArenaOptionsExt, Options},
-  sealed::{Constructable, Immutable, Pointer},
+  sealed::{Constructable, Immutable},
 };
 
 /// A write-ahead log builder.
@@ -791,11 +791,9 @@ where
   ///   .alloc::<[u8], [u8], GenericOrderWal<_, _>>()
   ///   .unwrap();
   /// ```
-  pub fn alloc<K, V, W>(self) -> Result<W, Error<W::Memtable>>
+  pub fn alloc<W>(self) -> Result<W, Error<W::Memtable>>
   where
-    K: ?Sized,
-    V: ?Sized,
-    W: Constructable<K, V, Memtable = M, Checksumer = S>,
+    W: Constructable<Memtable = M, Checksumer = S>,
   {
     let Self {
       opts,
@@ -807,7 +805,7 @@ where
       .alloc()
       .map_err(Error::from_insufficient_space)
       .and_then(|arena| {
-        <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
+        W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
       })
   }
 
@@ -823,11 +821,9 @@ where
   ///   .map_anon::<[u8], [u8], GenericOrderWal<_, _>>()
   ///   .unwrap();
   /// ```
-  pub fn map_anon<K, V, W>(self) -> Result<W, Error<W::Memtable>>
+  pub fn map_anon<W>(self) -> Result<W, Error<W::Memtable>>
   where
-    K: ?Sized,
-    V: ?Sized,
-    W: Constructable<K, V, Memtable = M, Checksumer = S>,
+    W: Constructable<Memtable = M, Checksumer = S>,
   {
     let Self {
       opts,
@@ -839,7 +835,7 @@ where
       .map_anon()
       .map_err(Into::into)
       .and_then(|arena| {
-        <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
+        W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
       })
   }
 
@@ -873,17 +869,15 @@ where
   ///     .map::<[u8], [u8], GenericOrderWalReader<_, _>, _>(&path)
   ///     .unwrap()
   /// };
-  pub unsafe fn map<K, V, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
+  pub unsafe fn map<W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
   where
-    K: ?Sized,
-    V: ?Sized,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<K, V, Memtable = M, Checksumer = S> + Immutable,
-    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    W: Constructable<Memtable = M, Checksumer = S> + Immutable,
+    // <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
-      .map_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
@@ -923,11 +917,8 @@ where
   ) -> Result<W, Either<E, Error<W::Memtable>>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    K: ?Sized,
-    V: ?Sized,
     S: BuildChecksumer,
-    W: Constructable<K, V, Memtable = M, Checksumer = S> + Immutable,
-    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    W: Constructable<Memtable = M, Checksumer = S> + Immutable,
   {
     let Self {
       opts,
@@ -975,17 +966,14 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut<K, V, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
+  pub unsafe fn map_mut<W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
   where
-    K: ?Sized,
-    V: ?Sized,
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<K, V, Memtable = M, Checksumer = S>,
-    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    W: Constructable<Memtable = M, Checksumer = S>,
   {
     self
-      .map_mut_with_path_builder::<K, V, W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
@@ -1018,17 +1006,14 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut_with_path_builder<K, V, W, PB, E>(
+  pub unsafe fn map_mut_with_path_builder<W, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<W, Either<E, Error<W::Memtable>>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-    K: ?Sized,
-    V: ?Sized,
     S: BuildChecksumer,
-    W: Constructable<K, V, Memtable = M, Checksumer = S>,
-    <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    W: Constructable<Memtable = M, Checksumer = S>,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
@@ -1044,9 +1029,9 @@ where
       .map_err(Into::into)
       .and_then(|arena| {
         if !exist {
-          <W as Constructable<K, V>>::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
+          W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
         } else {
-          <W as Constructable<K, V>>::replay(arena, opts, memtable_opts, false, cks)
+          W::replay(arena, opts, memtable_opts, false, cks)
             .map(W::from_core)
         }
       })
