@@ -237,7 +237,7 @@ where
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   ///
-  /// Compared to [`first`](MultipleVersionWalReader::first), this method returns a versioned item, which means that the returned item
+  /// Compared to [`first`](Reader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
   fn first_versioned(
@@ -280,7 +280,7 @@ where
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   ///
-  /// Compared to [`last`](MultipleVersionWalReader::last), this method returns a versioned item, which means that the returned item
+  /// Compared to [`last`](Reader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
   fn last_versioned(
@@ -321,7 +321,7 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   ///
-  /// Compared to [`contains_key`](MultipleVersionWalReader::contains_key), this method returns `true` even if the latest is marked as removed.
+  /// Compared to [`contains_key`](Reader::contains_key), this method returns `true` even if the latest is marked as removed.
   #[inline]
   fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
@@ -354,7 +354,7 @@ where
 
   /// Returns `true` if the key exists in the WAL.
   ///
-  /// Compared to [`contains_key_by_bytes`](MultipleVersionWalReader::contains_key_by_bytes), this method returns `true` even if the latest is marked as removed.
+  /// Compared to [`contains_key_by_bytes`](Reader::contains_key_by_bytes), this method returns `true` even if the latest is marked as removed.
   ///
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
@@ -392,7 +392,7 @@ where
 
   /// Gets the value associated with the key.
   ///
-  /// Compared to [`get`](MultipleVersionWalReader::get), this method returns a versioned item, which means that the returned item
+  /// Compared to [`get`](Reader::get), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
   fn get_versioned<'a, Q>(
@@ -445,7 +445,7 @@ where
 
   /// Gets the value associated with the key.
   ///
-  /// Compared to [`get_by_bytes`](MultipleVersionWalReader::get_by_bytes), this method returns a versioned item, which means that the returned item
+  /// Compared to [`get_by_bytes`](Reader::get_by_bytes), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   ///
   /// ## Safety
@@ -499,7 +499,7 @@ where
 
   /// Returns a value associated to the highest element whose key is below the given bound.
   ///
-  /// Compared to [`upper_bound`](MultipleVersionWalReader::upper_bound), this method returns a versioned item, which means that the returned item
+  /// Compared to [`upper_bound`](Reader::upper_bound), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
   fn upper_bound_versioned<'a, Q>(
@@ -554,7 +554,7 @@ where
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// Compared to [`upper_bound_by_bytes`](MultipleVersionWalReader::upper_bound_by_bytes), this method returns a versioned item, which means that the returned item
+  /// Compared to [`upper_bound_by_bytes`](Reader::upper_bound_by_bytes), this method returns a versioned item, which means that the returned item
   ///
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
@@ -608,7 +608,7 @@ where
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// Compared to [`lower_bound`](MultipleVersionWalReader::lower_bound), this method returns a versioned item, which means that the returned item
+  /// Compared to [`lower_bound`](Reader::lower_bound), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
   fn lower_bound_versioned<'a, Q>(
@@ -664,7 +664,7 @@ where
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// Compared to [`lower_bound_by_bytes`](MultipleVersionWalReader::lower_bound_by_bytes), this method returns a versioned item, which means that the returned item
+  /// Compared to [`lower_bound_by_bytes`](Reader::lower_bound_by_bytes), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   ///
   /// ## Safety
@@ -750,7 +750,7 @@ where
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
   ///
-  /// See also [`insert_with_value_builder`](Wal::insert_with_value_builder) and [`insert_with_builders`](Wal::insert_with_builders).
+  /// See also [`insert_with_value_builder`](Writer::insert_with_value_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
   fn insert_with_key_builder<'a, E>(
     &'a mut self,
@@ -770,7 +770,7 @@ where
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the value in place.
   ///
-  /// See also [`insert_with_key_builder`](Wal::insert_with_key_builder) and [`insert_with_builders`](Wal::insert_with_builders).
+  /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
   fn insert_with_value_builder<'a, E>(
     &'a mut self,

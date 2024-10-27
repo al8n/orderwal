@@ -575,7 +575,7 @@ where
   ///
   /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Windows.
   ///
-  /// This option has no effect on file-backed memory maps and vec backed [`Wal`](crate::Wal).
+  /// This option has no effect on file-backed memory maps and vec backed `Wal`.
   ///
   /// ## Example
   ///
@@ -598,7 +598,7 @@ where
   /// default is requested. The requested length should be a multiple of this, or the mapping
   /// will fail.
   ///
-  /// This option has no effect on file-backed memory maps and vec backed [`Wal`](crate::Wal).
+  /// This option has no effect on file-backed memory maps and vec backed `Wal`.
   ///
   /// ## Example
   ///
@@ -619,7 +619,7 @@ where
   ///
   /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Windows.
   ///
-  /// This option has no effect on vec backed [`Wal`](crate::Wal).
+  /// This option has no effect on vec backed `Wal`.
   ///
   /// ## Example
   ///

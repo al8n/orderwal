@@ -419,7 +419,7 @@ where
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key in place.
   ///
-  /// See also [`insert_with_value_builder`](Wal::insert_with_value_builder) and [`insert_with_builders`](Wal::insert_with_builders).
+  /// See also [`insert_with_value_builder`](Writer::insert_with_value_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
   fn insert_with_key_builder<'a, E>(
     &'a mut self,
@@ -438,7 +438,7 @@ where
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the value in place.
   ///
-  /// See also [`insert_with_key_builder`](Wal::insert_with_key_builder) and [`insert_with_builders`](Wal::insert_with_builders).
+  /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
   fn insert_with_value_builder<'a, E>(
     &'a mut self,

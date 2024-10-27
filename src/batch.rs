@@ -3,7 +3,7 @@ use super::{
   types::{BufWriter, EncodedEntryMeta, EntryFlags},
 };
 
-/// An entry can be inserted into the WALs through [`Batch`](super::batch::Batch).
+/// An entry can be inserted into the WALs through [`Batch`].
 pub struct BatchEntry<K, V, P> {
   pub(crate) key: K,
   pub(crate) value: Option<V>,
