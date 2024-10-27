@@ -1,7 +1,10 @@
 use core::ops::{Bound, RangeBounds};
 use dbutils::equivalent::Comparable;
 
-use crate::{sealed::WithVersion, wal::{KeyPointer, ValuePointer}};
+use crate::{
+  sealed::WithVersion,
+  wal::{KeyPointer, ValuePointer},
+};
 
 /// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].
 pub mod linked;
@@ -50,7 +53,7 @@ pub trait BaseTable {
   type Error;
 
   /// The item returned by the iterator or query methods.
-  type Item<'a>: MemtableEntry<'a> + Clone
+  type Item<'a>: MemtableEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
   where
     Self: 'a;
 
@@ -72,7 +75,12 @@ pub trait BaseTable {
     Self: Sized;
 
   /// Inserts a pointer into the memtable.
-  fn insert(&self, version: Option<u64>, kp: KeyPointer<Self::Key>, vp: ValuePointer<Self::Value>) -> Result<(), Self::Error>
+  fn insert(
+    &self,
+    version: Option<u64>,
+    kp: KeyPointer<Self::Key>,
+    vp: ValuePointer<Self::Value>,
+  ) -> Result<(), Self::Error>
   where
     KeyPointer<Self::Key>: Ord + 'static;
 
@@ -135,7 +143,11 @@ pub trait Memtable: BaseTable {
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait MultipleVersionMemtable: BaseTable {
   /// The item returned by the iterator or query methods.
-  type MultipleVersionItem<'a>: MultipleVersionMemtableEntry<'a>
+  type MultipleVersionItem<'a>: MultipleVersionMemtableEntry<
+    'a,
+    Key = Self::Key,
+    Value = Self::Value,
+  >
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a;

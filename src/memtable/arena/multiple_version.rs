@@ -6,13 +6,19 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use skl::{
-  either::Either, versioned::{
+  either::Either,
+  versioned::{
     sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry},
     VersionedMap as _,
-  }, Options, VersionedContainer as _
+  },
+  Options, VersionedContainer as _,
 };
 
-use crate::{memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry}, sealed::WithVersion, wal::{KeyPointer, ValuePointer}};
+use crate::{
+  memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry},
+  sealed::WithVersion,
+  wal::{KeyPointer, ValuePointer},
+};
 
 use super::TableOptions;
 
@@ -50,7 +56,8 @@ impl<K, V> WithVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
-{}
+{
+}
 
 impl<'a, K, V> MemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
@@ -81,7 +88,8 @@ where
   }
 }
 
-impl<'a, K, V> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a>
+  for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
@@ -97,7 +105,8 @@ impl<K, V> WithVersion for VersionedEntry<'_, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
-{}
+{
+}
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
 pub struct MultipleVersionTable<K: ?Sized, V: ?Sized> {
@@ -115,19 +124,17 @@ where
 
   type Item<'a>
     = Entry<'a, KeyPointer<K>, ValuePointer<V>>
-  where 
+  where
     Self: 'a;
 
   type Iterator<'a>
     = Iter<'a, KeyPointer<K>, ValuePointer<V>>
   where
-    
     Self: 'a;
 
   type Range<'a, Q, R>
     = Range<'a, KeyPointer<K>, ValuePointer<V>, Q, R>
   where
-    
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<K>>;
@@ -154,7 +161,12 @@ where
     .map(|map| Self { map })
   }
 
-  fn insert(&self, version: Option<u64>, kp: KeyPointer<K>, vp: ValuePointer<V>) -> Result<(), Self::Error>
+  fn insert(
+    &self,
+    version: Option<u64>,
+    kp: KeyPointer<K>,
+    vp: ValuePointer<V>,
+  ) -> Result<(), Self::Error>
   where
     KeyPointer<K>: Ord + 'static,
   {
@@ -189,13 +201,11 @@ where
   type MultipleVersionItem<'a>
     = VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
   where
-    
     Self: 'a;
 
   type AllIterator<'a>
     = AllVersionsIter<'a, KeyPointer<K>, ValuePointer<V>>
   where
-    
     Self: 'a;
 
   type AllRange<'a, Q, R>

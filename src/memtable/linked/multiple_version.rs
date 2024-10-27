@@ -10,7 +10,8 @@ use dbutils::equivalent::Comparable;
 
 use crate::{
   memtable,
-  sealed::WithVersion, wal::{KeyPointer, ValuePointer},
+  sealed::WithVersion,
+  wal::{KeyPointer, ValuePointer},
 };
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
@@ -60,7 +61,8 @@ impl<K, V> WithVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
-{}
+{
+}
 
 impl<'a, K, V> memtable::MemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
@@ -95,10 +97,11 @@ impl<K, V> WithVersion for VersionedEntry<'_, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
-{}
+{
+}
 
-
-impl<'a, K, V> memtable::MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> memtable::MultipleVersionMemtableEntry<'a>
+  for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
@@ -144,7 +147,12 @@ where
   }
 
   #[inline]
-  fn insert(&self, version: Option<u64>, kp: KeyPointer<Self::Key>, vp: ValuePointer<Self::Value>) -> Result<(), Self::Error>
+  fn insert(
+    &self,
+    version: Option<u64>,
+    kp: KeyPointer<Self::Key>,
+    vp: ValuePointer<Self::Value>,
+  ) -> Result<(), Self::Error>
   where
     KeyPointer<Self::Key>: Ord + 'static,
   {

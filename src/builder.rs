@@ -804,9 +804,7 @@ where
       .with_capacity(opts.capacity())
       .alloc()
       .map_err(Error::from_insufficient_space)
-      .and_then(|arena| {
-        W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
-      })
+      .and_then(|arena| W::new_in(arena, opts, memtable_opts, cks).map(W::from_core))
   }
 
   /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
@@ -834,9 +832,7 @@ where
       .merge(&opts)
       .map_anon()
       .map_err(Into::into)
-      .and_then(|arena| {
-        W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
-      })
+      .and_then(|arena| W::new_in(arena, opts, memtable_opts, cks).map(W::from_core))
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
@@ -1031,8 +1027,7 @@ where
         if !exist {
           W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
         } else {
-          W::replay(arena, opts, memtable_opts, false, cks)
-            .map(W::from_core)
+          W::replay(arena, opts, memtable_opts, false, cks).map(W::from_core)
         }
       })
       .map_err(Either::Right)

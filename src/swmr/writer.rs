@@ -77,7 +77,7 @@ where
   }
 }
 
-impl<K, V, M, S> crate::wal::base::Writer<K, V> for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> crate::wal::base::Writer for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
@@ -90,7 +90,7 @@ where
   }
 }
 
-impl<K, V, M, S> crate::wal::multiple_version::Writer<K, V> for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> crate::wal::multiple_version::Writer for GenericOrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,

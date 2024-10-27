@@ -32,7 +32,7 @@ where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static, 
+  M: BaseTable<Key = K, Value = V> + 'static,
 {
   type Allocator = Arena;
   type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;

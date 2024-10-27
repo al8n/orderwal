@@ -1,4 +1,7 @@
-use crate::{memtable::BaseTable, wal::{KeyPointer, ValuePointer}};
+use crate::{
+  memtable::BaseTable,
+  wal::{KeyPointer, ValuePointer},
+};
 
 use super::{
   sealed::{WithVersion, WithoutVersion},

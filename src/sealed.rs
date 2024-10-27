@@ -7,11 +7,15 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
-  leb128::{decode_u64_varint, encoded_u64_varint_len}, traits::Type,
+  leb128::{decode_u64_varint, encoded_u64_varint_len},
+  traits::Type,
 };
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
-use crate::{merge_lengths, split_lengths, wal::{KeyPointer, ValuePointer}};
+use crate::{
+  merge_lengths, split_lengths,
+  wal::{KeyPointer, ValuePointer},
+};
 
 use super::{
   batch::Batch,
@@ -540,7 +544,6 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
-    // <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.update(version, kb, Some(vb))
   }
@@ -554,7 +557,6 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     KE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
-    // <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     struct Noop;
 
@@ -590,7 +592,6 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
-    // <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -691,18 +692,12 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
             }
 
             buf.detach();
-            let ptr = buf
-              .as_ptr()
-              .add(encoded_entry_meta.key_offset() as usize);
+            let ptr = buf.as_ptr().add(encoded_entry_meta.key_offset() as usize);
             let kp = KeyPointer::new(entry_flag, encoded_entry_meta.klen, ptr);
             let vp = (!remove).then(|| {
               ValuePointer::new(encoded_entry_meta.vlen, ptr.add(encoded_entry_meta.klen))
             });
-            Ok((
-              buf.buffer_offset(),
-              kp,
-              vp
-            ))
+            Ok((buf.buffer_offset(), kp, vp))
           }
         }
       }
@@ -944,11 +939,15 @@ where
   }
 }
 
-
 pub trait Constructable: Sized {
   type Allocator: Allocator + 'static;
-  type Wal: Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer, Allocator = Self::Allocator, Memtable = Self::Memtable>
-    + 'static;
+  type Wal: Wal<
+      <Self::Memtable as BaseTable>::Key,
+      <Self::Memtable as BaseTable>::Value,
+      Self::Checksumer,
+      Allocator = Self::Allocator,
+      Memtable = Self::Memtable,
+    > + 'static;
   type Memtable: BaseTable;
   type Checksumer;
   type Reader;
@@ -1013,8 +1012,12 @@ pub trait Constructable: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let set = <Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable::new(memtable_opts)
-      .map_err(Error::memtable)?;
+    let set = <Self::Wal as Wal<
+      <Self::Memtable as BaseTable>::Key,
+      <Self::Memtable as BaseTable>::Value,
+      Self::Checksumer,
+    >>::Memtable::new(memtable_opts)
+    .map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -1102,7 +1105,8 @@ pub trait Constructable: Sized {
 
           let (version, ptr) = if flag.contains(EntryFlags::VERSIONED) {
             let version_ptr = ptr.add(EntryFlags::SIZE);
-            let version = u64::from_le_bytes(core::slice::from_raw_parts(version_ptr, VERSION_SIZE));
+            let version =
+              u64::from_le_bytes(core::slice::from_raw_parts(version_ptr, VERSION_SIZE));
             minimum_version = minimum_version.min(version);
             maximum_version = maximum_version.max(version);
             (Some(version), version_ptr.add(VERSION_SIZE))
@@ -1173,7 +1177,8 @@ pub trait Constructable: Sized {
 
             let (version, ptr, ent_len) = if flag.contains(EntryFlags::VERSIONED) {
               let version_ptr = ptr.add(EntryFlags::SIZE);
-              let version = u64::from_le_bytes(core::slice::from_raw_parts(version_ptr, VERSION_SIZE));
+              let version =
+                u64::from_le_bytes(core::slice::from_raw_parts(version_ptr, VERSION_SIZE));
               minimum_version = minimum_version.min(version);
               maximum_version = maximum_version.max(version);
               let ent_len = kvlen + EntryFlags::SIZE + VERSION_SIZE + klen + vlen;
@@ -1206,7 +1211,11 @@ pub trait Constructable: Sized {
       }
     }
 
-    Ok(<Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::construct(
+    Ok(<Self::Wal as Wal<
+      <Self::Memtable as BaseTable>::Key,
+      <Self::Memtable as BaseTable>::Value,
+      Self::Checksumer,
+    >>::construct(
       arena,
       set,
       opts,

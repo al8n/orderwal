@@ -14,8 +14,8 @@ use skl::either::Either;
 use crate::{
   batch::Batch,
   error::Error,
-  memtable::{self, MultipleVersionMemtable},
-  sealed::{Constructable, GenericPointer, MultipleVersionWalReader, Pointer, Wal, WithVersion},
+  memtable::{self, BaseTable, MultipleVersionMemtable},
+  sealed::{Constructable, MultipleVersionWalReader, Wal, WithVersion},
   types::{BufWriter, Entry, KeyBuilder, MultipleVersionEntry, ValueBuilder},
   Options,
 };
@@ -23,11 +23,7 @@ use crate::{
 use super::{iter::*, GenericQueryRange, Query, Slice};
 
 /// An abstract layer for the immutable write-ahead log.
-pub trait Reader<K: ?Sized, V: ?Sized>: Constructable<K, V>
-where
-  <Self::Memtable as memtable::BaseTable>::Pointer: WithVersion + GenericPointer<K, V>,
-  Self::Memtable: MultipleVersionMemtable,
-{
+pub trait Reader: Constructable {
   /// Returns the reserved space in the WAL.
   ///
   /// ## Safety
@@ -40,7 +36,7 @@ where
 
   /// Returns the path of the WAL if it is backed by a file.
   #[inline]
-  fn path(&self) -> Option<&<<Self as Constructable<K, V>>::Allocator as Allocator>::Path> {
+  fn path(&self) -> Option<&<<Self as Constructable>::Allocator as Allocator>::Path> {
     self.as_wal().path()
   }
 
@@ -81,13 +77,10 @@ where
     version: u64,
   ) -> Iter<
     '_,
-    K,
-    V,
-    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
+    <<Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable as BaseTable>::Iterator<'_>,
     Self::Memtable,
   >
   where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
   {
     Iter::new(self.as_wal().iter(version))
@@ -100,13 +93,10 @@ where
     version: u64,
   ) -> MultipleVersionIter<
     '_,
-    K,
-    V,
-    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::MultipleVersionMemtable>::AllIterator<'_>,
+    <<Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable as MultipleVersionMemtable>::AllIterator<'_>,
     Self::Memtable,
   >
   where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
   {
     MultipleVersionIter::new(self.as_wal().iter_all_versions(version))
@@ -118,13 +108,13 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Range<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> Range<'a, R, Q, <Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    
+    
   {
     Range::new(self.as_wal().range(version, GenericQueryRange::new(range)))
   }
@@ -135,13 +125,11 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> MultipleVersionRange<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> MultipleVersionRange<'a, R, Q, <Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     MultipleVersionRange::new(
       self
@@ -157,12 +145,9 @@ where
     version: u64,
   ) -> Keys<
     '_,
-    K,
-    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
+    <<Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable as BaseTable>::Iterator<'_>,
     Self::Memtable,
   >
-  where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     Keys::new(self.as_wal().iter(version))
   }
@@ -173,13 +158,13 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> RangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> RangeKeys<'a, R, Q, <Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    
+    
   {
     RangeKeys::new(self.as_wal().range(version, GenericQueryRange::new(range)))
   }
@@ -191,12 +176,9 @@ where
     version: u64,
   ) -> Values<
     '_,
-    V,
-    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::BaseTable>::Iterator<'_>,
+    <<Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable as BaseTable>::Iterator<'_>,
     Self::Memtable,
   >
-  where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     Values::new(self.as_wal().iter(version))
   }
@@ -207,27 +189,25 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> RangeValues<'a, K, V, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
+  ) -> RangeValues<'a, R, Q, <Self::Wal as Wal<<Self::Memtable as BaseTable>::Key, <Self::Memtable as BaseTable>::Value, Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
-    K: Type + Ord,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     RangeValues::new(self.as_wal().range(version, GenericQueryRange::new(range)))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(
-    &self,
+  fn first<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type,
-    V: Type,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -240,22 +220,20 @@ where
   /// Compared to [`first`](Reader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn first_versioned(
-    &self,
+  fn first_versioned<'a>(
+    &'a self,
     version: u64,
   ) -> Option<
     MultipleVersionEntry<
-      '_,
-      K,
-      V,
-      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+      'a,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type,
-    V: Type,
     Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + WithVersion,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -265,14 +243,15 @@ where
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(
-    &self,
+  fn last<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type,
-    V: Type,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     MultipleVersionWalReader::last(self.as_wal(), version)
       .map(|ent| Entry::with_version(ent, version))
@@ -283,22 +262,20 @@ where
   /// Compared to [`last`](Reader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn last_versioned(
-    &self,
+  fn last_versioned<'a>(
+    &'a self,
     version: u64,
   ) -> Option<
     MultipleVersionEntry<
-      '_,
-      K,
-      V,
-      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+      'a,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type,
-    V: Type,
     Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + WithVersion,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -310,13 +287,15 @@ where
   #[inline]
   fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
-    K: Type + 'a,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .contains_key(version, Query::<K, Q>::ref_cast(key))
+      .contains_key(version, Query::<_, Q>::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -325,14 +304,15 @@ where
   #[inline]
   fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
-    K: Type + 'a,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .contains_key_versioned(version, Query::<K, Q>::ref_cast(key))
+      .contains_key_versioned(version, Query::<_, Q>::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -340,16 +320,16 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn contains_key_by_bytes(&self, version: u64, key: &[u8]) -> bool
+  unsafe fn contains_key_by_bytes<'a>(&'a self, version: u64, key: &[u8]) -> bool
   where
-    K: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .contains_key(version, Slice::<K>::ref_cast(key))
+      .contains_key(version, Slice::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -359,12 +339,12 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn contains_key_versioned_by_bytes(&self, version: u64, key: &[u8]) -> bool
+  unsafe fn contains_key_versioned_by_bytes<'a>(&'a self, version: u64, key: &[u8]) -> bool
   where
-    K: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -377,16 +357,17 @@ where
     &'a self,
     version: u64,
     key: &Q,
-  ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type + 'a,
-    V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .get(version, Query::<K, Q>::ref_cast(key))
+      .get(version, Query::<_, Q>::ref_cast(key))
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -402,21 +383,19 @@ where
   ) -> Option<
     MultipleVersionEntry<
       'a,
-      K,
-      V,
       <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type + 'a,
-    V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .get_versioned(version, Query::<K, Q>::ref_cast(key))
+      .get_versioned(version, Query::<_, Q>::ref_cast(key))
       .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 
@@ -425,21 +404,20 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_by_bytes(
-    &self,
+  unsafe fn get_by_bytes<'a>(
+    &'a self,
     version: u64,
     key: &[u8],
-  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .get(version, Slice::<K>::ref_cast(key))
+      .get(version, Slice::ref_cast(key))
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -451,28 +429,25 @@ where
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_versioned_by_bytes(
-    &self,
+  unsafe fn get_versioned_by_bytes<'a>(
+    &'a self,
     version: u64,
     key: &[u8],
   ) -> Option<
     MultipleVersionEntry<
-      '_,
-      K,
-      V,
-      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+      'a,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .get_versioned(version, Slice::<K>::ref_cast(key))
+      .get_versioned(version, Slice::ref_cast(key))
       .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 
@@ -483,13 +458,13 @@ where
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type + Ord,
-    V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -509,18 +484,15 @@ where
   ) -> Option<
     MultipleVersionEntry<
       'a,
-      K,
-      V,
       <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type + Ord,
-    V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -534,20 +506,20 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn upper_bound_by_bytes(
-    &self,
+  unsafe fn upper_bound_by_bytes<'a>(
+    &'a self,
     version: u64,
     bound: Bound<&[u8]>,
-  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .upper_bound(version, bound.map(Slice::<K>::ref_cast))
+      .upper_bound(version, bound.map(Slice::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -559,28 +531,25 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn upper_bound_versioned_by_bytes(
-    &self,
+  unsafe fn upper_bound_versioned_by_bytes<'a>(
+    &'a self,
     version: u64,
     bound: Bound<&[u8]>,
   ) -> Option<
     MultipleVersionEntry<
-      '_,
-      K,
-      V,
-      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+      'a,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .upper_bound_versioned(version, bound.map(Slice::<K>::ref_cast))
+      .upper_bound_versioned(version, bound.map(Slice::ref_cast))
       .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 
@@ -591,13 +560,13 @@ where
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Entry<'a, K, V, <Self::Memtable as memtable::BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type + Ord,
-    V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -618,18 +587,15 @@ where
   ) -> Option<
     MultipleVersionEntry<
       'a,
-      K,
-      V,
       <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type + Ord,
-    V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -643,21 +609,20 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn lower_bound_by_bytes(
-    &self,
+  unsafe fn lower_bound_by_bytes<'a>(
+    &'a self,
     version: u64,
     bound: Bound<&[u8]>,
-  ) -> Option<Entry<'_, K, V, <Self::Memtable as memtable::BaseTable>::Item<'_>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .lower_bound(version, bound.map(Slice::<K>::ref_cast))
+      .lower_bound(version, bound.map(Slice::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -670,48 +635,40 @@ where
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn lower_bound_versioned_by_bytes(
-    &self,
+  unsafe fn lower_bound_versioned_by_bytes<'a>(
+    &'a self,
     version: u64,
     bound: Bound<&[u8]>,
   ) -> Option<
     MultipleVersionEntry<
-      '_,
-      K,
-      V,
-      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+      'a,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
     >,
   >
   where
-    K: Type,
-    V: Type,
-    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
     Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
   {
     self
       .as_wal()
-      .lower_bound_versioned(version, bound.map(Slice::<K>::ref_cast))
+      .lower_bound_versioned(version, bound.map(Slice::<<Self::Memtable as BaseTable>::Key>::ref_cast))
       .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 }
 
-impl<T, K, V> Reader<K, V> for T
+impl<T> Reader for T
 where
-  T: Constructable<K, V>,
-  <T::Memtable as memtable::BaseTable>::Pointer: WithVersion + GenericPointer<K, V>,
+  T: Constructable,
   T::Memtable: MultipleVersionMemtable,
-  K: ?Sized,
-  V: ?Sized,
 {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Writer<K: ?Sized, V: ?Sized>: Reader<K, V>
+pub trait Writer: Reader
 where
-  <Self::Memtable as memtable::BaseTable>::Pointer: WithVersion + GenericPointer<K, V>,
-  Self::Reader: Reader<K, V, Memtable = Self::Memtable>,
-  Self::Memtable: MultipleVersionMemtable,
+  Self::Reader: Reader<Memtable = Self::Memtable>,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -756,13 +713,13 @@ where
     &'a mut self,
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
-    value: impl Into<MaybeStructured<'a, V>>,
-  ) -> Result<(), Among<E, V::Error, Error<Self::Memtable>>>
+    value: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>>,
+  ) -> Result<(), Among<E, <<Self::Memtable as BaseTable>::Value as Type>::Error, Error<Self::Memtable>>>
   where
-    K: Type,
-    V: Type + 'a,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type + 'a,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().insert(Some(version), kb, value.into())
   }
@@ -775,14 +732,14 @@ where
   fn insert_with_value_builder<'a, E>(
     &'a mut self,
     version: u64,
-    key: impl Into<MaybeStructured<'a, K>>,
+    key: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
-  ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
+  ) -> Result<(), Among<<<Self::Memtable as BaseTable>::Key as Type>::Error, E, Error<Self::Memtable>>>
   where
-    K: Type + 'a,
-    V: Type,
+    <Self::Memtable as BaseTable>::Key: Type + 'a,
+    <Self::Memtable as BaseTable>::Value: Type,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().insert(Some(version), key.into(), vb)
   }
@@ -797,10 +754,10 @@ where
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, VE>>,
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
-    K: Type,
-    V: Type,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().insert(Some(version), kb, vb)
   }
@@ -810,14 +767,14 @@ where
   fn insert<'a>(
     &mut self,
     version: u64,
-    key: impl Into<MaybeStructured<'a, K>>,
-    value: impl Into<MaybeStructured<'a, V>>,
-  ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
+    key: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
+    value: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>>,
+  ) -> Result<(), Among<<<Self::Memtable as BaseTable>::Key as Type>::Error, <<Self::Memtable as BaseTable>::Value as Type>::Error, Error<Self::Memtable>>>
   where
-    K: Type + 'a,
-    V: Type + 'a,
+    <Self::Memtable as BaseTable>::Key: Type + 'a,
+    <Self::Memtable as BaseTable>::Value: Type + 'a,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self
       .as_wal()
@@ -833,9 +790,9 @@ where
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
-    K: Type,
+    <Self::Memtable as BaseTable>::Key: Type,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().remove(Some(version), kb)
   }
@@ -845,12 +802,12 @@ where
   fn remove<'a>(
     &mut self,
     version: u64,
-    key: impl Into<MaybeStructured<'a, K>>,
-  ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
+    key: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
+  ) -> Result<(), Either<<<Self::Memtable as BaseTable>::Key as Type>::Error, Error<Self::Memtable>>>
   where
-    K: Type + 'a,
+    <Self::Memtable as BaseTable>::Key: Type + 'a,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().remove(Some(version), key.into())
   }
@@ -860,17 +817,17 @@ where
   fn insert_batch<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
+  ) -> Result<(), Among<<<Self::Memtable as BaseTable>::Key as Type>::Error, <<Self::Memtable as BaseTable>::Value as Type>::Error, Error<Self::Memtable>>>
   where
     B: Batch<
-      <Self::Memtable as memtable::BaseTable>::Pointer,
-      Key = MaybeStructured<'a, K>,
-      Value = MaybeStructured<'a, V>,
+      Self::Memtable,
+      Key = MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>,
+      Value = MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>,
     >,
-    K: Type + 'a,
-    V: Type + 'a,
+    <Self::Memtable as BaseTable>::Key: Type + 'a,
+    <Self::Memtable as BaseTable>::Value: Type + 'a,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }
@@ -880,14 +837,14 @@ where
   fn insert_batch_with_key_builder<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<<B::Key as BufWriter>::Error, V::Error, Error<Self::Memtable>>>
+  ) -> Result<(), Among<<B::Key as BufWriter>::Error, <<Self::Memtable as BaseTable>::Value as Type>::Error, Error<Self::Memtable>>>
   where
-    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Value = MaybeStructured<'a, V>>,
+    B: Batch<Self::Memtable, Value = MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>>,
     B::Key: BufWriter,
-    K: Type + 'a,
-    V: Type + 'a,
+    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Value: Type + 'a,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }
@@ -897,14 +854,15 @@ where
   fn insert_batch_with_value_builder<'a, B>(
     &mut self,
     batch: &'a mut B,
-  ) -> Result<(), Among<K::Error, <B::Value as BufWriter>::Error, Error<Self::Memtable>>>
+  ) -> Result<(), Among<<<Self::Memtable as BaseTable>::Key as Type>::Error, <B::Value as BufWriter>::Error, Error<Self::Memtable>>>
   where
-    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = MaybeStructured<'a, K>>,
+    B: Batch<Self::Memtable, Key = MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
     B::Value: BufWriter,
-    K: Type + 'a,
-    V: Type + 'a,
+    <Self::Memtable as BaseTable>::Key: Type + 'a,
+    <Self::Memtable as BaseTable>::Value: Type,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
+    
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }
@@ -916,11 +874,11 @@ where
     batch: &mut B,
   ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
   where
-    B: Batch<<Self::Memtable as memtable::BaseTable>::Pointer, Key = KB, Value = VB>,
+    B: Batch<Self::Memtable, Key = KB, Value = VB>,
     KB: BufWriter,
     VB: BufWriter,
+    Self::Memtable: MultipleVersionMemtable,
     Self::Checksumer: BuildChecksumer,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }

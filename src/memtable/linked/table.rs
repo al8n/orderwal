@@ -3,7 +3,11 @@ use core::{convert::Infallible, ops::RangeBounds};
 use crossbeam_skiplist::{map::Entry, SkipMap};
 use dbutils::equivalent::Comparable;
 
-use crate::{memtable, sealed::WithoutVersion, wal::{KeyPointer, ValuePointer}};
+use crate::{
+  memtable,
+  sealed::WithoutVersion,
+  wal::{KeyPointer, ValuePointer},
+};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipMap`].
 pub struct Table<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);
@@ -48,7 +52,8 @@ impl<K, V> WithoutVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
-{}
+{
+}
 
 impl<K, V> memtable::BaseTable for Table<K, V>
 where
@@ -71,7 +76,6 @@ where
   type Range<'a, Q, R>
     = crossbeam_skiplist::map::Range<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
@@ -87,7 +91,12 @@ where
   }
 
   #[inline]
-  fn insert(&self, _: Option<u64>, kp: KeyPointer<Self::Key>, vp: ValuePointer<Self::Value>) -> Result<(), Self::Error>
+  fn insert(
+    &self,
+    _: Option<u64>,
+    kp: KeyPointer<Self::Key>,
+    vp: ValuePointer<Self::Value>,
+  ) -> Result<(), Self::Error>
   where
     KeyPointer<Self::Key>: Ord + 'static,
   {

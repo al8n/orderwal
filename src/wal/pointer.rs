@@ -111,6 +111,8 @@ pub struct KeyPointer<K: ?Sized> {
   _m: PhantomData<K>,
 }
 
+unsafe<K: ?Sized> KeyPointer<K>
+
 impl<K: ?Sized> core::fmt::Debug for KeyPointer<K> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("KeyPointer")

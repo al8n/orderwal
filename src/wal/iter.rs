@@ -9,7 +9,8 @@ use crate::{
 };
 
 use super::{
-  super::internal_iter::{Iter as BaseIter, MultipleVersionBaseIter}, GenericQueryRange, Query
+  super::internal_iter::{Iter as BaseIter, MultipleVersionBaseIter},
+  GenericQueryRange, Query,
 };
 
 /// Iterator over the entries in the WAL.
@@ -44,7 +45,7 @@ where
   M::Value: Type,
   I: Iterator<Item = M::Item<'a>>,
 {
-  type Item = Entry<'a, M::Key, M::Value, M::Item<'a>>;
+  type Item = Entry<'a, M::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -224,7 +225,7 @@ where
 
 impl<'a, R, Q, B> Range<'a, R, Q, B>
 where
-  R: RangeBounds<Q> + 'a, 
+  R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
   B::Key: Type + Ord,
@@ -256,9 +257,10 @@ where
   B: BaseTable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+    Iterator<Item = B::Item<'a>>,
 {
-  type Item = Entry<'a, B::Key, B::Value, B::Item<'a>>;
+  type Item = Entry<'a, B::Item<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -271,7 +273,7 @@ where
 
 impl<'a, R, Q, B> DoubleEndedIterator for Range<'a, R, Q, B>
 where
-  R: RangeBounds<Q> + 'a, 
+  R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
   B::Key: Type + Ord,
@@ -295,7 +297,8 @@ where
   B: BaseTable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: FusedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+    FusedIterator<Item = B::Item<'a>>,
 {
 }
 
@@ -344,7 +347,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
   B::Key: Type + Ord,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+    Iterator<Item = B::Item<'a>>,
 {
   type Item = Key<'a, B::Key, B::Item<'a>>;
 
@@ -381,7 +385,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: BaseTable + 'a,
   B::Key: Type + Ord,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: FusedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+    FusedIterator<Item = B::Item<'a>>,
 {
 }
 
@@ -431,7 +436,8 @@ where
   B: BaseTable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+    Iterator<Item = B::Item<'a>>,
 {
   type Item = Value<'a, B::Value, B::Item<'a>>;
 
@@ -470,7 +476,8 @@ where
   B: BaseTable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>: FusedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+    FusedIterator<Item = B::Item<'a>>,
 {
 }
 
@@ -506,7 +513,7 @@ where
   M::Value: Type,
   I: Iterator<Item = M::MultipleVersionItem<'a>>,
 {
-  type Item = MultipleVersionEntry<'a, M::Key, M::Value, M::MultipleVersionItem<'a>>;
+  type Item = MultipleVersionEntry<'a, M::MultipleVersionItem<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -599,7 +606,7 @@ where
   B::AllRange<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
     Iterator<Item = B::MultipleVersionItem<'a>>,
 {
-  type Item = MultipleVersionEntry<'a, B::Key, B::Value, B::MultipleVersionItem<'a>>;
+  type Item = MultipleVersionEntry<'a, B::MultipleVersionItem<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {

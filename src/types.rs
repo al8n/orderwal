@@ -148,27 +148,26 @@ impl EncodedEntryMeta {
 }
 
 /// The reference to an entry in the generic WALs.
-pub struct Entry<'a, K, V, E>
+pub struct Entry<'a, E>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Key: Type,
+  E::Value: Type,
 {
   ent: E,
   raw_key: &'a [u8],
   raw_value: &'a [u8],
-  key: OnceCell<K::Ref<'a>>,
-  value: OnceCell<V::Ref<'a>>,
+  key: OnceCell<<E::Key as Type>::Ref<'a>>,
+  value: OnceCell<<E::Value as Type>::Ref<'a>>,
   version: Option<u64>,
   query_version: Option<u64>,
 }
 
-impl<'a, K, V, E> core::fmt::Debug for Entry<'a, K, V, E>
+impl<'a, E> core::fmt::Debug for Entry<'a, E>
 where
-  K: Type + ?Sized,
-  K::Ref<'a>: core::fmt::Debug,
-  V: Type + ?Sized,
-  V::Ref<'a>: core::fmt::Debug,
-  E: core::fmt::Debug,
+  E: MemtableEntry<'a> + core::fmt::Debug,
+  E::Key: Type,
+  E::Value: Type,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     if let Some(version) = self.version {
@@ -186,13 +185,11 @@ where
   }
 }
 
-impl<'a, K, V, E> Clone for Entry<'a, K, V, E>
+impl<'a, E> Clone for Entry<'a, E>
 where
-  K: ?Sized + Type,
-  K::Ref<'a>: Clone,
-  V: ?Sized + Type,
-  V::Ref<'a>: Clone,
-  E: Clone,
+  E: MemtableEntry<'a> + Clone,
+  E::Key: Type,
+  E::Value: Type,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -208,11 +205,11 @@ where
   }
 }
 
-impl<'a, K, V, E> Entry<'a, K, V, E>
+impl<'a, E> Entry<'a, E>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
   E: MemtableEntry<'a> + WithoutVersion,
+  E::Key: Type,
+  E::Value: Type,
 {
   #[inline]
   pub(super) fn new(ent: E) -> Self {
@@ -220,11 +217,11 @@ where
   }
 }
 
-impl<'a, K, V, E> Entry<'a, K, V, E>
+impl<'a, E> Entry<'a, E>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  E: MultipleVersionMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a> + WithVersion,
+  E::Key: Type,
+  E::Value: Type,
 {
   #[inline]
   pub(super) fn with_version(ent: E, query_version: u64) -> Self {
@@ -232,11 +229,11 @@ where
   }
 }
 
-impl<'a, K, V, E> Entry<'a, K, V, E>
+impl<'a, E> Entry<'a, E>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
   E: MemtableEntry<'a>,
+  E::Key: Type,
+  E::Value: Type,
 {
   #[inline]
   pub(super) fn new_in(ent: E, version: Option<u64>, query_version: Option<u64>) -> Self {
@@ -254,12 +251,12 @@ where
   }
 }
 
-impl<'a, K, V, E> Entry<'a, K, V, E>
+impl<'a, E> Entry<'a, E>
 where
-  K: Type + Ord + ?Sized,
-  for<'b> K::Ref<'b>: KeyRef<'b, K>,
-  V: ?Sized + Type,
   E: MemtableEntry<'a>,
+  E::Key: Type + Ord,
+  for<'b> <E::Key as Type>::Ref<'b>: KeyRef<'b, E::Key>,
+  E::Value: Type,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -285,11 +282,11 @@ where
   }
 }
 
-impl<'a, K, V, E> Entry<'a, K, V, E>
+impl<'a, E> Entry<'a, E>
 where
-  K: Type + ?Sized,
-  V: ?Sized + Type,
   E: MemtableEntry<'a> + WithVersion,
+  E::Key: Type,
+  E::Value: Type,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -298,52 +295,48 @@ where
   }
 }
 
-impl<'a, K, V, E> Entry<'a, K, V, E>
+impl<'a, E> Entry<'a, E>
 where
-  K: ?Sized + Type,
-  V: Type + ?Sized,
-{
-  /// Returns the value of the entry.
-  #[inline]
-  pub fn value(&self) -> &V::Ref<'a> {
-    self.value.get_or_init(|| ty_ref::<V>(self.raw_value))
-  }
-}
-
-impl<'a, K, V, E> Entry<'a, K, V, E>
-where
-  K: Type + ?Sized,
-  V: ?Sized + Type,
+  E: MemtableEntry<'a>,
+  E::Key: Type,
+  E::Value: Type,
 {
   /// Returns the key of the entry.
   #[inline]
-  pub fn key(&self) -> &K::Ref<'a> {
-    self.key.get_or_init(|| ty_ref::<K>(self.raw_key))
+  pub fn key(&self) -> &<E::Key as Type>::Ref<'a> {
+    self.key.get_or_init(|| ty_ref::<E::Key>(self.raw_key))
+  }
+
+  /// Returns the value of the entry.
+  #[inline]
+  pub fn value(&self) -> &<E::Value as Type>::Ref<'a> {
+    self
+      .value
+      .get_or_init(|| ty_ref::<E::Value>(self.raw_value))
   }
 }
 
 /// The reference to an entry in the generic WALs.
-pub struct MultipleVersionEntry<'a, K, V, E>
+pub struct MultipleVersionEntry<'a, E>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
+  E: MultipleVersionMemtableEntry<'a>,
+  E::Key: Type,
+  E::Value: Type,
 {
   ent: E,
   raw_key: &'a [u8],
   raw_value: Option<&'a [u8]>,
-  key: OnceCell<K::Ref<'a>>,
-  value: OnceCell<V::Ref<'a>>,
+  key: OnceCell<<E::Key as Type>::Ref<'a>>,
+  value: OnceCell<<E::Value as Type>::Ref<'a>>,
   version: u64,
   query_version: u64,
 }
 
-impl<'a, K, V, E> core::fmt::Debug for MultipleVersionEntry<'a, K, V, E>
+impl<'a, E> core::fmt::Debug for MultipleVersionEntry<'a, E>
 where
-  K: Type + ?Sized,
-  K::Ref<'a>: core::fmt::Debug,
-  V: Type + ?Sized,
-  V::Ref<'a>: core::fmt::Debug,
-  E: core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
+  E::Key: Type,
+  E::Value: Type,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("MultipleVersionEntry")
@@ -354,13 +347,11 @@ where
   }
 }
 
-impl<'a, K, V, E> Clone for MultipleVersionEntry<'a, K, V, E>
+impl<'a, E> Clone for MultipleVersionEntry<'a, E>
 where
-  K: ?Sized + Type,
-  K::Ref<'a>: Clone,
-  V: ?Sized + Type,
-  V::Ref<'a>: Clone,
-  E: Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
+  E::Key: Type,
+  E::Value: Type,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -376,11 +367,11 @@ where
   }
 }
 
-impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+impl<'a, E> MultipleVersionEntry<'a, E>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
   E: MultipleVersionMemtableEntry<'a>,
+  E::Key: Type,
+  E::Value: Type,
 {
   #[inline]
   pub(super) fn with_version(ent: E, query_version: u64) -> Self {
@@ -399,12 +390,12 @@ where
   }
 }
 
-impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+impl<'a, E> MultipleVersionEntry<'a, E>
 where
-  K: Type + Ord + ?Sized,
-  for<'b> K::Ref<'b>: KeyRef<'b, K>,
-  V: ?Sized + Type,
   E: MultipleVersionMemtableEntry<'a>,
+  E::Key: Ord + Type,
+  for<'b> <E::Key as Type>::Ref<'b>: KeyRef<'b, E::Key>,
+  E::Value: Type,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -430,42 +421,30 @@ where
   }
 }
 
-impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+impl<'a, E> MultipleVersionEntry<'a, E>
 where
-  K: Type + ?Sized,
-  V: ?Sized + Type,
   E: MultipleVersionMemtableEntry<'a>,
+  E::Key: Type,
+  E::Value: Type,
 {
   /// Returns the version of the entry.
   #[inline]
   pub const fn version(&self) -> u64 {
     self.version
   }
-}
 
-impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
-where
-  K: ?Sized + Type,
-  V: Type + ?Sized,
-{
-  /// Returns the value of the entry.
-  #[inline]
-  pub fn value(&self) -> Option<&V::Ref<'a>> {
-    self
-      .raw_value
-      .map(|v| self.value.get_or_init(|| ty_ref::<V>(v)))
-  }
-}
-
-impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
-where
-  K: Type + ?Sized,
-  V: ?Sized + Type,
-{
   /// Returns the key of the entry.
   #[inline]
-  pub fn key(&self) -> &K::Ref<'a> {
-    self.key.get_or_init(|| ty_ref::<K>(self.raw_key))
+  pub fn key(&self) -> &<E::Key as Type>::Ref<'a> {
+    self.key.get_or_init(|| ty_ref::<E::Key>(self.raw_key))
+  }
+
+  /// Returns the value of the entry.
+  #[inline]
+  pub fn value(&self) -> Option<&<E::Value as Type>::Ref<'a>> {
+    self
+      .raw_value
+      .map(|v| self.value.get_or_init(|| ty_ref::<E::Value>(v)))
   }
 }
 
@@ -647,7 +626,6 @@ impl<'a, V, E> Value<'a, V, E>
 where
   V: ?Sized + Type,
   E: MemtableEntry<'a>,
-  
 {
   #[inline]
   pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
@@ -671,7 +649,6 @@ impl<'a, V, E> Value<'a, V, E>
 where
   V: Type + ?Sized,
   E: MemtableEntry<'a>,
-  
 {
   /// Returns the next entry in the generic WALs.
   ///

@@ -6,10 +6,12 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use skl::{
-  either::Either, map::{
+  either::Either,
+  map::{
     sync::{Entry, Iter, Range, SkipMap},
     Map as _,
-  }, Arena as _, Container as _, EntryRef, Options
+  },
+  Arena as _, Container as _, EntryRef, Options,
 };
 
 use crate::{
@@ -68,19 +70,16 @@ where
   type Item<'a>
     = Entry<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    
     Self: 'a;
 
   type Iterator<'a>
     = Iter<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
-    
     Self: 'a;
 
   type Range<'a, Q, R>
     = Range<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>, Q, R>
   where
-    
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
@@ -106,7 +105,12 @@ where
     .map(|map| Self { map })
   }
 
-  fn insert(&self, _: Option<u64>, kp: KeyPointer<Self::Key>, vp: ValuePointer<Self::Value>) -> Result<(), Self::Error>
+  fn insert(
+    &self,
+    _: Option<u64>,
+    kp: KeyPointer<Self::Key>,
+    vp: ValuePointer<Self::Value>,
+  ) -> Result<(), Self::Error>
   where
     KeyPointer<Self::Key>: Ord + 'static,
   {

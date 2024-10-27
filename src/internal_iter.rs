@@ -16,8 +16,7 @@ where
   _m: PhantomData<&'a ()>,
 }
 
-impl<I, M: BaseTable> Iter<'_, I, M>
-{
+impl<I, M: BaseTable> Iter<'_, I, M> {
   #[inline]
   pub(super) fn new(version: Option<u64>, iter: I) -> Self {
     Self {
