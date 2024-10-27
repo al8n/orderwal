@@ -185,11 +185,33 @@ where
     self.map.upper_bound(version, bound)
   }
 
+  fn upper_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.map.upper_bound_versioned(version, bound)
+  }
+
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.map.lower_bound(version, bound)
+  }
+
+  fn lower_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.map.lower_bound_versioned(version, bound)
   }
 
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
@@ -199,11 +221,25 @@ where
     self.map.first(version)
   }
 
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Self::Pointer: Ord,
+  {
+    self.map.first_versioned(version)
+  }
+
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
   where
     Self::Pointer: Ord,
   {
     self.map.last(version)
+  }
+
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Self::Pointer: Ord,
+  {
+    self.map.last_versioned(version)
   }
 
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
@@ -213,11 +249,25 @@ where
     self.map.get(version, key)
   }
 
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.map.get_versioned(version, key)
+  }
+
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.map.contains_key(version, key)
+  }
+
+  fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.map.contains_key_versioned(version, key)
   }
 
   fn iter(&self, version: u64) -> Self::Iterator<'_> {

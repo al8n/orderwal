@@ -162,11 +162,33 @@ where
     self.0.upper_bound(version, bound)
   }
 
+  fn upper_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.0.upper_bound_versioned(version, bound)
+  }
+
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.0.lower_bound(version, bound)
+  }
+
+  fn lower_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.0.lower_bound_versioned(version, bound)
   }
 
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
@@ -176,11 +198,25 @@ where
     self.0.front(version)
   }
 
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Self::Pointer: Ord,
+  {
+    self.0.front_versioned(version)
+  }
+
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
   where
     Self::Pointer: Ord,
   {
     self.0.back(version)
+  }
+
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Self::Pointer: Ord,
+  {
+    self.0.back_versioned(version)
   }
 
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
@@ -190,11 +226,25 @@ where
     self.0.get(version, key)
   }
 
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.0.get_versioned(version, key)
+  }
+
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<Self::Pointer>,
   {
     self.0.contains_key(version, key)
+  }
+
+  fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Comparable<Self::Pointer>,
+  {
+    self.0.contains_key_versioned(version, key)
   }
 
   fn iter(&self, version: u64) -> Self::Iterator<'_> {

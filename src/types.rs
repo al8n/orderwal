@@ -1,3 +1,5 @@
+use core::cell::OnceCell;
+
 pub use dbutils::{
   buffer::{BufWriter, BufWriterOnce},
   traits::MaybeStructured,
@@ -8,7 +10,7 @@ use dbutils::{
 };
 
 use crate::{
-  memtable::MemtableEntry,
+  memtable::{MemtableEntry, MultipleVersionMemtableEntry},
   merge_lengths,
   sealed::{Pointer, WithVersion, WithoutVersion},
   ty_ref, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
@@ -152,9 +154,10 @@ where
   V: ?Sized + Type,
 {
   ent: E,
-  pub(crate) raw_key: &'a [u8],
-  key: K::Ref<'a>,
-  value: V::Ref<'a>,
+  raw_key: &'a [u8],
+  raw_value: &'a [u8],
+  key: OnceCell<K::Ref<'a>>,
+  value: OnceCell<V::Ref<'a>>,
   version: Option<u64>,
   query_version: Option<u64>,
 }
@@ -196,8 +199,9 @@ where
     Self {
       ent: self.ent.clone(),
       raw_key: self.raw_key,
-      key: self.key,
-      value: self.value,
+      raw_value: self.raw_value,
+      key: self.key.clone(),
+      value: self.value.clone(),
       version: self.version,
       query_version: self.query_version,
     }
@@ -241,10 +245,12 @@ where
   pub(super) fn with_version_in(ent: E, query_version: Option<u64>) -> Self {
     let ptr = ent.pointer();
     let raw_key = ptr.as_key_slice();
+    let raw_value = ptr.as_value_slice().expect("value must be set on `Entry`");
     Self {
       raw_key,
-      key: ty_ref::<K>(raw_key),
-      value: ty_ref::<V>(ptr.as_value_slice().unwrap()),
+      raw_value,
+      key: OnceCell::new(),
+      value: OnceCell::new(),
       version: if query_version.is_some() {
         Some(ptr.version().unwrap_or(0))
       } else {
@@ -298,7 +304,7 @@ where
   /// Returns the version of the entry.
   #[inline]
   pub fn version(&self) -> u64 {
-    self.version.expect("version must be set")
+    self.version.unwrap_or(0)
   }
 }
 
@@ -309,8 +315,8 @@ where
 {
   /// Returns the value of the entry.
   #[inline]
-  pub const fn value(&self) -> &V::Ref<'a> {
-    &self.value
+  pub fn value(&self) -> &V::Ref<'a> {
+    self.value.get_or_init(|| ty_ref::<V>(self.raw_value))
   }
 }
 
@@ -321,8 +327,158 @@ where
 {
   /// Returns the key of the entry.
   #[inline]
-  pub const fn key(&self) -> &K::Ref<'a> {
-    &self.key
+  pub fn key(&self) -> &K::Ref<'a> {
+    self.key.get_or_init(|| ty_ref::<K>(self.raw_key))
+  }
+}
+
+/// The reference to an entry in the generic WALs.
+pub struct MultipleVersionEntry<'a, K, V, E>
+where
+  K: ?Sized + Type,
+  V: ?Sized + Type,
+{
+  ent: E,
+  raw_key: &'a [u8],
+  raw_value: Option<&'a [u8]>,
+  key: OnceCell<K::Ref<'a>>,
+  value: OnceCell<V::Ref<'a>>,
+  version: u64,
+  query_version: u64,
+}
+
+impl<'a, K, V, E> core::fmt::Debug for MultipleVersionEntry<'a, K, V, E>
+where
+  K: Type + ?Sized,
+  K::Ref<'a>: core::fmt::Debug,
+  V: Type + ?Sized,
+  V::Ref<'a>: core::fmt::Debug,
+  E: core::fmt::Debug,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("MultipleVersionEntry")
+      .field("key", &self.key())
+      .field("value", &self.value())
+      .field("version", &self.version)
+      .finish()
+  }
+}
+
+impl<'a, K, V, E> Clone for MultipleVersionEntry<'a, K, V, E>
+where
+  K: ?Sized + Type,
+  K::Ref<'a>: Clone,
+  V: ?Sized + Type,
+  V::Ref<'a>: Clone,
+  E: Clone,
+{
+  #[inline]
+  fn clone(&self) -> Self {
+    Self {
+      ent: self.ent.clone(),
+      raw_key: self.raw_key,
+      raw_value: self.raw_value,
+      key: self.key.clone(),
+      value: self.value.clone(),
+      version: self.version,
+      query_version: self.query_version,
+    }
+  }
+}
+
+impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+where
+  K: ?Sized + Type,
+  V: ?Sized + Type,
+  E: MultipleVersionMemtableEntry<'a>,
+  E::Pointer: Pointer + WithVersion,
+{
+  #[inline]
+  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+    let ptr = ent.pointer();
+    let raw_key = ptr.as_key_slice();
+    let raw_value = ptr.as_value_slice();
+    Self {
+      raw_key,
+      raw_value,
+      key: OnceCell::new(),
+      value: OnceCell::new(),
+      version: ptr.version().unwrap_or(0),
+      query_version,
+      ent,
+    }
+  }
+}
+
+impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+where
+  K: Type + Ord + ?Sized,
+  for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  V: ?Sized + Type,
+  E: MultipleVersionMemtableEntry<'a>,
+  E::Pointer: Pointer + WithVersion,
+{
+  /// Returns the next entry in the generic WALs.
+  ///
+  /// This does not move the cursor.
+  #[inline]
+  #[allow(clippy::should_implement_trait)]
+  pub fn next(&mut self) -> Option<Self> {
+    self
+      .ent
+      .next()
+      .map(|ent| Self::with_version(ent, self.query_version))
+  }
+
+  /// Returns the previous entry in the generic WALs.
+  ///
+  /// This does not move the cursor.
+  #[inline]
+  pub fn prev(&mut self) -> Option<Self> {
+    self
+      .ent
+      .prev()
+      .map(|ent| Self::with_version(ent, self.query_version))
+  }
+}
+
+impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+where
+  K: Type + ?Sized,
+  V: ?Sized + Type,
+  E: MultipleVersionMemtableEntry<'a>,
+  E::Pointer: WithVersion,
+{
+  /// Returns the version of the entry.
+  #[inline]
+  pub const fn version(&self) -> u64 {
+    self.version
+  }
+}
+
+impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+where
+  K: ?Sized + Type,
+  V: Type + ?Sized,
+{
+  /// Returns the value of the entry.
+  #[inline]
+  pub fn value(&self) -> Option<&V::Ref<'a>> {
+    self
+      .raw_value
+      .map(|v| self.value.get_or_init(|| ty_ref::<V>(v)))
+  }
+}
+
+impl<'a, K, V, E> MultipleVersionEntry<'a, K, V, E>
+where
+  K: Type + ?Sized,
+  V: ?Sized + Type,
+{
+  /// Returns the key of the entry.
+  #[inline]
+  pub fn key(&self) -> &K::Ref<'a> {
+    self.key.get_or_init(|| ty_ref::<K>(self.raw_key))
   }
 }
 

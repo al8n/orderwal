@@ -160,8 +160,26 @@ where
   where
     Q: ?Sized + Comparable<Self::Pointer>;
 
+  /// Returns the upper bound of the memtable.
+  fn upper_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>;
+
   /// Returns the lower bound of the memtable.
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>;
+
+  /// Returns the lower bound of the memtable.
+  fn lower_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<Self::MultipleVersionItem<'_>>
   where
     Q: ?Sized + Comparable<Self::Pointer>;
 
@@ -170,8 +188,18 @@ where
   where
     Self::Pointer: Ord;
 
+  /// Returns the first pointer in the memtable.
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Self::Pointer: Ord;
+
   /// Returns the last pointer in the memtable.
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
+  where
+    Self::Pointer: Ord;
+
+  /// Returns the last pointer in the memtable.
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionItem<'_>>
   where
     Self::Pointer: Ord;
 
@@ -180,8 +208,18 @@ where
   where
     Q: ?Sized + Comparable<Self::Pointer>;
 
+  /// Returns the pointer associated with the key.
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<Self::Pointer>;
+
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Comparable<Self::Pointer>;
+
+  /// Returns `true` if the memtable contains the specified pointer.
+  fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<Self::Pointer>;
 

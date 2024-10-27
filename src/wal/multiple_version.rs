@@ -16,7 +16,7 @@ use crate::{
   error::Error,
   memtable::{self, MultipleVersionMemtable},
   sealed::{Constructable, GenericPointer, MultipleVersionWalReader, Pointer, Wal, WithVersion},
-  types::{BufWriter, Entry, KeyBuilder, ValueBuilder},
+  types::{BufWriter, Entry, KeyBuilder, MultipleVersionEntry, ValueBuilder},
   Options,
 };
 
@@ -167,23 +167,6 @@ where
     Keys::new(self.as_wal().iter(version))
   }
 
-  /// Returns an iterator over the keys (all versions) in the WAL.
-  #[inline]
-  fn keys_all_versions(
-    &self,
-    version: u64,
-  ) -> MultipleVersionKeys<
-    '_,
-    K,
-    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::MultipleVersionMemtable>::AllIterator<'_>,
-    Self::Memtable,
-  >
-  where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
-  {
-    MultipleVersionKeys::new(self.as_wal().iter_all_versions(version))
-  }
-
   /// Returns an iterator over a subset of keys in the WAL.
   #[inline]
   fn range_keys<'a, Q, R>(
@@ -199,27 +182,6 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     RangeKeys::new(self.as_wal().range(version, GenericQueryRange::new(range)))
-  }
-
-  /// Returns an iterator over a subset of keys (all versions) in the WAL.
-  #[inline]
-  fn range_keys_all_versions<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> MultipleVersionRangeKeys<'a, K, R, Q, <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable>
-  where
-    R: RangeBounds<Q> + 'a,
-    K: Type + Ord,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
-  {
-    MultipleVersionRangeKeys::new(
-      self
-        .as_wal()
-        .range_all_versions(version, GenericQueryRange::new(range)),
-    )
   }
 
   /// Returns an iterator over the values in the WAL.
@@ -239,23 +201,6 @@ where
     Values::new(self.as_wal().iter(version))
   }
 
-  /// Returns an iterator over the values (all versions) in the WAL.
-  #[inline]
-  fn values_all_versions(
-    &self,
-    version: u64,
-  ) -> MultipleVersionValues<
-    '_,
-    V,
-    <<Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable as memtable::MultipleVersionMemtable>::AllIterator<'_>,
-    Self::Memtable,
-  >
-  where
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
-  {
-    MultipleVersionValues::new(self.as_wal().iter_all_versions(version))
-  }
-
   /// Returns an iterator over a subset of values in the WAL.
   #[inline]
   fn range_values<'a, Q, R>(
@@ -271,33 +216,6 @@ where
     <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
   {
     RangeValues::new(self.as_wal().range(version, GenericQueryRange::new(range)))
-  }
-
-  /// Returns an iterator over a subset of values (all versions) in the WAL.
-  #[inline]
-  fn range_values_all_versions<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> MultipleVersionRangeValues<
-    'a,
-    K,
-    V,
-    R,
-    Q,
-    <Self::Wal as Wal<K, V, Self::Checksumer>>::Memtable,
-  >
-  where
-    R: RangeBounds<Q> + 'a,
-    K: Type + Ord,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer,
-  {
-    MultipleVersionRangeValues::new(
-      self
-        .as_wal()
-        .range_all_versions(version, GenericQueryRange::new(range)),
-    )
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -317,6 +235,34 @@ where
       .map(|ent| Entry::with_version(ent, version))
   }
 
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  ///
+  /// Compared to [`first`](MultipleVersionWalReader::first), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  #[inline]
+  fn first_versioned(
+    &self,
+    version: u64,
+  ) -> Option<
+    MultipleVersionEntry<
+      '_,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+    >,
+  >
+  where
+    K: Type,
+    V: Type,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + WithVersion,
+  {
+    self
+      .as_wal()
+      .first_versioned(version)
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+  }
+
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
   fn last(
@@ -332,6 +278,34 @@ where
       .map(|ent| Entry::with_version(ent, version))
   }
 
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  ///
+  /// Compared to [`last`](MultipleVersionWalReader::last), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  #[inline]
+  fn last_versioned(
+    &self,
+    version: u64,
+  ) -> Option<
+    MultipleVersionEntry<
+      '_,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+    >,
+  >
+  where
+    K: Type,
+    V: Type,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + Ord + WithVersion,
+  {
+    self
+      .as_wal()
+      .last_versioned(version)
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+  }
+
   /// Returns `true` if the key exists in the WAL.
   #[inline]
   fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
@@ -343,6 +317,22 @@ where
     self
       .as_wal()
       .contains_key(version, Query::<K, Q>::ref_cast(key))
+  }
+
+  /// Returns `true` if the key exists in the WAL.
+  ///
+  /// Compared to [`contains_key`](MultipleVersionWalReader::contains_key), this method returns `true` even if the latest is marked as removed.
+  #[inline]
+  fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
+  where
+    K: Type + 'a,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .contains_key_versioned(version, Query::<K, Q>::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -362,6 +352,25 @@ where
       .contains_key(version, Slice::<K>::ref_cast(key))
   }
 
+  /// Returns `true` if the key exists in the WAL.
+  ///
+  /// Compared to [`contains_key_by_bytes`](MultipleVersionWalReader::contains_key_by_bytes), this method returns `true` even if the latest is marked as removed.
+  ///
+  /// ## Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn contains_key_versioned_by_bytes(&self, version: u64, key: &[u8]) -> bool
+  where
+    K: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .contains_key_versioned(version, Slice::<K>::ref_cast(key))
+  }
+
   /// Gets the value associated with the key.
   #[inline]
   fn get<'a, Q>(
@@ -379,6 +388,36 @@ where
       .as_wal()
       .get(version, Query::<K, Q>::ref_cast(key))
       .map(|ent| Entry::with_version(ent, version))
+  }
+
+  /// Gets the value associated with the key.
+  ///
+  /// Compared to [`get`](MultipleVersionWalReader::get), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  #[inline]
+  fn get_versioned<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<
+    MultipleVersionEntry<
+      'a,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
+    >,
+  >
+  where
+    K: Type + 'a,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .get_versioned(version, Query::<K, Q>::ref_cast(key))
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 
   /// Gets the value associated with the key.
@@ -404,6 +443,39 @@ where
       .map(|ent| Entry::with_version(ent, version))
   }
 
+  /// Gets the value associated with the key.
+  ///
+  /// Compared to [`get_by_bytes`](MultipleVersionWalReader::get_by_bytes), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  ///
+  /// ## Safety
+  /// - The given `key` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn get_versioned_by_bytes(
+    &self,
+    version: u64,
+    key: &[u8],
+  ) -> Option<
+    MultipleVersionEntry<
+      '_,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+    >,
+  >
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .get_versioned(version, Slice::<K>::ref_cast(key))
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+  }
+
   /// Returns a value associated to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
@@ -423,6 +495,37 @@ where
       .as_wal()
       .upper_bound(version, bound.map(Query::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  ///
+  /// Compared to [`upper_bound`](MultipleVersionWalReader::upper_bound), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  #[inline]
+  fn upper_bound_versioned<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<
+    MultipleVersionEntry<
+      'a,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
+    >,
+  >
+  where
+    K: Type + Ord,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .upper_bound_versioned(version, bound.map(Query::ref_cast))
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -446,6 +549,39 @@ where
       .as_wal()
       .upper_bound(version, bound.map(Slice::<K>::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// Compared to [`upper_bound_by_bytes`](MultipleVersionWalReader::upper_bound_by_bytes), this method returns a versioned item, which means that the returned item
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn upper_bound_versioned_by_bytes(
+    &self,
+    version: u64,
+    bound: Bound<&[u8]>,
+  ) -> Option<
+    MultipleVersionEntry<
+      '_,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+    >,
+  >
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .upper_bound_versioned(version, bound.map(Slice::<K>::ref_cast))
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -472,6 +608,38 @@ where
   /// Returns a value associated to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
+  /// Compared to [`lower_bound`](MultipleVersionWalReader::lower_bound), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  #[inline]
+  fn lower_bound_versioned<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<
+    MultipleVersionEntry<
+      'a,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>,
+    >,
+  >
+  where
+    K: Type + Ord,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    for<'b> Query<'b, K, Q>: Comparable<<Self::Memtable as memtable::BaseTable>::Pointer> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .lower_bound_versioned(version, bound.map(Query::ref_cast))
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
@@ -491,6 +659,40 @@ where
       .as_wal()
       .lower_bound(version, bound.map(Slice::<K>::ref_cast))
       .map(|ent| Entry::with_version(ent, version))
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// Compared to [`lower_bound_by_bytes`](MultipleVersionWalReader::lower_bound_by_bytes), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  ///
+  /// ## Safety
+  /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
+  #[inline]
+  unsafe fn lower_bound_versioned_by_bytes(
+    &self,
+    version: u64,
+    bound: Bound<&[u8]>,
+  ) -> Option<
+    MultipleVersionEntry<
+      '_,
+      K,
+      V,
+      <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>,
+    >,
+  >
+  where
+    K: Type,
+    V: Type,
+    for<'a> K::Ref<'a>: KeyRef<'a, K> + Ord,
+    <Self::Memtable as memtable::BaseTable>::Pointer: Pointer + WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+  {
+    self
+      .as_wal()
+      .lower_bound_versioned(version, bound.map(Slice::<K>::ref_cast))
+      .map(|ent| MultipleVersionEntry::with_version(ent, version))
   }
 }
 

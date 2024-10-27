@@ -193,12 +193,16 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
   fn iter_all_versions(
     &self,
     version: u64,
-  ) -> Iter<'_, <Self::Memtable as MultipleVersionMemtable>::AllIterator<'_>, Self::Memtable>
+  ) -> MultipleVersionBaseIter<
+    '_,
+    <Self::Memtable as MultipleVersionMemtable>::AllIterator<'_>,
+    Self::Memtable,
+  >
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
-    Iter::new(Some(version), self.memtable().iter_all_versions(version))
+    MultipleVersionBaseIter::new(version, self.memtable().iter_all_versions(version))
   }
 
   #[inline]
@@ -206,17 +210,18 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     &self,
     version: u64,
     range: R,
-  ) -> Iter<'_, <Self::Memtable as MultipleVersionMemtable>::AllRange<'_, Q, R>, Self::Memtable>
+  ) -> MultipleVersionBaseIter<
+    '_,
+    <Self::Memtable as MultipleVersionMemtable>::AllRange<'_, Q, R>,
+    Self::Memtable,
+  >
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
-    Iter::new(
-      Some(version),
-      self.memtable().range_all_versions(version, range),
-    )
+    MultipleVersionBaseIter::new(version, self.memtable().range_all_versions(version, range))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -229,6 +234,22 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     self.memtable().first(version)
   }
 
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  ///
+  /// Compared to [`first`](MultipleVersionWalReader::first), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  #[inline]
+  fn first_versioned(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  where
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
+  {
+    self.memtable().first_versioned(version)
+  }
+
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   fn last(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
@@ -236,6 +257,21 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
   {
     self.memtable().last(version)
+  }
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  ///
+  /// Compared to [`last`](MultipleVersionWalReader::last), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  fn last_versioned(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  where
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + WithVersion,
+  {
+    self.memtable().last_versioned(version)
   }
 
   /// Returns `true` if the WAL contains the specified key.
@@ -248,7 +284,20 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     self.memtable().contains(version, key)
   }
 
-  /// Returns the value associated with the key.
+  /// Returns `true` if the WAL contains the specified key.
+  ///
+  /// Compared to [`contains_key`](MultipleVersionWalReader::contains_key), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  fn contains_key_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
+  {
+    self.memtable().contains_versioned(version, key)
+  }
+
+  /// Returns the entry associated with the key. The returned entry is the latest version of the key.
   #[inline]
   fn get<Q>(&self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
   where
@@ -257,6 +306,23 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     self.memtable().get(version, key)
+  }
+
+  /// Returns the value associated with the key.
+  ///
+  /// Compared to [`get`](MultipleVersionWalReader::get), this method returns a versioned item, which means that the returned item
+  /// may already be marked as removed.
+  fn get_versioned<Q>(
+    &self,
+    version: u64,
+    key: &Q,
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
+  {
+    self.memtable().get_versioned(version, key)
   }
 
   fn upper_bound<Q>(
@@ -272,6 +338,19 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     self.memtable().upper_bound(version, bound)
   }
 
+  fn upper_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
+  {
+    self.memtable().upper_bound_versioned(version, bound)
+  }
+
   fn lower_bound<Q>(
     &self,
     version: u64,
@@ -283,6 +362,19 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
     <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
   {
     self.memtable().lower_bound(version, bound)
+  }
+
+  fn lower_bound_versioned<Q>(
+    &self,
+    version: u64,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  where
+    Q: ?Sized + Comparable<<Self::Memtable as BaseTable>::Pointer>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Pointer: Pointer + WithVersion,
+  {
+    self.memtable().lower_bound_versioned(version, bound)
   }
 }
 
