@@ -17,15 +17,21 @@ pub struct TableOptions {
 impl Default for TableOptions {
   #[inline]
   fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl TableOptions {
+  /// Creates a new instance of `TableOptions` with the default options.
+  #[inline]
+  pub fn new() -> Self {
     Self {
       capacity: 8192,
       map_anon: false,
       max_height: Height::try_from(20u8).unwrap(),
     }
   }
-}
 
-impl TableOptions {
   /// Sets the capacity of the table.
   ///
   /// Default is `8KB`.

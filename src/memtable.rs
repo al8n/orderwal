@@ -165,13 +165,13 @@ where
     Self: 'a;
 
   /// The iterator type which can yields all the entries in the memtable.
-  type AllIterator<'a>: Iterator<Item = Self::MultipleVersionItem<'a>>
+  type AllIterator<'a>: DoubleEndedIterator<Item = Self::MultipleVersionItem<'a>>
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a;
 
   /// The range iterator type which can yields all the entries in the memtable.
-  type AllRange<'a, Q, R>: Iterator<Item = Self::MultipleVersionItem<'a>>
+  type AllRange<'a, Q, R>: DoubleEndedIterator<Item = Self::MultipleVersionItem<'a>>
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a,

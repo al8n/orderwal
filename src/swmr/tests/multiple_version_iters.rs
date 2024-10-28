@@ -1,1 +1,330 @@
+use crate::memtable::{arena::TableOptions, MultipleVersionMemtable, MultipleVersionMemtableEntry};
+use multiple_version::{Reader, Writer};
 
+use super::*;
+
+expand_unit_tests!("linked": MultipleVersionGenericOrderWalLinkedTable<str, str> {
+  iter_all_versions_mvcc,
+});
+
+expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<str, str> {
+  iter_all_versions_mvcc,
+});
+
+expand_unit_tests!("linked": MultipleVersionGenericOrderWalLinkedTable<String, String> {
+  iter_all_versions_next,
+  iter_all_versions_next_by_entry,
+  iter_all_versions_next_by_versioned_entry,
+  range_next,
+  iter_all_versions_prev,
+  range_prev,
+  iter_all_versions_prev_by_entry,
+  iter_all_versions_prev_by_versioned_entry,
+});
+
+macro_rules! arena_builder {
+  () => {{
+    crate::Builder::new()
+      .with_memtable_options(TableOptions::new().with_capacity(1024 * 1024))
+      .with_capacity(8 * 1024)
+  }};
+}
+
+expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<String, String> {
+  // iter_all_versions_next(arena_builder!()),
+  // iter_all_versions_next_by_entry(arena_builder!()),
+  // iter_all_versions_next_by_versioned_entry(arena_builder!()),
+  // range_next(arena_builder!()),
+  // iter_all_versions_prev(arena_builder!()),
+  // range_prev(arena_builder!()),
+  // iter_all_versions_prev_by_entry(arena_builder!()),
+  iter_all_versions_prev_by_versioned_entry(arena_builder!()),
+});
+
+fn make_int_key(i: usize) -> String {
+  ::std::format!("{:05}", i)
+}
+
+fn make_value(i: usize) -> String {
+  ::std::format!("v{:05}", i)
+}
+
+fn iter_all_versions_mvcc<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+where
+  M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  wal.insert(1, "a", "a1").unwrap();
+  wal.insert(3, "a", "a2").unwrap();
+  wal.insert(1, "c", "c1").unwrap();
+  wal.insert(3, "c", "c2").unwrap();
+
+  let mut iter = wal.iter_all_versions(0);
+  let mut num = 0;
+  while iter.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 0);
+
+  let mut iter = wal.iter_all_versions(1);
+  let mut num = 0;
+  while iter.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut iter = wal.iter_all_versions(2);
+  let mut num = 0;
+  while iter.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut iter = wal.iter_all_versions(3);
+  let mut num = 0;
+  while iter.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 4);
+}
+
+fn iter_all_versions_next<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let iter = wal.iter_all_versions(0);
+
+  let mut i = 0;
+  for ent in iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, N);
+}
+
+fn iter_all_versions_next_by_entry<M>(
+  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
+) where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let mut ent = wal.first(0);
+
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    assert_eq!(entry.key(), make_int_key(i).as_str());
+    assert_eq!(entry.value(), make_value(i).as_str());
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N);
+}
+
+fn iter_all_versions_next_by_versioned_entry<M>(
+  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
+) where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    let k = make_int_key(i);
+    let v = make_value(i);
+    wal.insert(0, &k, &v).unwrap();
+    wal.remove(1, &k).unwrap();
+  }
+
+  let mut ent = wal.first(0);
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    assert_eq!(entry.key(), make_int_key(i).as_str());
+    assert_eq!(entry.value(), make_value(i).as_str());
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N);
+
+  let mut ent = wal.first_versioned(1);
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    if i % 2 == 1 {
+      assert_eq!(entry.version(), 0);
+      assert_eq!(entry.key(), make_int_key(i / 2).as_str());
+      assert_eq!(entry.value().unwrap(), make_value(i / 2).as_str());
+    } else {
+      assert_eq!(entry.version(), 1);
+      assert_eq!(entry.key(), make_int_key(i / 2).as_str());
+      assert!(entry.value().is_none());
+    }
+
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N * 2);
+  let ent = wal.first(1);
+  assert!(ent.is_none());
+}
+
+fn range_next<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let upper = make_int_key(50);
+  let mut i = 0;
+  let mut iter = wal.range(0, ..=upper);
+  for ent in &mut iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.value(), make_value(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, 51);
+}
+
+fn iter_all_versions_prev<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let iter = wal.iter_all_versions(0).rev();
+  let mut i = N;
+  for ent in iter {
+    assert_eq!(ent.key(), make_int_key(i - 1).as_str());
+    assert_eq!(ent.value().unwrap(), make_value(i - 1).as_str());
+    i -= 1;
+  }
+
+  assert_eq!(i, 0);
+}
+
+fn iter_all_versions_prev_by_entry<M>(
+  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
+) where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let mut ent = wal.last(0);
+
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    i += 1;
+    assert_eq!(entry.key(), make_int_key(N - i).as_str());
+    assert_eq!(entry.value(), make_value(N - i).as_str());
+    ent = entry.prev();
+  }
+  assert_eq!(i, N);
+}
+
+fn iter_all_versions_prev_by_versioned_entry<M>(
+  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
+) where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::MultipleVersionItem<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    let k = make_int_key(i);
+    let v = make_value(i);
+    wal.insert(0, &k, &v).unwrap();
+    wal.remove(1, &k).unwrap();
+  }
+
+  let mut ent = wal.last(0);
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    i += 1;
+    assert_eq!(entry.key(), make_int_key(N - i).as_str());
+    assert_eq!(entry.value(), make_value(N - i).as_str());
+    ent = entry.prev();
+  }
+  assert_eq!(i, N);
+
+  let mut ent = wal.last_versioned(1);
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    if i % 2 == 0 {
+      assert_eq!(entry.version(), 0);
+      assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_str());
+      assert_eq!(entry.value().unwrap(), make_value(N - 1 - i / 2).as_str());
+    } else {
+      assert_eq!(entry.version(), 1);
+      assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_str());
+      assert!(entry.value().is_none());
+    }
+
+    ent = entry.prev();
+    i += 1;
+  }
+
+  assert_eq!(i, N * 2);
+  let ent = wal.last(1);
+  assert!(ent.is_none());
+}
+
+fn range_prev<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+where
+  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let lower = make_int_key(50);
+  let it = wal.range(0, lower..).rev();
+  let mut i = N - 1;
+
+  for ent in it {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.value(), make_value(i).as_str());
+    i -= 1;
+  }
+}

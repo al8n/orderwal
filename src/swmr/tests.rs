@@ -320,13 +320,13 @@ mod iters;
 #[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
 mod get;
 
-#[cfg(all(test, any(test_swmr_multiple_version_constructor, all_orderwal_tests)))]
+// #[cfg(all(test, any(test_swmr_multiple_version_constructor, all_orderwal_tests)))]
 mod multiple_version_constructor;
 
 #[cfg(all(test, any(test_swmr_multiple_version_get, all_orderwal_tests)))]
 mod multiple_version_get;
 
-#[cfg(all(test, any(test_swmr_multiple_version_insert, all_orderwal_tests)))]
+// #[cfg(all(test, any(test_swmr_multiple_version_insert, all_orderwal_tests)))]
 mod multiple_version_insert;
 
 #[cfg(all(test, any(test_swmr_multiple_version_iters, all_orderwal_tests)))]

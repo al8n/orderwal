@@ -70,7 +70,7 @@ where
   /// use orderwal::{base::GenericOrderWal, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = Builder::new().with_capacity(100).alloc::<[u8], [u8], GenericOrderWal<_, _>>().unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<GenericOrderWal<[u8], [u8]>>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```

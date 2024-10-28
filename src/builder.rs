@@ -791,7 +791,7 @@ where
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .alloc::<[u8], [u8], GenericOrderWal<_, _>>()
+  ///   .alloc::<GenericOrderWal<[u8], [u8]>>()
   ///   .unwrap();
   /// ```
   pub fn alloc<W>(self) -> Result<W, Error<W::Memtable>>
@@ -819,7 +819,7 @@ where
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .map_anon::<[u8], [u8], GenericOrderWal<_, _>>()
+  ///   .map_anon::<GenericOrderWal<[u8], [u8]>>()
   ///   .unwrap();
   /// ```
   pub fn map_anon<W>(self) -> Result<W, Error<W::Memtable>>
@@ -859,13 +859,13 @@ where
   /// # let wal = unsafe {
   /// #  Builder::new()
   /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<[u8], [u8], orderwal::base::GenericOrderWal<_, _>, _>(&path)
+  /// #  .map_mut::<orderwal::base::GenericOrderWal<[u8], [u8]>, _>(&path)
   /// #  .unwrap()
   /// # };
   ///
   /// let wal = unsafe {
   ///   Builder::new()
-  ///     .map::<[u8], [u8], GenericOrderWalReader<_, _>, _>(&path)
+  ///     .map::<GenericOrderWalReader<[u8], [u8]>, _>(&path)
   ///     .unwrap()
   /// };
   pub unsafe fn map<'a, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
@@ -902,13 +902,13 @@ where
   /// # let wal = unsafe {
   /// #  Builder::new()
   /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<[u8], [u8], orderwal::base::GenericOrderWal<_, _>, _>(&path)
+  /// #  .map_mut::<orderwal::base::GenericOrderWal<[u8], [u8]>, _>(&path)
   /// #  .unwrap()
   /// # };
   ///
   /// let wal = unsafe {
   ///   Builder::new()
-  ///     .map_with_path_builder::<[u8], [u8], GenericOrderWalReader<_, _>, _, ()>(|| Ok(path))
+  ///     .map_with_path_builder::<GenericOrderWalReader<[u8], [u8]>, _, ()>(|| Ok(path))
   ///     .unwrap()
   /// };
   pub unsafe fn map_with_path_builder<'a, W, PB, E>(
@@ -964,7 +964,7 @@ where
   ///     .with_read(true)
   ///     .with_write(true)
   ///     .with_capacity(1000)
-  ///     .map_mut::<[u8], [u8], GenericOrderWal<_, _>, _>(&path)
+  ///     .map_mut::<GenericOrderWal<[u8], [u8]>, _>(&path)
   ///     .unwrap()
   /// };
   /// ```
@@ -1004,7 +1004,7 @@ where
   ///     .with_read(true)
   ///     .with_write(true)
   ///     .with_capacity(1000)
-  ///     .map_mut_with_path_builder::<[u8], [u8], GenericOrderWal<_, _>, _, ()>(
+  ///     .map_mut_with_path_builder::<GenericOrderWal<[u8], [u8]>, _, ()>(
   ///       || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
   ///     )
   ///     .unwrap()
