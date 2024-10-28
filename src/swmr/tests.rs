@@ -20,7 +20,7 @@ macro_rules! expand_unit_tests {
         fn [< test_ $prefix _ $name _inmemory >]() {
           $name(&mut $crate::Builder::new()
             .with_capacity(MB)
-            .alloc::<_, _, $wal>()
+            .alloc::<$wal>()
             .unwrap()
           );
         }
@@ -29,7 +29,7 @@ macro_rules! expand_unit_tests {
         fn [< test_ $prefix _ $name _map_anon >]() {
           $name(&mut $crate::Builder::new()
             .with_capacity(MB)
-            .map_anon::<_, _, $wal>().unwrap()
+            .map_anon::<$wal>().unwrap()
           );
         }
 
@@ -44,7 +44,7 @@ macro_rules! expand_unit_tests {
                 .with_read(true)
                 .with_write(true)
                 .with_capacity(MB as u32)
-                .map_mut::<_, _, $wal, _>(
+                .map_mut::<$wal, _>(
                   dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file")
                 ),
             )
@@ -59,12 +59,12 @@ macro_rules! expand_unit_tests {
       paste::paste! {
         #[test]
         fn [< test_ $prefix _ $name _inmemory >]() {
-          $name($crate::Builder::new().with_capacity(MB).alloc::<_, _, $wal>().unwrap());
+          $name($crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
         }
 
         #[test]
         fn [< test_ $prefix _ $name _map_anon >]() {
-          $name($crate::Builder::new().with_capacity(MB).map_anon::<_, _, $wal>().unwrap());
+          $name($crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
         }
 
         #[test]
@@ -78,7 +78,7 @@ macro_rules! expand_unit_tests {
                 .with_read(true)
                 .with_write(true)
                 .with_capacity(MB as u32)
-                .map_mut::<_, _, $wal, _>(
+                .map_mut::<$wal, _>(
               &p,
             )
             .unwrap()
@@ -101,13 +101,13 @@ macro_rules! expand_unit_tests {
       paste::paste! {
         #[test]
         fn [< test_ $prefix _ $name _inmemory >]() {
-          $name(&mut $builder.alloc::<_, _, $wal>().unwrap());
+          $name(&mut $builder.alloc::<$wal>().unwrap());
         }
 
         #[test]
         fn [< test_ $prefix _ $name _map_anon >]() {
           $name(&mut $builder
-            .map_anon::<_, _, $wal>().unwrap()
+            .map_anon::<$wal>().unwrap()
           );
         }
 
@@ -122,7 +122,7 @@ macro_rules! expand_unit_tests {
                 .with_read(true)
                 .with_write(true)
                 .with_capacity(MB as u32)
-                .map_mut::<_, _, $wal, _>(
+                .map_mut::<$wal, _>(
                   dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file")
                 ),
             )
@@ -320,7 +320,14 @@ mod iters;
 #[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
 mod get;
 
+#[cfg(all(test, any(test_swmr_multiple_version_constructor, all_orderwal_tests)))]
 mod multiple_version_constructor;
+
+#[cfg(all(test, any(test_swmr_multiple_version_get, all_orderwal_tests)))]
 mod multiple_version_get;
+
+#[cfg(all(test, any(test_swmr_multiple_version_insert, all_orderwal_tests)))]
 mod multiple_version_insert;
+
+#[cfg(all(test, any(test_swmr_multiple_version_iters, all_orderwal_tests)))]
 mod multiple_version_iters;

@@ -1,16 +1,16 @@
 use core::ops::Bound;
 use std::collections::BTreeMap;
 
-use base::{GenericOrderWal, GenericPointer, Reader, Writer};
+use base::{GenericOrderWal, Reader, Writer};
 
-use crate::{memtable::Memtable, sealed::WithoutVersion};
+use crate::memtable::{Memtable, MemtableEntry};
 
 use super::*;
 
 fn iter<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let mut people = (0..100)
@@ -49,8 +49,8 @@ where
 
 fn bounds<M>(wal: &mut GenericOrderWal<u32, u32, M>)
 where
-  M: Memtable<Pointer = GenericPointer<u32, u32>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = u32, Value = u32> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   for i in 0..100u32 {
@@ -189,8 +189,8 @@ where
 
 fn range<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let mut mid = Person::random();
@@ -234,8 +234,8 @@ where
 
 fn entry_iter<M>(wal: &mut GenericOrderWal<u32, u32, M>)
 where
-  M: Memtable<Pointer = GenericPointer<u32, u32>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = u32, Value = u32> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   for i in 0..100u32 {

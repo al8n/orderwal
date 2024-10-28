@@ -127,7 +127,7 @@ where
 
 impl<K, V> memtable::Memtable for Table<K, V>
 where
-  K: ?Sized + Type + Ord,
+  K: ?Sized + Type + Ord + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type + 'static,
 {

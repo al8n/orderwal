@@ -75,4 +75,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(test_swmr_insert)',
   'cfg(test_swmr_iters)',
   'cfg(test_swmr_get)',
+  'cfg(test_swmr_multiple_version_constructor)',
+  'cfg(test_swmr_multiple_version_insert)',
+  'cfg(test_swmr_multiple_version_iters)',
+  'cfg(test_swmr_multiple_version_get)',
 ] }

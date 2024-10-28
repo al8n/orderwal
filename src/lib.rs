@@ -78,12 +78,6 @@ mod swmr;
 mod wal;
 pub use swmr::*;
 
-/// Iterators.
-pub mod iter {
-  pub use super::wal::iter::*;
-}
-
-mod internal_iter;
 /// The memory table implementation.
 pub mod memtable;
 

@@ -1,10 +1,9 @@
-use base::{GenericPointer, Reader, Writer};
+use base::{Reader, Writer};
 use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
 use crate::{
   batch::BatchEntry,
-  memtable::Memtable,
-  sealed::WithoutVersion,
+  memtable::{Memtable, MemtableEntry},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -13,8 +12,8 @@ use super::*;
 
 fn concurrent_basic<M>(mut w: GenericOrderWal<u32, [u8; 4], M>)
 where
-  M: Memtable<Pointer = GenericPointer<u32, [u8; 4]>> + Send + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = u32, Value = [u8; 4]> + Send + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
@@ -43,8 +42,8 @@ where
 
 fn concurrent_one_key<M>(mut w: GenericOrderWal<u32, [u8; 4], M>)
 where
-  M: Memtable<Pointer = GenericPointer<u32, [u8; 4]>> + Send + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = u32, Value = [u8; 4]> + Send + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
@@ -69,8 +68,8 @@ fn insert_batch<M>(
   mut wal: GenericOrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + Send + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + Send + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -125,8 +124,8 @@ fn insert_batch_with_key_builder<M>(
   mut wal: GenericOrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + Send + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + Send + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -184,8 +183,8 @@ fn insert_batch_with_value_builder<M>(
   mut wal: GenericOrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + Send + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + Send + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -242,8 +241,8 @@ fn insert_batch_with_builders<M>(
   mut wal: GenericOrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + Send + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + Send + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -302,14 +301,14 @@ where
 expand_unit_tests!(
   move "linked": GenericOrderWalLinkedTable<u32, [u8; 4]> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<u32, [u8; 4], GenericOrderWalReaderLinkedTable<_, _>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(&i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<u32, [u8; 4], GenericOrderWalReaderLinkedTable<_, _>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(&1));
     },
   }
@@ -320,7 +319,7 @@ expand_unit_tests!(
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -333,7 +332,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -346,7 +345,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -359,7 +358,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderLinkedTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -375,14 +374,14 @@ expand_unit_tests!(
 expand_unit_tests!(
   move "arena": GenericOrderWalArenaTable<u32, [u8; 4]> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<u32, [u8; 4], GenericOrderWalReaderArenaTable<_, _>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(&i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<u32, [u8; 4], GenericOrderWalReaderArenaTable<_, _>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(&1));
     },
   }
@@ -393,7 +392,7 @@ expand_unit_tests!(
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderArenaTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -406,7 +405,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderArenaTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -419,7 +418,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderArenaTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -432,7 +431,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<Person, String, GenericOrderWalReaderArenaTable<_, _>, _>(&p)
+          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 

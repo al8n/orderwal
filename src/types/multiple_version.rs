@@ -188,7 +188,7 @@ where
   E::Key: Type,
 {
   #[inline]
-  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+  pub(crate) fn with_version(ent: E, query_version: u64) -> Self {
     let raw_key = ent.key().as_slice();
     let version = ent.version();
     Self {
@@ -301,7 +301,7 @@ where
   E::Value: Type,
 {
   #[inline]
-  pub(super) fn with_version(ent: E, query_version: u64) -> Self {
+  pub(crate) fn with_version(ent: E, query_version: u64) -> Self {
     let raw_key = ent.key().as_slice();
     let raw_value = ent
       .value()

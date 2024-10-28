@@ -1,13 +1,13 @@
-use base::{GenericPointer, Reader, Writer};
+use base::{Reader, Writer};
 
-use crate::{memtable::Memtable, sealed::WithoutVersion};
+use crate::memtable::{Memtable, MemtableEntry};
 
 use super::*;
 
 fn zero_reserved<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   unsafe {
@@ -21,8 +21,8 @@ where
 
 fn reserved<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   unsafe {

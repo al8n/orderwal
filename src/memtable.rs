@@ -97,7 +97,10 @@ pub trait BaseTable {
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait Memtable: BaseTable {
+pub trait Memtable: BaseTable
+where
+  for<'a> Self::Item<'a>: MemtableEntry<'a>,
+{
   /// Returns the number of entries in the memtable.
   fn len(&self) -> usize;
 
@@ -147,7 +150,10 @@ pub trait Memtable: BaseTable {
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait MultipleVersionMemtable: BaseTable {
+pub trait MultipleVersionMemtable: BaseTable
+where
+  for<'a> Self::Item<'a>: MultipleVersionMemtableEntry<'a>,
+{
   /// The item returned by the iterator or query methods.
   type MultipleVersionItem<'a>: MultipleVersionMemtableEntry<
     'a,

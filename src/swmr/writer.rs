@@ -1,5 +1,7 @@
 use crate::{
-  memtable::{BaseTable, Memtable, MultipleVersionMemtable},
+  memtable::{
+    BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry,
+  },
   sealed::{Constructable, WithVersion},
 };
 use dbutils::{checksum::Crc32, traits::Type};
@@ -82,6 +84,7 @@ where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
   M: Memtable<Key = K, Value = V> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   S: 'static,
 {
   #[inline]
@@ -95,6 +98,7 @@ where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
   M: MultipleVersionMemtable<Key = K, Value = V> + 'static,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   for<'a> M::MultipleVersionItem<'a>: WithVersion,
   for<'a> M::Item<'a>: WithVersion,
   S: 'static,

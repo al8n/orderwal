@@ -1,12 +1,11 @@
-use base::{GenericOrderWal, GenericPointer};
+use base::GenericOrderWal;
 
 use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
 use std::collections::BTreeMap;
 
 use crate::{
-  memtable::Memtable,
-  sealed::WithoutVersion,
+  memtable::{Memtable, MemtableEntry},
   swmr::base::{Reader, Writer},
   types::{KeyBuilder, ValueBuilder},
 };
@@ -15,8 +14,8 @@ use super::*;
 
 fn first<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..10)
@@ -43,9 +42,8 @@ where
 
 fn last<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  for<'a> M::Item<'a>: std::fmt::Debug,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..10)
@@ -72,8 +70,8 @@ where
 #[allow(clippy::needless_borrows_for_generic_args)]
 fn insert<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -100,8 +98,8 @@ where
 
 fn insert_with_value_builder<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -131,8 +129,8 @@ where
 #[allow(clippy::needless_borrows_for_generic_args)]
 fn insert_with_key_builder<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -163,8 +161,8 @@ where
 
 fn insert_with_bytes<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -194,10 +192,9 @@ where
 
 fn insert_with_builders<M>(wal: &mut GenericOrderWal<Person, String, M>)
 where
-  M: Memtable<Pointer = GenericPointer<Person, String>> + 'static,
-  M::Pointer: WithoutVersion,
+  M: Memtable<Key = Person, Value = String> + 'static,
+  for<'a> M::Item<'a>: MemtableEntry<'a> + std::fmt::Debug,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: std::fmt::Debug,
 {
   let people = (0..1)
     .map(|_| {
