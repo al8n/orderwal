@@ -1,7 +1,10 @@
 use core::{convert::Infallible, ops::RangeBounds};
 
 use crossbeam_skiplist::{map::Entry, SkipMap};
-use dbutils::equivalent::Comparable;
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
 
 use crate::{
   memtable,
@@ -19,10 +22,11 @@ impl<K: ?Sized, V: ?Sized> Default for Table<K, V> {
   }
 }
 
-impl<'a, K, V> memtable::MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> memtable::BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + Type + Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + Type,
 {
   type Key = K;
   type Value = V;
@@ -41,7 +45,14 @@ where
   fn key(&self) -> KeyPointer<K> {
     *self.key()
   }
+}
 
+impl<'a, K, V> memtable::MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized + Type + Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + Type,
+{
   #[inline]
   fn value(&self) -> ValuePointer<V> {
     *self.value()
@@ -57,9 +68,9 @@ where
 
 impl<K, V> memtable::BaseTable for Table<K, V>
 where
-  K: ?Sized,
-  V: ?Sized,
-  KeyPointer<K>: Send + Ord + std::fmt::Debug + 'static,
+  K: ?Sized + Type + Ord,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + Type + 'static,
 {
   type Key = K;
   type Value = V;
@@ -116,9 +127,9 @@ where
 
 impl<K, V> memtable::Memtable for Table<K, V>
 where
-  K: ?Sized,
-  V: ?Sized,
-  KeyPointer<K>: Ord + Send + std::fmt::Debug + 'static,
+  K: ?Sized + Type + Ord,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + Type + 'static,
 {
   #[inline]
   fn len(&self) -> usize {

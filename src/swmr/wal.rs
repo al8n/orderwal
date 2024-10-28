@@ -14,7 +14,7 @@ pub struct OrderCore<K: ?Sized, V: ?Sized, M, S> {
   pub(super) _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-impl<K, V, M, S> Wal<K, V, S> for OrderCore<K, V, M, S>
+impl<K, V, M, S> Wal<S> for OrderCore<K, V, M, S>
 where
   K: ?Sized,
   V: ?Sized,

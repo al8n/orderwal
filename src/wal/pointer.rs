@@ -18,6 +18,9 @@ pub struct ValuePointer<V: ?Sized> {
   _m: PhantomData<V>,
 }
 
+unsafe impl<V: ?Sized> Send for ValuePointer<V> {}
+unsafe impl<V: ?Sized> Sync for ValuePointer<V> {}
+
 impl<V: ?Sized> core::fmt::Debug for ValuePointer<V> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("ValuePointer")
@@ -111,7 +114,8 @@ pub struct KeyPointer<K: ?Sized> {
   _m: PhantomData<K>,
 }
 
-unsafe<K: ?Sized> KeyPointer<K>
+unsafe impl<K: ?Sized> Send for KeyPointer<K> {}
+unsafe impl<K: ?Sized> Sync for KeyPointer<K> {}
 
 impl<K: ?Sized> core::fmt::Debug for KeyPointer<K> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -169,29 +173,26 @@ impl<K: Type + ?Sized> PartialEq for KeyPointer<K> {
 
 impl<K: Type + ?Sized> Eq for KeyPointer<K> {}
 
-impl<K> PartialOrd for KeyPointer<K>
+impl<'a, K> PartialOrd for KeyPointer<K>
 where
   K: Type + Ord + ?Sized,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  K::Ref<'a>: KeyRef<'a, K>,
 {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl<K> Ord for KeyPointer<K>
+impl<'a, K> Ord for KeyPointer<K>
 where
   K: Type + Ord + ?Sized,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  K::Ref<'a>: KeyRef<'a, K>,
 {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
     // SAFETY: WALs guarantee that the self and other must be the same as the result returned by `<K as Type>::encode`.
     unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(self.as_slice(), other.as_slice()) }
   }
 }
-
-unsafe impl<K> Send for KeyPointer<K> where K: ?Sized {}
-unsafe impl<K> Sync for KeyPointer<K> where K: ?Sized {}
 
 impl<K> Type for KeyPointer<K>
 where
@@ -238,10 +239,10 @@ impl<'a, K: ?Sized> TypeRef<'a> for KeyPointer<K> {
   }
 }
 
-impl<K> KeyRef<'_, Self> for KeyPointer<K>
+impl<'a, K> KeyRef<'a, Self> for KeyPointer<K>
 where
   K: Type + Ord + ?Sized,
-  for<'b> K::Ref<'b>: KeyRef<'b, K>,
+  K::Ref<'a>: KeyRef<'a, K>,
 {
   #[inline]
   fn compare<Q>(&self, a: &Q) -> cmp::Ordering

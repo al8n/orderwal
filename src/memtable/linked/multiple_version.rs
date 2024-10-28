@@ -6,10 +6,13 @@ use core::{
 use crossbeam_skiplist_mvcc::nested::{
   AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
 };
-use dbutils::equivalent::Comparable;
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
 
 use crate::{
-  memtable,
+  memtable::{self, BaseEntry, MultipleVersionMemtableEntry},
   sealed::WithVersion,
   wal::{KeyPointer, ValuePointer},
 };
@@ -28,9 +31,10 @@ where
   }
 }
 
-impl<'a, K, V> memtable::MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
-  K: ?Sized,
+  K: ?Sized + Type + Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized,
 {
   type Key = K;
@@ -50,10 +54,23 @@ where
   fn key(&self) -> KeyPointer<K> {
     *self.key()
   }
+}
+
+impl<'a, K, V> memtable::MultipleVersionMemtableEntry<'a>
+  for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized + Type + Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
+{
+  #[inline]
+  fn value(&self) -> Option<ValuePointer<V>> {
+    Some(*self.value())
+  }
 
   #[inline]
-  fn value(&self) -> ValuePointer<V> {
-    *self.value()
+  fn version(&self) -> u64 {
+    Entry::version(self)
   }
 }
 
@@ -64,9 +81,10 @@ where
 {
 }
 
-impl<'a, K, V> memtable::MemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> BaseEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
-  K: ?Sized,
+  K: ?Sized + Type + Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized,
 {
   type Key = K;
@@ -86,10 +104,23 @@ where
   fn key(&self) -> KeyPointer<K> {
     *self.key()
   }
+}
+
+impl<'a, K, V> MultipleVersionMemtableEntry<'a>
+  for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized + Type + Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
+{
+  #[inline]
+  fn version(&self) -> u64 {
+    VersionedEntry::version(self)
+  }
 
   #[inline]
-  fn value(&self) -> ValuePointer<V> {
-    *self.value()
+  fn value(&self) -> Option<ValuePointer<V>> {
+    self.value().copied()
   }
 }
 
@@ -100,22 +131,11 @@ where
 {
 }
 
-impl<'a, K, V> memtable::MultipleVersionMemtableEntry<'a>
-  for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
-  fn version(&self) -> u64 {
-    VersionedEntry::version(self)
-  }
-}
-
 impl<K, V> memtable::BaseTable for MultipleVersionTable<K, V>
 where
-  K: ?Sized,
-  KeyPointer<K>: Ord + Send + 'static,
-  V: ?Sized,
+  K: ?Sized + Type + Ord + 'static,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + 'static,
 {
   type Key = K;
   type Value = V;
@@ -172,9 +192,9 @@ where
 
 impl<K, V> memtable::MultipleVersionMemtable for MultipleVersionTable<K, V>
 where
-  K: ?Sized,
-  V: ?Sized,
-  KeyPointer<K>: Ord + Send + 'static,
+  K: ?Sized + Type + Ord + 'static,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + 'static,
 {
   type MultipleVersionItem<'a>
     = VersionedEntry<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>

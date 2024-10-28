@@ -14,9 +14,9 @@ use skl::either::Either;
 use crate::{
   batch::Batch,
   error::Error,
-  memtable::{BaseTable, Memtable},
-  sealed::{Constructable, Wal, WalReader, WithoutVersion},
-  types::{BufWriter, Entry, KeyBuilder, ValueBuilder},
+  memtable::{BaseTable, Memtable, MemtableEntry},
+  sealed::{Constructable, Wal, WalReader},
+  types::{base::Entry, BufWriter, KeyBuilder, ValueBuilder},
   Options,
 };
 
@@ -42,13 +42,25 @@ pub trait Reader: Constructable {
 
   /// Returns the number of entries in the WAL.
   #[inline]
-  fn len(&self) -> usize {
+  fn len<'a>(&'a self) -> usize
+  where
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+  {
     self.as_wal().len()
   }
 
   /// Returns `true` if the WAL is empty.
   #[inline]
-  fn is_empty(&self) -> bool {
+  fn is_empty<'a>(&'a self) -> bool
+  where
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+  {
     self.as_wal().is_empty()
   }
 
@@ -85,19 +97,17 @@ pub trait Reader: Constructable {
   /// Returns an iterator over the entries in the WAL.
   #[inline]
   fn iter<'a>(
-    &self,
+    &'a self,
   ) -> Iter<
     'a,
-    <<Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable as BaseTable>::Iterator<'a>,
+    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a>,
     Self::Memtable,
   >
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
   {
     Iter::new(self.as_wal().iter())
   }
@@ -107,22 +117,14 @@ pub trait Reader: Constructable {
   fn range<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> Range<
-    'a,
-    R,
-    Q,
-    <Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable,
-  >
+  ) -> Range<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
   {
     Range::new(self.as_wal().range(GenericQueryRange::new(range)))
   }
@@ -130,19 +132,17 @@ pub trait Reader: Constructable {
   /// Returns an iterator over the keys in the WAL.
   #[inline]
   fn keys<'a>(
-    &self,
+    &'a self,
   ) -> Keys<
     'a,
-    <<Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable as BaseTable>::Iterator<'a>,
+    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a>,
     Self::Memtable,
   >
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <Self::Memtable as BaseTable>::Value: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
   {
     Keys::new(self.as_wal().iter())
   }
@@ -152,45 +152,35 @@ pub trait Reader: Constructable {
   fn range_keys<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> RangeKeys<
-    'a,
-    R,
-    Q,
-    <Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable,
-  >
+  ) -> RangeKeys<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
   {
-    RangeKeys::new(self.as_wal().range(GenericQueryRange::new(range)))
+    RangeKeys::new(WalReader::range(
+      self.as_wal(),
+      GenericQueryRange::new(range),
+    ))
   }
 
   /// Returns an iterator over the values in the WAL.
   #[inline]
   fn values<'a>(
-    &self,
+    &'a self,
   ) -> Values<
     'a,
-    <<Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable as BaseTable>::Iterator<'a>,
+    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a>,
     Self::Memtable,
   >
   where
     Self::Memtable: Memtable,
     <Self::Memtable as BaseTable>::Key: Type,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
   {
     Values::new(self.as_wal().iter())
   }
@@ -200,33 +190,27 @@ pub trait Reader: Constructable {
   fn range_values<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> RangeValues<
-    'a,
-    R,
-    Q,
-    <Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable,
-  >
+  ) -> RangeValues<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
   {
     RangeValues::new(self.as_wal().range(GenericQueryRange::new(range)))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<Entry<'_, <Self::Memtable as BaseTable>::Item<'_>>>
+  fn first<'a>(&'a self) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
   {
     self.as_wal().first().map(Entry::new)
@@ -234,10 +218,13 @@ pub trait Reader: Constructable {
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<Entry<'_, <Self::Memtable as BaseTable>::Item<'_>>>
+  fn last<'a>(&'a self) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
   {
     WalReader::last(self.as_wal()).map(Entry::new)
@@ -249,9 +236,11 @@ pub trait Reader: Constructable {
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self.as_wal().contains_key(Query::<_, Q>::ref_cast(key))
   }
@@ -264,11 +253,11 @@ pub trait Reader: Constructable {
   unsafe fn contains_key_by_bytes<'a>(&'a self, key: &[u8]) -> bool
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
     <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -281,9 +270,11 @@ pub trait Reader: Constructable {
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -302,11 +293,11 @@ pub trait Reader: Constructable {
   ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
     <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -324,9 +315,11 @@ pub trait Reader: Constructable {
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -346,11 +339,11 @@ pub trait Reader: Constructable {
   ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
     <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -368,9 +361,11 @@ pub trait Reader: Constructable {
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -390,11 +385,11 @@ pub trait Reader: Constructable {
   ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
   where
     Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Key: Type,
+    <Self::Memtable as BaseTable>::Item<'a>: MemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Key: Ord + Type,
     <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
     <Self::Memtable as BaseTable>::Value: Type,
-    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -464,9 +459,12 @@ where
     Among<E, <<Self::Memtable as BaseTable>::Value as Type>::Error, Error<Self::Memtable>>,
   >
   where
-    <Self::Memtable as BaseTable>::Key: Type,
-    <Self::Memtable as BaseTable>::Value: Type,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert(None, kb, value.into())
   }
@@ -485,9 +483,12 @@ where
     Among<<<Self::Memtable as BaseTable>::Key as Type>::Error, E, Error<Self::Memtable>>,
   >
   where
-    <Self::Memtable as BaseTable>::Key: Type,
-    <Self::Memtable as BaseTable>::Value: Type,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert(None, key.into(), vb)
   }
@@ -495,15 +496,18 @@ where
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key and value in place.
   #[inline]
-  fn insert_with_builders<KE, VE>(
-    &mut self,
+  fn insert_with_builders<'a, KE, VE>(
+    &'a mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, VE>>,
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
-    <Self::Memtable as BaseTable>::Key: Type,
-    <Self::Memtable as BaseTable>::Value: Type,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert(None, kb, vb)
   }
@@ -511,7 +515,7 @@ where
   /// Inserts a key-value pair into the WAL.
   #[inline]
   fn insert<'a>(
-    &mut self,
+    &'a mut self,
     key: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
     value: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>>,
   ) -> Result<
@@ -523,9 +527,12 @@ where
     >,
   >
   where
-    <Self::Memtable as BaseTable>::Key: Type + 'a,
-    <Self::Memtable as BaseTable>::Value: Type + 'a,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert(None, key.into(), value.into())
   }
@@ -533,13 +540,17 @@ where
   /// Removes a key-value pair from the WAL. This method
   /// allows the caller to build the key in place.
   #[inline]
-  fn remove_with_builder<KE>(
-    &mut self,
+  fn remove_with_builder<'a, KE>(
+    &'a mut self,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
-    <Self::Memtable as BaseTable>::Key: Type,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().remove(None, kb)
   }
@@ -547,12 +558,16 @@ where
   /// Removes a key-value pair from the WAL.
   #[inline]
   fn remove<'a>(
-    &mut self,
+    &'a mut self,
     key: impl Into<MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
   ) -> Result<(), Either<<<Self::Memtable as BaseTable>::Key as Type>::Error, Error<Self::Memtable>>>
   where
-    <Self::Memtable as BaseTable>::Key: Type + 'a,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().remove(None, key.into())
   }
@@ -560,8 +575,8 @@ where
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
   fn insert_batch<'a, B>(
-    &mut self,
-    batch: &'a mut B,
+    &'a mut self,
+    batch: &mut B,
   ) -> Result<
     (),
     Among<
@@ -576,9 +591,12 @@ where
       Key = MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>,
       Value = MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>,
     >,
-    <Self::Memtable as BaseTable>::Key: Type + 'a,
-    <Self::Memtable as BaseTable>::Value: Type + 'a,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }
@@ -586,8 +604,8 @@ where
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
   fn insert_batch_with_key_builder<'a, B>(
-    &mut self,
-    batch: &'a mut B,
+    &'a mut self,
+    batch: &mut B,
   ) -> Result<
     (),
     Among<
@@ -599,9 +617,12 @@ where
   where
     B: Batch<Self::Memtable, Value = MaybeStructured<'a, <Self::Memtable as BaseTable>::Value>>,
     B::Key: BufWriter,
-    <Self::Memtable as BaseTable>::Key: Type,
-    <Self::Memtable as BaseTable>::Value: Type + 'a,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }
@@ -609,8 +630,8 @@ where
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
   fn insert_batch_with_value_builder<'a, B>(
-    &mut self,
-    batch: &'a mut B,
+    &'a mut self,
+    batch: &mut B,
   ) -> Result<
     (),
     Among<
@@ -622,17 +643,20 @@ where
   where
     B: Batch<Self::Memtable, Key = MaybeStructured<'a, <Self::Memtable as BaseTable>::Key>>,
     B::Value: BufWriter,
-    <Self::Memtable as BaseTable>::Key: Type + 'a,
-    <Self::Memtable as BaseTable>::Value: Type,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_builders<KB, VB, B>(
-    &mut self,
+  fn insert_batch_with_builders<'a, KB, VB, B>(
+    &'a mut self,
     batch: &mut B,
   ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
   where
@@ -640,6 +664,11 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }

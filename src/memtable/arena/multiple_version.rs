@@ -15,17 +15,17 @@ use skl::{
 };
 
 use crate::{
-  memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry},
+  memtable::{BaseEntry, BaseTable, MultipleVersionMemtable, MultipleVersionMemtableEntry},
   sealed::WithVersion,
   wal::{KeyPointer, ValuePointer},
 };
 
 use super::TableOptions;
 
-impl<'a, K, V> MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
-  for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
+  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
   V: ?Sized + Type,
 {
   type Key = K;
@@ -45,10 +45,22 @@ where
   fn key(&self) -> KeyPointer<K> {
     *Entry::key(self)
   }
+}
+
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized + Type + Ord,
+  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized + Type,
+{
+  #[inline]
+  fn value(&self) -> Option<ValuePointer<Self::Value>> {
+    Some(*Entry::value(self))
+  }
 
   #[inline]
-  fn value(&self) -> ValuePointer<V> {
-    *Entry::value(self)
+  fn version(&self) -> u64 {
+    Entry::version(self)
   }
 }
 
@@ -59,10 +71,10 @@ where
 {
 }
 
-impl<'a, K, V> MemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> BaseEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
-  for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
+  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
   V: ?Sized + Type,
 {
   type Key = K;
@@ -81,23 +93,23 @@ where
   fn key(&self) -> KeyPointer<K> {
     *VersionedEntry::key(self)
   }
-
-  #[inline]
-  fn value(&self) -> ValuePointer<V> {
-    *VersionedEntry::value(self)
-  }
 }
 
 impl<'a, K, V> MultipleVersionMemtableEntry<'a>
   for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
-  for<'b> KeyPointer<K>: Type<Ref<'b> = KeyPointer<K>> + KeyRef<'b, KeyPointer<K>>,
+  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
   V: ?Sized + Type,
 {
   #[inline]
   fn version(&self) -> u64 {
     self.version()
+  }
+
+  #[inline]
+  fn value(&self) -> Option<ValuePointer<V>> {
+    VersionedEntry::value(self).copied()
   }
 }
 
@@ -115,9 +127,9 @@ pub struct MultipleVersionTable<K: ?Sized, V: ?Sized> {
 
 impl<K, V> BaseTable for MultipleVersionTable<K, V>
 where
-  K: ?Sized + Type + Ord,
+  K: ?Sized + Type + Ord + 'static,
   for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
-  V: ?Sized + Type,
+  V: ?Sized + Type + 'static,
 {
   type Key = K;
   type Value = V;
@@ -153,10 +165,10 @@ where
 
     if opts.map_anon() {
       arena_opts
-        .map_anon::<KeyPointer<K>, (), SkipMap<_, _>>()
+        .map_anon::<KeyPointer<K>, ValuePointer<V>, SkipMap<_, _>>()
         .map_err(skl::Error::IO)
     } else {
-      arena_opts.alloc::<KeyPointer<K>, (), SkipMap<_, _>>()
+      arena_opts.alloc::<KeyPointer<K>, ValuePointer<V>, SkipMap<_, _>>()
     }
     .map(|map| Self { map })
   }
@@ -194,9 +206,9 @@ where
 
 impl<K, V> MultipleVersionMemtable for MultipleVersionTable<K, V>
 where
-  K: ?Sized + Type + Ord,
+  K: ?Sized + Type + Ord + 'static,
   for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
-  V: ?Sized + Type,
+  V: ?Sized + Type + 'static,
 {
   type MultipleVersionItem<'a>
     = VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>

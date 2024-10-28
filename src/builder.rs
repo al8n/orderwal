@@ -1,4 +1,7 @@
-use dbutils::checksum::Crc32;
+use dbutils::{
+  checksum::Crc32,
+  traits::{KeyRef, Type},
+};
 use skl::either::Either;
 
 use super::{
@@ -865,12 +868,13 @@ where
   ///     .map::<[u8], [u8], GenericOrderWalReader<_, _>, _>(&path)
   ///     .unwrap()
   /// };
-  pub unsafe fn map<W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
+  pub unsafe fn map<'a, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
   where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<Memtable = M, Checksumer = S> + Immutable,
-    // <W::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    M::Key: Type + Ord + 'static,
+    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     self
       .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -907,7 +911,7 @@ where
   ///     .map_with_path_builder::<[u8], [u8], GenericOrderWalReader<_, _>, _, ()>(|| Ok(path))
   ///     .unwrap()
   /// };
-  pub unsafe fn map_with_path_builder<K, V, W, PB, E>(
+  pub unsafe fn map_with_path_builder<'a, W, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<W, Either<E, Error<W::Memtable>>>
@@ -915,6 +919,8 @@ where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
     W: Constructable<Memtable = M, Checksumer = S> + Immutable,
+    M::Key: Type + Ord + 'static,
+    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     let Self {
       opts,
@@ -962,11 +968,13 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut<W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
+  pub unsafe fn map_mut<'a, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
   where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<Memtable = M, Checksumer = S>,
+    M::Key: Type + Ord + 'static,
+    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     self
       .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -1002,7 +1010,7 @@ where
   ///     .unwrap()
   /// };
   /// ```
-  pub unsafe fn map_mut_with_path_builder<W, PB, E>(
+  pub unsafe fn map_mut_with_path_builder<'a, W, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<W, Either<E, Error<W::Memtable>>>
@@ -1010,6 +1018,8 @@ where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
     W: Constructable<Memtable = M, Checksumer = S>,
+    M::Key: Type + Ord + 'static,
+    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();

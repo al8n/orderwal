@@ -15,16 +15,14 @@ use skl::{
 };
 
 use crate::{
-  memtable::BaseTable,
+  memtable::{BaseEntry, BaseTable, Memtable, MemtableEntry},
+  sealed::WithoutVersion,
   wal::{KeyPointer, ValuePointer},
 };
 
-use super::{
-  super::{Memtable, MemtableEntry},
-  TableOptions,
-};
+use super::TableOptions;
 
-impl<'a, K, V> MemtableEntry<'a> for Entry<'a, K, V>
+impl<'a, K, V> BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
@@ -47,12 +45,21 @@ where
   fn key(&self) -> KeyPointer<K> {
     *EntryRef::key(self)
   }
+}
 
+impl<'a, K, V> MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+where
+  K: ?Sized + Type + Ord,
+  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  V: ?Sized + Type,
+{
   #[inline]
   fn value(&self) -> ValuePointer<V> {
     *EntryRef::value(self)
   }
 }
+
+impl<K: ?Sized, V: ?Sized> WithoutVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>> {}
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
 pub struct Table<K: ?Sized, V: ?Sized> {
@@ -61,9 +68,9 @@ pub struct Table<K: ?Sized, V: ?Sized> {
 
 impl<K, V> BaseTable for Table<K, V>
 where
-  K: ?Sized + Type + Ord,
+  K: ?Sized + Type + Ord + 'static,
   for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
-  V: ?Sized,
+  V: ?Sized + Type + 'static,
 {
   type Key = K;
   type Value = V;
@@ -97,10 +104,10 @@ where
 
     if opts.map_anon() {
       arena_opts
-        .map_anon::<KeyPointer<Self::Key>, (), SkipMap<_, _>>()
+        .map_anon::<KeyPointer<Self::Key>, ValuePointer<Self::Value>, SkipMap<_, _>>()
         .map_err(skl::Error::IO)
     } else {
-      arena_opts.alloc::<KeyPointer<Self::Key>, (), SkipMap<_, _>>()
+      arena_opts.alloc::<KeyPointer<Self::Key>, ValuePointer<Self::Value>, SkipMap<_, _>>()
     }
     .map(|map| Self { map })
   }
@@ -134,9 +141,9 @@ where
 
 impl<K, V> Memtable for Table<K, V>
 where
-  K: ?Sized + Type + Ord,
+  K: ?Sized + Type + Ord + 'static,
   for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
-  V: ?Sized + Type,
+  V: ?Sized + Type + 'static,
 {
   #[inline]
   fn len(&self) -> usize {

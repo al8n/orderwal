@@ -14,32 +14,28 @@ use super::KeyPointer;
 
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
-pub struct Slice<K: ?Sized> {
-  _k: PhantomData<K>,
+pub struct Slice<'a, K: ?Sized> {
+  _k: PhantomData<&'a K>,
   data: [u8],
 }
 
-impl<K> Equivalent<KeyPointer<K>> for Slice<K>
+impl<'a, K> Equivalent<KeyPointer<K>> for Slice<'a, K>
 where
   K: Type + ?Sized,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  K::Ref<'a>: KeyRef<'a, K>,
 {
   fn equivalent(&self, key: &KeyPointer<K>) -> bool {
     self.data.eq(key.as_slice())
   }
 }
 
-impl<K> Comparable<KeyPointer<K>> for Slice<K>
+impl<'a, K> Comparable<KeyPointer<K>> for Slice<'a, K>
 where
   K: Type + ?Sized,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  K::Ref<'a>: KeyRef<'a, K>,
 {
   fn compare(&self, p: &KeyPointer<K>) -> cmp::Ordering {
-    unsafe {
-      let kr: K::Ref<'_> = TypeRef::from_slice(p.as_slice());
-      let or: K::Ref<'_> = TypeRef::from_slice(&self.data);
-      KeyRef::compare(&kr, &or).reverse()
-    }
+    unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(&self.data, p.as_slice()) }
   }
 }
 

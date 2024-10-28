@@ -8,7 +8,7 @@ use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
   leb128::{decode_u64_varint, encoded_u64_varint_len},
-  traits::Type,
+  traits::{KeyRef, Type},
 };
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
@@ -36,185 +36,227 @@ pub trait WithoutVersion {}
 
 pub trait Immutable {}
 
-pub trait WalReader<K: ?Sized, V: ?Sized, S> {
+pub trait WalReader<S> {
   type Allocator: Allocator;
   type Memtable;
 
   fn memtable(&self) -> &Self::Memtable;
 
   /// Returns the number of entries in the WAL.
-  fn len(&self) -> usize
+  fn len<'a>(&'a self) -> usize
   where
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Self::Memtable: Memtable + 'a,
+    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self.memtable().len()
   }
 
   /// Returns `true` if the WAL is empty.
   #[inline]
-  fn is_empty(&self) -> bool
+  fn is_empty<'a>(&'a self) -> bool
   where
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Self::Memtable: Memtable + 'a,
+    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
     self.memtable().is_empty()
   }
 
   #[inline]
-  fn iter(&self) -> Iter<'_, <Self::Memtable as BaseTable>::Iterator<'_>, Self::Memtable>
+  fn iter<'a>(&'a self) -> Iter<'a, <Self::Memtable as BaseTable>::Iterator<'a>, Self::Memtable>
   where
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
-    Iter::new(None, self.memtable().iter())
+    Iter::new(None, Memtable::iter(self.memtable()))
   }
 
   #[inline]
-  fn range<Q, R>(
-    &self,
+  fn range<'a, Q, R>(
+    &'a self,
     range: R,
-  ) -> Iter<'_, <Self::Memtable as BaseTable>::Range<'_, Q, R>, Self::Memtable>
+  ) -> Iter<'a, <Self::Memtable as BaseTable>::Range<'a, Q, R>, Self::Memtable>
   where
     R: RangeBounds<Q>,
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
   {
-    Iter::new(None, self.memtable().range(range))
+    Iter::new(None, Memtable::range(self.memtable(), range))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn first<'a>(&'a self) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Self::Memtable: Memtable<Key = K, Value = V>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    self.memtable().first()
+    Memtable::first(self.memtable())
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(&self) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  #[inline]
+  fn last<'a>(&'a self) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Self::Memtable: Memtable<Key = K, Value = V>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    self.memtable().last()
+    Memtable::last(self.memtable())
   }
 
   /// Returns `true` if the WAL contains the specified key.
-  fn contains_key<Q>(&self, key: &Q) -> bool
+  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    self.memtable().contains(key)
+    Memtable::contains(self.memtable(), key)
   }
 
   /// Returns the value associated with the key.
   #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    self.memtable().get(key)
+    Memtable::get(self.memtable(), key)
   }
 
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  #[inline]
+  fn upper_bound<'a, Q>(
+    &'a self,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    self.memtable().upper_bound(bound)
+    Memtable::upper_bound(self.memtable(), bound)
   }
 
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  #[inline]
+  fn lower_bound<'a, Q>(
+    &'a self,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: Memtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithoutVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: Memtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    self.memtable().lower_bound(bound)
+    Memtable::lower_bound(self.memtable(), bound)
   }
 }
 
-pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
+pub trait MultipleVersionWalReader<S> {
   type Allocator: Allocator;
   type Memtable;
 
   fn memtable(&self) -> &Self::Memtable;
 
   #[inline]
-  fn iter(
-    &self,
+  fn iter<'a>(
+    &'a self,
     version: u64,
-  ) -> Iter<'_, <Self::Memtable as BaseTable>::Iterator<'_>, Self::Memtable>
+  ) -> Iter<'a, <Self::Memtable as BaseTable>::Iterator<'a>, Self::Memtable>
   where
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    Iter::new(Some(version), self.memtable().iter(version))
+    Iter::new(
+      Some(version),
+      MultipleVersionMemtable::iter(self.memtable(), version),
+    )
   }
 
   #[inline]
-  fn range<Q, R>(
-    &self,
+  fn range<'a, Q, R>(
+    &'a self,
     version: u64,
     range: R,
-  ) -> Iter<'_, <Self::Memtable as BaseTable>::Range<'_, Q, R>, Self::Memtable>
+  ) -> Iter<'a, <Self::Memtable as BaseTable>::Range<'a, Q, R>, Self::Memtable>
   where
     R: RangeBounds<Q>,
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    Iter::new(Some(version), self.memtable().range(version, range))
+    Iter::new(
+      Some(version),
+      MultipleVersionMemtable::range(self.memtable(), version, range),
+    )
   }
 
   #[inline]
-  fn iter_all_versions(
-    &self,
+  fn iter_all_versions<'a>(
+    &'a self,
     version: u64,
   ) -> MultipleVersionBaseIter<
-    '_,
-    <Self::Memtable as MultipleVersionMemtable>::AllIterator<'_>,
+    'a,
+    <Self::Memtable as MultipleVersionMemtable>::AllIterator<'a>,
     Self::Memtable,
   >
   where
     Self::Memtable: MultipleVersionMemtable,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    MultipleVersionBaseIter::new(version, self.memtable().iter_all_versions(version))
+    MultipleVersionBaseIter::new(
+      version,
+      MultipleVersionMemtable::iter_all_versions(self.memtable(), version),
+    )
   }
 
   #[inline]
-  fn range_all_versions<Q, R>(
-    &self,
+  fn range_all_versions<'a, Q, R>(
+    &'a self,
     version: u64,
     range: R,
   ) -> MultipleVersionBaseIter<
-    '_,
-    <Self::Memtable as MultipleVersionMemtable>::AllRange<'_, Q, R>,
+    'a,
+    <Self::Memtable as MultipleVersionMemtable>::AllRange<'a, Q, R>,
     Self::Memtable,
   >
   where
     R: RangeBounds<Q>,
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     MultipleVersionBaseIter::new(version, self.memtable().range_all_versions(version, range))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn first<'a>(&'a self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
     Self::Memtable: MultipleVersionMemtable,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().first(version)
   }
@@ -224,22 +266,26 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
   /// Compared to [`first`](MultipleVersionWalReader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn first_versioned(
-    &self,
+  fn first_versioned<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>>
   where
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().first_versioned(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn last<'a>(&'a self, version: u64) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().last(version)
   }
@@ -248,23 +294,27 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
   ///
   /// Compared to [`last`](MultipleVersionWalReader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
-  fn last_versioned(
-    &self,
+  fn last_versioned<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>>
   where
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().last_versioned(version)
   }
 
   /// Returns `true` if the WAL contains the specified key.
-  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().contains(version, key)
   }
@@ -273,22 +323,26 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
   ///
   /// Compared to [`contains_key`](MultipleVersionWalReader::contains_key), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
-  fn contains_key_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().contains_versioned(version, key)
   }
 
   /// Returns the entry associated with the key. The returned entry is the latest version of the key.
   #[inline]
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().get(version, key)
   }
@@ -297,73 +351,83 @@ pub trait MultipleVersionWalReader<K: ?Sized, V: ?Sized, S> {
   ///
   /// Compared to [`get`](MultipleVersionWalReader::get), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
-  fn get_versioned<Q>(
-    &self,
+  fn get_versioned<'a, Q>(
+    &'a self,
     version: u64,
     key: &Q,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().get_versioned(version, key)
   }
 
-  fn upper_bound<Q>(
-    &self,
+  fn upper_bound<'a, Q>(
+    &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  ) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().upper_bound(version, bound)
   }
 
-  fn upper_bound_versioned<Q>(
-    &self,
+  fn upper_bound_versioned<'a, Q>(
+    &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().upper_bound_versioned(version, bound)
   }
 
-  fn lower_bound<Q>(
-    &self,
+  fn lower_bound<'a, Q>(
+    &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Item<'_>>
+  ) -> Option<<Self::Memtable as BaseTable>::Item<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().lower_bound(version, bound)
   }
 
-  fn lower_bound_versioned<Q>(
-    &self,
+  fn lower_bound_versioned<'a, Q>(
+    &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>>
   where
-    Q: ?Sized + Comparable<KeyPointer<K>>,
-    Self::Memtable: MultipleVersionMemtable<Key = K, Value = V>,
-    for<'a> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionItem<'a>: WithVersion,
+    Q: ?Sized + Comparable<KeyPointer<<Self::Memtable as BaseTable>::Key>>,
+    Self::Memtable: MultipleVersionMemtable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     self.memtable().lower_bound_versioned(version, bound)
   }
 }
 
-pub trait Wal<K: ?Sized, V: ?Sized, S> {
+pub trait Wal<S> {
   type Allocator: Allocator;
   type Memtable;
 
@@ -503,15 +567,18 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   fn update_minimum_version(&mut self, version: u64);
 
   #[inline]
-  fn insert_pointer(
-    &self,
+  fn insert_pointer<'a>(
+    &'a self,
     version: Option<u64>,
-    kp: KeyPointer<K>,
-    vp: Option<ValuePointer<V>>,
+    kp: KeyPointer<<Self::Memtable as BaseTable>::Key>,
+    vp: Option<ValuePointer<<Self::Memtable as BaseTable>::Value>>,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
-    // <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     let t = self.memtable();
     if let Some(vp) = vp {
@@ -522,19 +589,28 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 
   #[inline]
-  fn insert_pointers(
-    &self,
-    mut ptrs: impl Iterator<Item = (Option<u64>, KeyPointer<K>, Option<ValuePointer<V>>)>,
+  fn insert_pointers<'a>(
+    &'a self,
+    mut ptrs: impl Iterator<
+      Item = (
+        Option<u64>,
+        KeyPointer<<Self::Memtable as BaseTable>::Key>,
+        Option<ValuePointer<<Self::Memtable as BaseTable>::Value>>,
+      ),
+    >,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
-    // <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     ptrs.try_for_each(|(version, kp, vp)| self.insert_pointer(version, kp, vp))
   }
 
-  fn insert<KE, VE>(
-    &self,
+  fn insert<'a, KE, VE>(
+    &'a self,
     version: Option<u64>,
     kb: KE,
     vb: VE,
@@ -544,12 +620,16 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     self.update(version, kb, Some(vb))
   }
 
-  fn remove<KE>(
-    &self,
+  fn remove<'a, KE>(
+    &'a self,
     version: Option<u64>,
     kb: KE,
   ) -> Result<(), Either<KE::Error, Error<Self::Memtable>>>
@@ -557,6 +637,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     KE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     struct Noop;
 
@@ -581,8 +665,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
       .map_err(Among::into_left_right)
   }
 
-  fn update<KE, VE>(
-    &self,
+  fn update<'a, KE, VE>(
+    &'a self,
     version: Option<u64>,
     kb: KE,
     vb: Option<VE>,
@@ -592,6 +676,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -713,8 +801,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     })
   }
 
-  fn insert_batch<W, B>(
-    &self,
+  fn insert_batch<'a, W, B>(
+    &'a self,
     batch: &mut B,
   ) -> Result<
     (),
@@ -727,7 +815,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     S: BuildChecksumer,
     W: Constructable<Wal = Self, Memtable = Self::Memtable>,
     Self::Memtable: BaseTable,
-    // <Self::Memtable as BaseTable>::Pointer: Pointer + Ord + 'static,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
+    <Self::Memtable as BaseTable>::Value: Type + 'static,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -854,8 +945,8 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
         }
 
         let entry_size = meta.entry_size as usize;
-        let kp = KeyPointer::new(ent.flag, key_ptr, meta.klen);
-        let vp = vb.is_some().then(|| ValuePointer::new(val_ptr, meta.vlen));
+        let kp = KeyPointer::new(ent.flag, meta.klen, key_ptr);
+        let vp = vb.is_some().then(|| ValuePointer::new(meta.vlen, val_ptr));
         ent.set_pointer(kp, vp);
         cursor += entry_size;
       }
@@ -889,7 +980,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
     };
 
     self
-      .insert_pointers(batch.iter_mut().map(|e| e.take_pointer().unwrap()))
+      .insert_pointers(batch.iter_mut().map(|e| {
+        let (kp, vp) = e.take_pointer().unwrap();
+        (e.internal_version(), kp, vp)
+      }))
       .map_err(|e| {
         // Safety: the writer is single threaded, the memory chunk in buf cannot be accessed by other threads,
         // so it's safe to rewind the arena.
@@ -903,13 +997,10 @@ pub trait Wal<K: ?Sized, V: ?Sized, S> {
   }
 }
 
-impl<K, V, S, T> WalReader<K, V, S> for T
+impl<S, T> WalReader<S> for T
 where
-  K: ?Sized,
-  V: ?Sized,
-  T: Wal<K, V, S>,
+  T: Wal<S>,
   T::Memtable: Memtable,
-  for<'a> <T::Memtable as BaseTable>::Item<'a>: WithoutVersion,
 {
   type Allocator = T::Allocator;
 
@@ -921,13 +1012,10 @@ where
   }
 }
 
-impl<K, V, S, T> MultipleVersionWalReader<K, V, S> for T
+impl<S, T> MultipleVersionWalReader<S> for T
 where
-  K: ?Sized,
-  V: ?Sized,
-  T: Wal<K, V, S>,
+  T: Wal<S>,
   T::Memtable: MultipleVersionMemtable,
-  for<'a> <T::Memtable as BaseTable>::Item<'a>: WithVersion,
 {
   type Allocator = T::Allocator;
 
@@ -941,13 +1029,7 @@ where
 
 pub trait Constructable: Sized {
   type Allocator: Allocator + 'static;
-  type Wal: Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-      Allocator = Self::Allocator,
-      Memtable = Self::Memtable,
-    > + 'static;
+  type Wal: Wal<Self::Checksumer, Allocator = Self::Allocator, Memtable = Self::Memtable> + 'static;
   type Memtable: BaseTable;
   type Checksumer;
   type Reader;
@@ -989,7 +1071,7 @@ pub trait Constructable: Sized {
       })
   }
 
-  fn replay(
+  fn replay<'a>(
     arena: Self::Allocator,
     opts: Options,
     memtable_opts: <Self::Memtable as BaseTable>::Options,
@@ -998,7 +1080,9 @@ pub trait Constructable: Sized {
   ) -> Result<Self::Wal, Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    KeyPointer<<Self::Memtable as BaseTable>::Key>: Ord + 'static,
+    <Self::Memtable as BaseTable>::Key: Type + Ord + 'static,
+    <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
+      KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     let slice = arena.reserved_slice();
     let magic_text = &slice[0..6];
@@ -1012,12 +1096,8 @@ pub trait Constructable: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let set = <Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::Memtable::new(memtable_opts)
-    .map_err(Error::memtable)?;
+    let set = <Self::Wal as Wal<Self::Checksumer>>::Memtable::new(memtable_opts)
+      .map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -1105,8 +1185,11 @@ pub trait Constructable: Sized {
 
           let (version, ptr) = if flag.contains(EntryFlags::VERSIONED) {
             let version_ptr = ptr.add(EntryFlags::SIZE);
-            let version =
-              u64::from_le_bytes(core::slice::from_raw_parts(version_ptr, VERSION_SIZE));
+            let version = u64::from_le_bytes(
+              core::slice::from_raw_parts(version_ptr, VERSION_SIZE)
+                .try_into()
+                .unwrap(),
+            );
             minimum_version = minimum_version.min(version);
             maximum_version = maximum_version.max(version);
             (Some(version), version_ptr.add(VERSION_SIZE))
@@ -1118,7 +1201,7 @@ pub trait Constructable: Sized {
           if flag.contains(EntryFlags::REMOVED) {
             set.remove(version, kp).map_err(Error::memtable)?;
           } else {
-            let vp = ValuePointer::new(ptr.add(key_len), value_len);
+            let vp = ValuePointer::new(value_len, ptr.add(key_len));
             set.insert(version, kp, vp).map_err(Error::memtable)?;
           }
 
@@ -1177,8 +1260,11 @@ pub trait Constructable: Sized {
 
             let (version, ptr, ent_len) = if flag.contains(EntryFlags::VERSIONED) {
               let version_ptr = ptr.add(EntryFlags::SIZE);
-              let version =
-                u64::from_le_bytes(core::slice::from_raw_parts(version_ptr, VERSION_SIZE));
+              let version = u64::from_le_bytes(
+                core::slice::from_raw_parts(version_ptr, VERSION_SIZE)
+                  .try_into()
+                  .unwrap(),
+              );
               minimum_version = minimum_version.min(version);
               maximum_version = maximum_version.max(version);
               let ent_len = kvlen + EntryFlags::SIZE + VERSION_SIZE + klen + vlen;
@@ -1192,7 +1278,7 @@ pub trait Constructable: Sized {
             if flag.contains(EntryFlags::REMOVED) {
               set.remove(version, kp).map_err(Error::memtable)?;
             } else {
-              let vp = ValuePointer::new(ptr.add(klen), vlen);
+              let vp = ValuePointer::new(vlen, ptr.add(klen));
               set.insert(version, kp, vp).map_err(Error::memtable)?;
             }
 
@@ -1211,11 +1297,7 @@ pub trait Constructable: Sized {
       }
     }
 
-    Ok(<Self::Wal as Wal<
-      <Self::Memtable as BaseTable>::Key,
-      <Self::Memtable as BaseTable>::Value,
-      Self::Checksumer,
-    >>::construct(
+    Ok(<Self::Wal as Wal<Self::Checksumer>>::construct(
       arena,
       set,
       opts,

@@ -1,8 +1,9 @@
 use core::{iter::FusedIterator, marker::PhantomData};
 
-use dbutils::CheapClone;
-
-use crate::memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable};
+use crate::{
+  memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable},
+  wal::{KeyPointer, ValuePointer},
+};
 
 /// Iterator over the entries in the WAL.
 pub struct Iter<'a, I, M>
@@ -11,8 +12,8 @@ where
 {
   iter: I,
   version: Option<u64>,
-  head: Option<M::Item<'a>>,
-  tail: Option<M::Item<'a>>,
+  head: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
+  tail: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
   _m: PhantomData<&'a ()>,
 }
 
@@ -45,7 +46,7 @@ where
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().inspect(|ent| {
-      self.head = Some(ent.pointer().cheap_clone());
+      self.head = Some((ent.key(), ent.value()));
     })
   }
 }
@@ -58,7 +59,7 @@ where
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().inspect(|ent| {
-      self.tail = Some(ent.pointer().cheap_clone());
+      self.tail = Some((ent.key(), ent.value()));
     })
   }
 }
@@ -77,8 +78,8 @@ where
 {
   iter: I,
   version: u64,
-  head: Option<M::MultipleVersionItem<'a>>,
-  tail: Option<M::MultipleVersionItem<'a>>,
+  head: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
+  tail: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
   _m: PhantomData<&'a ()>,
 }
 
@@ -114,7 +115,7 @@ where
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().inspect(|ent| {
-      self.head = Some(ent.pointer().cheap_clone());
+      self.head = Some((ent.key(), ent.value()));
     })
   }
 }
@@ -127,7 +128,7 @@ where
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     self.iter.next_back().inspect(|ent| {
-      self.tail = Some(ent.pointer().cheap_clone());
+      self.tail = Some((ent.key(), ent.value()));
     })
   }
 }

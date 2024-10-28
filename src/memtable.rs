@@ -2,7 +2,7 @@ use core::ops::{Bound, RangeBounds};
 use dbutils::equivalent::Comparable;
 
 use crate::{
-  sealed::WithVersion,
+  sealed::{WithVersion, WithoutVersion},
   wal::{KeyPointer, ValuePointer},
 };
 
@@ -13,7 +13,7 @@ pub mod linked;
 pub mod arena;
 
 /// An entry which is stored in the memory table.
-pub trait MemtableEntry<'a>: Sized {
+pub trait BaseEntry<'a>: Sized {
   /// The key type.
   type Key: ?Sized;
   /// The value type.
@@ -22,9 +22,6 @@ pub trait MemtableEntry<'a>: Sized {
   /// Returns the key in the entry.
   fn key(&self) -> KeyPointer<Self::Key>;
 
-  /// Returns the value in the entry.
-  fn value(&self) -> ValuePointer<Self::Value>;
-
   /// Returns the next entry in the memory table.
   fn next(&mut self) -> Option<Self>;
 
@@ -32,9 +29,18 @@ pub trait MemtableEntry<'a>: Sized {
   fn prev(&mut self) -> Option<Self>;
 }
 
+/// An entry which is stored in the memory table.
+pub trait MemtableEntry<'a>: BaseEntry<'a> + WithoutVersion {
+  /// Returns the value in the entry.
+  fn value(&self) -> ValuePointer<Self::Value>;
+}
+
 /// An entry which is stored in the multiple versioned memory table.
-pub trait MultipleVersionMemtableEntry<'a>: MemtableEntry<'a> + WithVersion {
-  /// Returns the version associated with the entry.
+pub trait MultipleVersionMemtableEntry<'a>: BaseEntry<'a> + WithVersion {
+  /// Returns the value in the entry.
+  fn value(&self) -> Option<ValuePointer<Self::Value>>;
+
+  /// Returns the version of the entry if it is versioned.
   fn version(&self) -> u64;
 }
 
@@ -53,7 +59,7 @@ pub trait BaseTable {
   type Error;
 
   /// The item returned by the iterator or query methods.
-  type Item<'a>: MemtableEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
+  type Item<'a>: BaseEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
   where
     Self: 'a;
 

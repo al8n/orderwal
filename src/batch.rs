@@ -152,12 +152,14 @@ where
   }
 
   #[inline]
-  pub(crate) fn take_pointer(&mut self) -> Option<(KeyPointer<K>, Option<ValuePointer<V>>)> {
+  pub(crate) fn take_pointer(
+    &mut self,
+  ) -> Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)> {
     self.pointers.take()
   }
 
   #[inline]
-  pub(crate) fn set_pointer(&mut self, kp: KeyPointer<K>, vp: Option<ValuePointer<V>>) {
+  pub(crate) fn set_pointer(&mut self, kp: KeyPointer<M::Key>, vp: Option<ValuePointer<M::Value>>) {
     self.pointers = Some((kp, vp));
   }
 
