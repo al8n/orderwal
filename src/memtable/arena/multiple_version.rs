@@ -17,6 +17,7 @@ use skl::{
 use crate::{
   memtable::{BaseEntry, BaseTable, MultipleVersionMemtable, MultipleVersionMemtableEntry},
   sealed::WithVersion,
+  types::Kind,
   wal::{KeyPointer, ValuePointer},
 };
 
@@ -202,6 +203,11 @@ where
       _ => Ok(()),
     }
   }
+
+  #[inline]
+  fn kind() -> Kind {
+    Kind::MultipleVersion
+  }
 }
 
 impl<K, V> MultipleVersionMemtable for MultipleVersionTable<K, V>
@@ -295,9 +301,7 @@ where
   where
     Q: ?Sized + Comparable<KeyPointer<K>>,
   {
-    self.map.get(version, key).inspect(|ent| {
-      println!("get arena: {:?} {:?}", ent.version(), ent.key());
-    })
+    self.map.get(version, key)
   }
 
   fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionItem<'_>>

@@ -30,33 +30,13 @@ pub use dbutils::checksum::XxHash64;
 const RECORD_FLAG_SIZE: usize = mem::size_of::<Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;
-const MAGIC_TEXT: [u8; 6] = *b"ordwal";
+const MAGIC_TEXT: [u8; 5] = *b"order";
 const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
+const WAL_KIND_SIZE: usize = mem::size_of::<types::Kind>();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
-const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
-
+const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + WAL_KIND_SIZE + MAGIC_VERSION_SIZE;
 /// The mvcc version size.
-const VERSION_SIZE: usize = core::mem::size_of::<u64>();
-
-// #[cfg(all(
-//   test,
-//   any(
-//     all_orderwal_tests,
-//     test_unsync_constructor,
-//     test_unsync_insert,
-//     test_unsync_get,
-//     test_unsync_iters,
-//     test_swmr_constructor,
-//     test_swmr_insert,
-//     test_swmr_get,
-//     test_swmr_iters,
-//     test_swmr_constructor,
-//     test_swmr_insert,
-//     test_swmr_get,
-//     test_swmr_iters,
-//   )
-// ))]
-// mod tests;
+const VERSION_SIZE: usize = mem::size_of::<u64>();
 
 /// Error types.
 pub mod error;

@@ -2,7 +2,7 @@ use among::Among;
 use dbutils::error::InsufficientBuffer;
 use derive_where::derive_where;
 
-use crate::memtable::BaseTable;
+use crate::{memtable::BaseTable, types::Kind};
 
 /// The batch error type.
 #[derive(Debug)]
@@ -69,6 +69,17 @@ pub enum Error<T: BaseTable> {
     /// The maximum entry size.
     maximum_entry_size: u64,
   },
+  /// Unknown WAL kind.
+  UnknownKind(UnknownKind),
+
+  /// WAL kind mismatch.
+  KindMismatch {
+    /// The WAL was created with this kind.
+    create: Kind,
+    /// Trying to open the WAL with this kind.
+    open: Kind,
+  },
+
   /// Returned when the expected batch encoding size does not match the actual size.
   Batch(BatchError),
   /// I/O error.
@@ -81,6 +92,13 @@ impl<T: BaseTable> From<BatchError> for Error<T> {
   #[inline]
   fn from(e: BatchError) -> Self {
     Self::Batch(e)
+  }
+}
+
+impl<T: BaseTable> From<UnknownKind> for Error<T> {
+  #[inline]
+  fn from(e: UnknownKind) -> Self {
+    Self::UnknownKind(e)
   }
 }
 
@@ -124,9 +142,34 @@ where
         "the entry size is {} larger than the maximum entry size {}",
         size, maximum_entry_size
       ),
+      Self::UnknownKind(e) => write!(f, "{e}"),
+      Self::KindMismatch { create, open } => write!(
+        f,
+        "the wal was {}, cannot be {}",
+        create.display_created_err_msg(),
+        open.display_open_err_msg()
+      ),
       Self::Batch(e) => write!(f, "{e}"),
       Self::IO(e) => write!(f, "{e}"),
       Self::ReadOnly => write!(f, "The WAL is read-only"),
+    }
+  }
+}
+
+impl Kind {
+  #[inline]
+  const fn display_created_err_msg(&self) -> &'static str {
+    match self {
+      Self::Plain => "created without multiple versions support",
+      Self::MultipleVersion => "created with multiple versions support",
+    }
+  }
+
+  #[inline]
+  const fn display_open_err_msg(&self) -> &'static str {
+    match self {
+      Self::Plain => "opened without multiple versions support",
+      Self::MultipleVersion => "opened with multiple versions support",
     }
   }
 }
@@ -143,6 +186,8 @@ where
       Self::KeyTooLarge { .. } => None,
       Self::ValueTooLarge { .. } => None,
       Self::EntryTooLarge { .. } => None,
+      Self::UnknownKind(e) => Some(e),
+      Self::KindMismatch { .. } => None,
       Self::Batch(e) => Some(e),
       Self::IO(e) => Some(e),
       Self::ReadOnly => None,
@@ -215,6 +260,11 @@ impl<T: BaseTable> Error<T> {
     }
   }
 
+  #[inline]
+  pub(crate) const fn wal_kind_mismatch(create: Kind, open: Kind) -> Self {
+    Self::KindMismatch { create, open }
+  }
+
   /// Create a new corrupted error.
   #[inline]
   pub(crate) fn corrupted<E>(e: E) -> Self
@@ -272,3 +322,15 @@ impl<T: BaseTable> Error<T> {
     ))
   }
 }
+
+/// Unknown WAL kind error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnknownKind(pub(super) u8);
+
+impl core::fmt::Display for UnknownKind {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    write!(f, "unknown WAL kind: {}", self.0)
+  }
+}
+
+impl core::error::Error for UnknownKind {}

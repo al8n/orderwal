@@ -9,11 +9,23 @@ use dbutils::{
 use crate::{
   memtable,
   sealed::WithoutVersion,
+  types::Kind,
   wal::{KeyPointer, ValuePointer},
 };
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipMap`].
 pub struct Table<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);
+
+impl<K, V> core::fmt::Debug for Table<K, V>
+where
+  K: ?Sized + Type + Ord,
+  for<'a> K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_tuple("Table").field(&self.0).finish()
+  }
+}
 
 impl<K: ?Sized, V: ?Sized> Default for Table<K, V> {
   #[inline]
@@ -122,6 +134,11 @@ where
   {
     self.0.remove(&key);
     Ok(())
+  }
+
+  #[inline]
+  fn kind() -> Kind {
+    Kind::Plain
   }
 }
 

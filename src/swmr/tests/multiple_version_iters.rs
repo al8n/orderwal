@@ -31,13 +31,13 @@ macro_rules! arena_builder {
 }
 
 expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<String, String> {
-  // iter_all_versions_next(arena_builder!()),
-  // iter_all_versions_next_by_entry(arena_builder!()),
-  // iter_all_versions_next_by_versioned_entry(arena_builder!()),
-  // range_next(arena_builder!()),
-  // iter_all_versions_prev(arena_builder!()),
-  // range_prev(arena_builder!()),
-  // iter_all_versions_prev_by_entry(arena_builder!()),
+  iter_all_versions_next(arena_builder!()),
+  iter_all_versions_next_by_entry(arena_builder!()),
+  iter_all_versions_next_by_versioned_entry(arena_builder!()),
+  range_next(arena_builder!()),
+  iter_all_versions_prev(arena_builder!()),
+  range_prev(arena_builder!()),
+  iter_all_versions_prev_by_entry(arena_builder!()),
   iter_all_versions_prev_by_versioned_entry(arena_builder!()),
 });
 

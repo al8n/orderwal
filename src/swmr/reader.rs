@@ -13,6 +13,19 @@ use super::writer::GenericOrderWal;
 /// An [`GenericOrderWal`] reader.
 pub struct GenericOrderWalReader<K: ?Sized, V: ?Sized, P, S>(GenericOrderWal<K, V, P, S>);
 
+impl<K, V, M, S> core::fmt::Debug for GenericOrderWalReader<K, V, M, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
+  #[inline]
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_tuple("GenericOrderWalReader")
+      .field(&self.0.core)
+      .finish()
+  }
+}
+
 impl<K: ?Sized, V: ?Sized, P, S> Immutable for GenericOrderWalReader<K, V, P, S> {}
 
 impl<K, V, P, S> GenericOrderWalReader<K, V, P, S>

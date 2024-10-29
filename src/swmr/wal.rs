@@ -4,7 +4,11 @@ use rarena_allocator::sync::Arena;
 
 use crate::{memtable::BaseTable, sealed::Wal, Options};
 
-pub struct OrderCore<K: ?Sized, V: ?Sized, M, S> {
+pub struct OrderCore<K, V, M, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
   pub(super) arena: Arena,
   pub(super) map: M,
   pub(super) max_version: u64,
@@ -12,6 +16,22 @@ pub struct OrderCore<K: ?Sized, V: ?Sized, M, S> {
   pub(super) opts: Options,
   pub(super) cks: S,
   pub(super) _m: PhantomData<(fn() -> K, fn() -> V)>,
+}
+
+impl<K, V, M, S> core::fmt::Debug for OrderCore<K, V, M, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
+  #[inline]
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("OrderCore")
+      .field("arena", &self.arena)
+      .field("max_version", &self.max_version)
+      .field("min_version", &self.min_version)
+      .field("options", &self.opts)
+      .finish()
+  }
 }
 
 impl<K, V, M, S> Wal<S> for OrderCore<K, V, M, S>

@@ -11,6 +11,34 @@ pub(crate) mod multiple_version;
 
 const ENTRY_FLAGS_SIZE: usize = core::mem::size_of::<EntryFlags>();
 
+/// The kind of the Write-Ahead Log.
+///
+/// Currently, there are two kinds of Write-Ahead Log:
+/// 1. Plain: The Write-Ahead Log is plain, which means it does not support multiple versions.
+/// 2. MultipleVersion: The Write-Ahead Log supports multiple versions.
+#[derive(Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[non_exhaustive]
+pub enum Kind {
+  /// The Write-Ahead Log is plain, which means it does not support multiple versions.
+  Plain = 0,
+  /// The Write-Ahead Log supports multiple versions.
+  MultipleVersion = 1,
+}
+
+impl TryFrom<u8> for Kind {
+  type Error = crate::error::UnknownKind;
+
+  #[inline]
+  fn try_from(value: u8) -> Result<Self, Self::Error> {
+    Ok(match value {
+      0 => Self::Plain,
+      1 => Self::MultipleVersion,
+      _ => return Err(crate::error::UnknownKind(value)),
+    })
+  }
+}
+
 bitflags::bitflags! {
   /// The flags for each entry.
   #[derive(Debug, Copy, Clone)]
@@ -28,6 +56,7 @@ impl EntryFlags {
   pub(crate) const SIZE: usize = core::mem::size_of::<Self>();
 }
 
+#[derive(Debug)]
 pub(crate) struct EncodedEntryMeta {
   pub(crate) packed_kvlen_size: usize,
   pub(crate) packed_kvlen: u64,

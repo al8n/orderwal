@@ -24,8 +24,9 @@ use super::{
   error::Error,
   memtable::{BaseTable, Memtable, MultipleVersionMemtable},
   options::Options,
-  types::{BufWriter, EncodedEntryMeta, EntryFlags},
-  Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, RECORD_FLAG_SIZE, VERSION_SIZE,
+  types::{BufWriter, EncodedEntryMeta, EntryFlags, Kind},
+  Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
+  WAL_KIND_SIZE,
 };
 
 /// A marker trait which indicates that such pointer has a version.
@@ -716,11 +717,13 @@ pub trait Wal<S> {
             } else {
               EntryFlags::REMOVED
             };
-            buf.put_u8_unchecked(entry_flag.bits());
 
             if let Some(version) = version {
-              buf.put_u64_le_unchecked(version);
               entry_flag |= EntryFlags::VERSIONED;
+              buf.put_u8_unchecked(entry_flag.bits());
+              buf.put_u64_le_unchecked(version);
+            } else {
+              buf.put_u8_unchecked(entry_flag.bits());
             }
 
             let ko = encoded_entry_meta.key_offset();
@@ -1038,8 +1041,6 @@ pub trait Constructable: Sized {
 
   fn as_wal(&self) -> &Self::Wal;
 
-  // fn as_wal_mut(&mut self) -> &mut Self::Wal;
-
   fn new_in(
     arena: Self::Allocator,
     opts: Options,
@@ -1048,8 +1049,12 @@ pub trait Constructable: Sized {
   ) -> Result<Self::Wal, Error<Self::Memtable>> {
     unsafe {
       let slice = arena.reserved_slice_mut();
-      slice[0..6].copy_from_slice(&MAGIC_TEXT);
-      slice[6..8].copy_from_slice(&opts.magic_version().to_le_bytes());
+      let mut cursor = 0;
+      slice[0..MAGIC_TEXT_SIZE].copy_from_slice(&MAGIC_TEXT);
+      cursor += MAGIC_TEXT_SIZE;
+      slice[MAGIC_TEXT_SIZE] = <Self::Memtable as BaseTable>::kind() as u8;
+      cursor += WAL_KIND_SIZE;
+      slice[cursor..HEADER_SIZE].copy_from_slice(&opts.magic_version().to_le_bytes());
     }
 
     arena
@@ -1078,13 +1083,20 @@ pub trait Constructable: Sized {
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     let slice = arena.reserved_slice();
-    let magic_text = &slice[0..6];
-    let magic_version = u16::from_le_bytes(slice[6..8].try_into().unwrap());
-
+    let mut cursor = 0;
+    let magic_text = &slice[0..MAGIC_TEXT_SIZE];
     if magic_text != MAGIC_TEXT {
       return Err(Error::magic_text_mismatch());
     }
+    cursor += MAGIC_TEXT_SIZE;
+    let kind = Kind::try_from(slice[cursor])?;
+    let created_kind = <Self::Memtable as BaseTable>::kind();
+    if kind != created_kind {
+      return Err(Error::wal_kind_mismatch(kind, created_kind));
+    }
+    cursor += WAL_KIND_SIZE;
 
+    let magic_version = u16::from_le_bytes(slice[cursor..HEADER_SIZE].try_into().unwrap());
     if magic_version != opts.magic_version() {
       return Err(Error::magic_version_mismatch());
     }

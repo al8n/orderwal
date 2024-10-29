@@ -16,6 +16,17 @@ pub struct GenericOrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
   pub(super) core: Arc<OrderCore<K, V, M, S>>,
 }
 
+impl<K, V, M, S> core::fmt::Debug for GenericOrderWal<K, V, M, S>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
+  #[inline]
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_tuple("GenericOrderWal").field(&self.core).finish()
+  }
+}
+
 unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for GenericOrderWal<K, V, M, S> {}
 unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync
   for GenericOrderWal<K, V, M, S>

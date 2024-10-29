@@ -3,6 +3,7 @@ use dbutils::equivalent::Comparable;
 
 use crate::{
   sealed::{WithVersion, WithoutVersion},
+  types::Kind,
   wal::{KeyPointer, ValuePointer},
 };
 
@@ -94,6 +95,9 @@ pub trait BaseTable {
   fn remove(&self, version: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
   where
     KeyPointer<Self::Key>: Ord + 'static;
+
+  /// Returns the kind of the memtable.
+  fn kind() -> Kind;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.

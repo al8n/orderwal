@@ -17,6 +17,7 @@ use skl::{
 use crate::{
   memtable::{BaseEntry, BaseTable, Memtable, MemtableEntry},
   sealed::WithoutVersion,
+  types::Kind,
   wal::{KeyPointer, ValuePointer},
 };
 
@@ -136,6 +137,11 @@ where
       Err(Either::Left(_)) => unreachable!(),
       _ => Ok(()),
     }
+  }
+
+  #[inline]
+  fn kind() -> Kind {
+    Kind::Plain
   }
 }
 
