@@ -80,6 +80,7 @@ where
 {
   type Key = K;
   type Value = V;
+
   #[inline]
   fn next(&mut self) -> Option<Self> {
     VersionedEntry::next(self)

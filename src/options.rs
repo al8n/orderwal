@@ -1,4 +1,5 @@
 use rarena_allocator::{Freelist, Options as ArenaOptions};
+// use skl::Height;
 
 use super::{CURRENT_VERSION, HEADER_SIZE};
 
@@ -7,6 +8,7 @@ use super::{CURRENT_VERSION, HEADER_SIZE};
 pub struct Options {
   maximum_key_size: u32,
   maximum_value_size: u32,
+  // maximum_height: Height,
   sync: bool,
   magic_version: u16,
   cap: Option<u32>,
