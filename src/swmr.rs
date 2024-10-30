@@ -23,7 +23,8 @@ pub mod base {
 
   pub use crate::{
     memtable::arena::TableOptions as ArenaTableOptions,
-    wal::base::{Reader, Writer},
+    types::base::{Entry, Key, Value},
+    wal::base::{Iter, Keys, RangeKeys, RangeValues, Reader, Writer},
   };
 
   /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`linked::Table`](BaseLinkedTable).
@@ -67,7 +68,10 @@ pub mod multiple_version {
 
   pub use crate::{
     memtable::arena::TableOptions as ArenaTableOptions,
-    wal::multiple_version::{Reader, Writer},
+    types::multiple_version::{Entry, Key, MultipleVersionEntry, Value},
+    wal::multiple_version::{
+      Iter, Keys, MultipleVersionIter, MultipleVersionRange, RangeKeys, RangeValues, Reader, Writer,
+    },
   };
 
   /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`linked::MultipleVersionTable`](BaseLinkedTable).

@@ -7,8 +7,7 @@ ignore:
   - "**/benches/"
   - "src/error.rs"
   - "src/swmr/tests.rs"
-  - "src/swmr/tests/"
-  - "src/wal/type/"
+  - "src/swmr/tests/" 
 
 coverage:
   status:
