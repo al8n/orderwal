@@ -13,10 +13,11 @@ pub use among;
 #[cfg(feature = "std")]
 extern crate std;
 
-use dbutils::traits::{Type, TypeRef};
 pub use dbutils::{
   checksum::{self, Crc32},
-  Ascend, CheapClone, Comparator, Descend,
+  equivalent::{Comparable, Equivalent},
+  traits::{KeyRef, Type, TypeRef},
+  CheapClone,
 };
 
 #[cfg(feature = "xxhash3")]
@@ -63,8 +64,9 @@ pub use swmr::*;
 pub mod memtable;
 
 mod sealed;
-mod utils;
-use utils::*;
+
+/// The utilities functions.
+pub mod utils;
 
 bitflags::bitflags! {
   /// The flags for each atomic write.

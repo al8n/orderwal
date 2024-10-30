@@ -9,38 +9,35 @@ use rarena_allocator::{sync::Arena, Allocator};
 
 use std::sync::Arc;
 
-use super::{reader::GenericOrderWalReader, wal::OrderCore};
+use super::{reader::OrderWalReader, wal::OrderCore};
 
 /// A ordered write-ahead log implementation for concurrent thread environments.
-pub struct GenericOrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
+pub struct OrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
   pub(super) core: Arc<OrderCore<K, V, M, S>>,
 }
 
-impl<K, V, M, S> core::fmt::Debug for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> core::fmt::Debug for OrderWal<K, V, M, S>
 where
   K: ?Sized,
   V: ?Sized,
 {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_tuple("GenericOrderWal").field(&self.core).finish()
+    f.debug_tuple("OrderWal").field(&self.core).finish()
   }
 }
 
-unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for GenericOrderWal<K, V, M, S> {}
-unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync
-  for GenericOrderWal<K, V, M, S>
-{
-}
+unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for OrderWal<K, V, M, S> {}
+unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync for OrderWal<K, V, M, S> {}
 
-impl<K: ?Sized, V: ?Sized, P, S> GenericOrderWal<K, V, P, S> {
+impl<K: ?Sized, V: ?Sized, P, S> OrderWal<K, V, P, S> {
   #[inline]
   pub(super) const fn construct(core: Arc<OrderCore<K, V, P, S>>) -> Self {
     Self { core }
   }
 }
 
-impl<K, V, M, S> Constructable for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> Constructable for OrderWal<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
@@ -51,7 +48,7 @@ where
   type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
-  type Reader = GenericOrderWalReader<K, V, M, S>;
+  type Reader = OrderWalReader<K, V, M, S>;
 
   #[inline]
   fn as_wal(&self) -> &Self::Wal {
@@ -66,7 +63,7 @@ where
   }
 }
 
-impl<K, V, M, S> GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> OrderWal<K, V, M, S>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
@@ -78,10 +75,10 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWal, Builder};
+  /// use orderwal::{base::OrderWal, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = Builder::new().with_capacity(100).alloc::<GenericOrderWal<[u8], [u8]>>().unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal<[u8], [u8]>>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```
@@ -90,7 +87,7 @@ where
   }
 }
 
-impl<K, V, M, S> crate::wal::base::Writer for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> crate::wal::base::Writer for OrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
@@ -100,11 +97,11 @@ where
 {
   #[inline]
   fn reader(&self) -> Self::Reader {
-    GenericOrderWalReader::new(self.core.clone())
+    OrderWalReader::new(self.core.clone())
   }
 }
 
-impl<K, V, M, S> crate::wal::multiple_version::Writer for GenericOrderWal<K, V, M, S>
+impl<K, V, M, S> crate::wal::multiple_version::Writer for OrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
@@ -116,6 +113,6 @@ where
 {
   #[inline]
   fn reader(&self) -> Self::Reader {
-    GenericOrderWalReader::new(self.core.clone())
+    OrderWalReader::new(self.core.clone())
   }
 }

@@ -1,4 +1,4 @@
-use base::GenericOrderWal;
+use base::OrderWal;
 
 use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
@@ -12,7 +12,7 @@ use crate::{
 
 use super::*;
 
-fn first<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn first<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -40,7 +40,7 @@ where
   assert_eq!(ent.value(), v);
 }
 
-fn last<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn last<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -68,7 +68,7 @@ where
 }
 
 #[allow(clippy::needless_borrows_for_generic_args)]
-fn insert<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn insert<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -96,7 +96,7 @@ where
   }
 }
 
-fn insert_with_value_builder<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn insert_with_value_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -127,7 +127,7 @@ where
 }
 
 #[allow(clippy::needless_borrows_for_generic_args)]
-fn insert_with_key_builder<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn insert_with_key_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -159,7 +159,7 @@ where
   }
 }
 
-fn insert_with_bytes<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn insert_with_bytes<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -190,7 +190,7 @@ where
   }
 }
 
-fn insert_with_builders<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn insert_with_builders<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a> + std::fmt::Debug,
@@ -229,7 +229,7 @@ where
   }
 }
 
-expand_unit_tests!("linked": GenericOrderWalLinkedTable<Person, String> {
+expand_unit_tests!("linked": OrderWalLinkedTable<Person, String> {
   first,
   last,
   insert,
@@ -239,7 +239,7 @@ expand_unit_tests!("linked": GenericOrderWalLinkedTable<Person, String> {
   insert_with_builders,
 });
 
-expand_unit_tests!("arena": GenericOrderWalArenaTable<Person, String> {
+expand_unit_tests!("arena": OrderWalArenaTable<Person, String> {
   first,
   last,
   insert,

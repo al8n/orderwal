@@ -1,13 +1,13 @@
 use core::ops::Bound;
 use std::collections::BTreeMap;
 
-use base::{GenericOrderWal, Reader, Writer};
+use base::{OrderWal, Reader, Writer};
 
 use crate::memtable::{Memtable, MemtableEntry};
 
 use super::*;
 
-fn iter<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn iter<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -47,7 +47,7 @@ where
   }
 }
 
-fn bounds<M>(wal: &mut GenericOrderWal<u32, u32, M>)
+fn bounds<M>(wal: &mut OrderWal<u32, u32, M>)
 where
   M: Memtable<Key = u32, Value = u32> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -187,7 +187,7 @@ where
   assert_eq!(lower_unbounded.value(), &0u32);
 }
 
-fn range<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn range<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -232,7 +232,7 @@ where
   }
 }
 
-fn entry_iter<M>(wal: &mut GenericOrderWal<u32, u32, M>)
+fn entry_iter<M>(wal: &mut OrderWal<u32, u32, M>)
 where
   M: Memtable<Key = u32, Value = u32> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -263,22 +263,22 @@ where
   }
 }
 
-expand_unit_tests!("linked": GenericOrderWalLinkedTable<u32, u32> {
+expand_unit_tests!("linked": OrderWalLinkedTable<u32, u32> {
   bounds,
   entry_iter,
 });
 
-expand_unit_tests!("arena": GenericOrderWalArenaTable<u32, u32> {
+expand_unit_tests!("arena": OrderWalArenaTable<u32, u32> {
   bounds,
   entry_iter,
 });
 
-expand_unit_tests!("linked": GenericOrderWalLinkedTable<Person, String> {
+expand_unit_tests!("linked": OrderWalLinkedTable<Person, String> {
   range,
   iter,
 });
 
-expand_unit_tests!("arena": GenericOrderWalArenaTable<Person, String> {
+expand_unit_tests!("arena": OrderWalArenaTable<Person, String> {
   range,
   iter,
 });

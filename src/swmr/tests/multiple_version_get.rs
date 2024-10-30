@@ -5,7 +5,7 @@ use multiple_version::{Reader, Writer};
 
 use super::*;
 
-expand_unit_tests!("linked": MultipleVersionGenericOrderWalLinkedTable<str, str> {
+expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<str, str> {
   mvcc,
   gt,
   ge,
@@ -13,7 +13,7 @@ expand_unit_tests!("linked": MultipleVersionGenericOrderWalLinkedTable<str, str>
   lt,
 });
 
-expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<str, str> {
+expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<str, str> {
   mvcc,
   gt,
   ge,
@@ -21,7 +21,7 @@ expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<str, str> {
   lt,
 });
 
-fn mvcc<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+fn mvcc<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
@@ -81,7 +81,7 @@ where
   assert!(wal.get(5, "d").is_none());
 }
 
-fn gt<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+fn gt<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
@@ -165,7 +165,7 @@ where
   assert!(wal.lower_bound(6, Bound::Excluded("c")).is_none());
 }
 
-fn ge<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+fn ge<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
@@ -247,7 +247,7 @@ where
   assert!(wal.lower_bound(4, Bound::Included("d")).is_none());
 }
 
-fn le<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+fn le<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
@@ -343,7 +343,7 @@ where
   assert_eq!(ent.version(), 3);
 }
 
-fn lt<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+fn lt<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,

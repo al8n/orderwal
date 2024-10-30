@@ -26,10 +26,10 @@ pub mod base {
     wal::base::{Reader, Writer},
   };
 
-  /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`linked::Table`](BaseLinkedTable).
+  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`linked::Table`](BaseLinkedTable).
   pub type LinkedTable<K, V> = BaseLinkedTable<K, V>;
 
-  /// An memory table for [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`arena::Table`](BaseArenaTable).
+  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`arena::Table`](BaseArenaTable).
   pub type ArenaTable<K, V> = BaseArenaTable<K, V>;
 
   /// A generic ordered write-ahead log implementation for multiple threads environments.
@@ -49,12 +49,11 @@ pub mod base {
   /// |         ...          |            ...          |         ...        |          ...        |        ...      |         ...        |
   /// +----------------------+-------------------------+--------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type GenericOrderWal<K, V, M = LinkedTable<K, V>, S = Crc32> =
-    writer::GenericOrderWal<K, V, M, S>;
+  pub type OrderWal<K, V, M = LinkedTable<K, V>, S = Crc32> = writer::OrderWal<K, V, M, S>;
 
-  /// Immutable reader for the generic ordered write-ahead log [`GenericOrderWal`].
-  pub type GenericOrderWalReader<K, V, M = LinkedTable<K, V>, S = Crc32> =
-    reader::GenericOrderWalReader<K, V, M, S>;
+  /// Immutable reader for the generic ordered write-ahead log [`OrderWal`].
+  pub type OrderWalReader<K, V, M = LinkedTable<K, V>, S = Crc32> =
+    reader::OrderWalReader<K, V, M, S>;
 }
 
 /// A multiple version ordered write-ahead log implementation for multiple threads environments.
@@ -71,10 +70,10 @@ pub mod multiple_version {
     wal::multiple_version::{Reader, Writer},
   };
 
-  /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`linked::MultipleVersionTable`](BaseLinkedTable).
+  /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`linked::MultipleVersionTable`](BaseLinkedTable).
   pub type LinkedTable<K, V> = BaseLinkedTable<K, V>;
 
-  /// An memory table for multiple version [`GenericOrderWal`] or [`GenericOrderWalReader`] based on [`arena::MultipleVersionTable`](BaseArenaTable).
+  /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`arena::MultipleVersionTable`](BaseArenaTable).
   pub type ArenaTable<K, V> = BaseArenaTable<K, V>;
 
   /// A multiple versioned generic ordered write-ahead log implementation for multiple threads environments.
@@ -92,10 +91,9 @@ pub mod multiple_version {
   /// |         ...          |            ...          |         ...        |          ...        |        ...          |         ...     |        ,,,         |
   /// +----------------------+-------------------------+--------------------+---------------------+---------------------+-----------------+--------------------+
   /// ```
-  pub type GenericOrderWal<K, V, M = LinkedTable<K, V>, S = Crc32> =
-    writer::GenericOrderWal<K, V, M, S>;
+  pub type OrderWal<K, V, M = LinkedTable<K, V>, S = Crc32> = writer::OrderWal<K, V, M, S>;
 
-  /// Immutable reader for the multiple versioned generic ordered write-ahead log [`GenericOrderWal`].
-  pub type GenericOrderWalReader<K, V, M = LinkedTable<K, V>, S = Crc32> =
-    reader::GenericOrderWalReader<K, V, M, S>;
+  /// Immutable reader for the multiple versioned generic ordered write-ahead log [`OrderWal`].
+  pub type OrderWalReader<K, V, M = LinkedTable<K, V>, S = Crc32> =
+    reader::OrderWalReader<K, V, M, S>;
 }

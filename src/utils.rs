@@ -1,3 +1,5 @@
+pub use dbutils::leb128;
+
 /// Merge two `u32` into a `u64`.
 ///
 /// - high 32 bits: `a`

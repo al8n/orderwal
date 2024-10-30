@@ -787,11 +787,11 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWal, Builder};
+  /// use orderwal::{base::OrderWal, Builder};
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .alloc::<GenericOrderWal<[u8], [u8]>>()
+  ///   .alloc::<OrderWal<[u8], [u8]>>()
   ///   .unwrap();
   /// ```
   pub fn alloc<W>(self) -> Result<W, Error<W::Memtable>>
@@ -815,11 +815,11 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWal, Builder};
+  /// use orderwal::{base::OrderWal, Builder};
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .map_anon::<GenericOrderWal<[u8], [u8]>>()
+  ///   .map_anon::<OrderWal<[u8], [u8]>>()
   ///   .unwrap();
   /// ```
   pub fn map_anon<W>(self) -> Result<W, Error<W::Memtable>>
@@ -851,7 +851,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWalReader, Builder};
+  /// use orderwal::{base::OrderWalReader, Builder};
   ///
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir.path().join("map.wal");
@@ -859,13 +859,13 @@ where
   /// # let wal = unsafe {
   /// #  Builder::new()
   /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<orderwal::base::GenericOrderWal<[u8], [u8]>, _>(&path)
+  /// #  .map_mut::<orderwal::base::OrderWal<[u8], [u8]>, _>(&path)
   /// #  .unwrap()
   /// # };
   ///
   /// let wal = unsafe {
   ///   Builder::new()
-  ///     .map::<GenericOrderWalReader<[u8], [u8]>, _>(&path)
+  ///     .map::<OrderWalReader<[u8], [u8]>, _>(&path)
   ///     .unwrap()
   /// };
   pub unsafe fn map<'a, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
@@ -894,7 +894,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWalReader, Builder};
+  /// use orderwal::{base::OrderWalReader, Builder};
   ///
   /// # let dir = tempfile::tempdir().unwrap();
   /// # let path = dir.path().join("map_with_path_builder.wal");
@@ -902,13 +902,13 @@ where
   /// # let wal = unsafe {
   /// #  Builder::new()
   /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<orderwal::base::GenericOrderWal<[u8], [u8]>, _>(&path)
+  /// #  .map_mut::<orderwal::base::OrderWal<[u8], [u8]>, _>(&path)
   /// #  .unwrap()
   /// # };
   ///
   /// let wal = unsafe {
   ///   Builder::new()
-  ///     .map_with_path_builder::<GenericOrderWalReader<[u8], [u8]>, _, ()>(|| Ok(path))
+  ///     .map_with_path_builder::<OrderWalReader<[u8], [u8]>, _, ()>(|| Ok(path))
   ///     .unwrap()
   /// };
   pub unsafe fn map_with_path_builder<'a, W, PB, E>(
@@ -953,7 +953,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWal, Builder};
+  /// use orderwal::{base::OrderWal, Builder};
   ///
   /// let dir = tempfile::tempdir().unwrap();
   /// let path = dir.path().join("map_mut_with_path_builder_example.wal");
@@ -964,7 +964,7 @@ where
   ///     .with_read(true)
   ///     .with_write(true)
   ///     .with_capacity(1000)
-  ///     .map_mut::<GenericOrderWal<[u8], [u8]>, _>(&path)
+  ///     .map_mut::<OrderWal<[u8], [u8]>, _>(&path)
   ///     .unwrap()
   /// };
   /// ```
@@ -994,7 +994,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::GenericOrderWal, Builder};
+  /// use orderwal::{base::OrderWal, Builder};
   ///
   /// let dir = tempfile::tempdir().unwrap();
   ///  
@@ -1004,7 +1004,7 @@ where
   ///     .with_read(true)
   ///     .with_write(true)
   ///     .with_capacity(1000)
-  ///     .map_mut_with_path_builder::<GenericOrderWal<[u8], [u8]>, _, ()>(
+  ///     .map_mut_with_path_builder::<OrderWal<[u8], [u8]>, _, ()>(
   ///       || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
   ///     )
   ///     .unwrap()

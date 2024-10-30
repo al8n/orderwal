@@ -23,7 +23,7 @@ use crate::{
   Options,
 };
 
-use super::{GenericQueryRange, Query, Slice};
+use super::{Query, QueryRange, Slice};
 
 mod iter;
 pub use iter::*;
@@ -142,7 +142,7 @@ pub trait Reader: Constructable {
   {
     Range::new(BaseIter::new(
       version,
-      self.as_wal().range(version, GenericQueryRange::new(range)),
+      self.as_wal().range(version, QueryRange::new(range)),
     ))
   }
 
@@ -169,7 +169,7 @@ pub trait Reader: Constructable {
       version,
       self
         .as_wal()
-        .range_all_versions(version, GenericQueryRange::new(range)),
+        .range_all_versions(version, QueryRange::new(range)),
     ))
   }
 
@@ -217,7 +217,7 @@ pub trait Reader: Constructable {
   {
     RangeKeys::new(BaseIter::new(
       version,
-      self.as_wal().range(version, GenericQueryRange::new(range)),
+      self.as_wal().range(version, QueryRange::new(range)),
     ))
   }
 
@@ -265,7 +265,7 @@ pub trait Reader: Constructable {
   {
     RangeValues::new(BaseIter::new(
       version,
-      self.as_wal().range(version, GenericQueryRange::new(range)),
+      self.as_wal().range(version, QueryRange::new(range)),
     ))
   }
 

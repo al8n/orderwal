@@ -39,7 +39,7 @@ where
   }
 }
 
-pub struct GenericQueryRange<'a, K: ?Sized, Q: ?Sized, R>
+pub struct QueryRange<'a, K: ?Sized, Q: ?Sized, R>
 where
   R: RangeBounds<Q>,
 {
@@ -47,7 +47,7 @@ where
   _q: PhantomData<(&'a Q, &'a K)>,
 }
 
-impl<K: ?Sized, Q: ?Sized, R> GenericQueryRange<'_, K, Q, R>
+impl<K: ?Sized, Q: ?Sized, R> QueryRange<'_, K, Q, R>
 where
   R: RangeBounds<Q>,
 {
@@ -57,7 +57,7 @@ where
   }
 }
 
-impl<'a, K: ?Sized, Q: ?Sized, R> RangeBounds<Query<'a, K, Q>> for GenericQueryRange<'a, K, Q, R>
+impl<'a, K: ?Sized, Q: ?Sized, R> RangeBounds<Query<'a, K, Q>> for QueryRange<'a, K, Q, R>
 where
   R: RangeBounds<Q>,
 {

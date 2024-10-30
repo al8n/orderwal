@@ -3,15 +3,15 @@ use multiple_version::{Reader, Writer};
 
 use super::*;
 
-expand_unit_tests!("linked": MultipleVersionGenericOrderWalLinkedTable<str, str> {
+expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<str, str> {
   iter_all_versions_mvcc,
 });
 
-expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<str, str> {
+expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<str, str> {
   iter_all_versions_mvcc,
 });
 
-expand_unit_tests!("linked": MultipleVersionGenericOrderWalLinkedTable<String, String> {
+expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<String, String> {
   iter_all_versions_next,
   iter_all_versions_next_by_entry,
   iter_all_versions_next_by_versioned_entry,
@@ -30,7 +30,7 @@ macro_rules! arena_builder {
   }};
 }
 
-expand_unit_tests!("arena": MultipleVersionGenericOrderWalArenaTable<String, String> {
+expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<String, String> {
   iter_all_versions_next(arena_builder!()),
   iter_all_versions_next_by_entry(arena_builder!()),
   iter_all_versions_next_by_versioned_entry(arena_builder!()),
@@ -49,7 +49,7 @@ fn make_value(i: usize) -> String {
   ::std::format!("v{:05}", i)
 }
 
-fn iter_all_versions_mvcc<M>(wal: &mut multiple_version::GenericOrderWal<str, str, M>)
+fn iter_all_versions_mvcc<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
@@ -89,7 +89,7 @@ where
   assert_eq!(num, 4);
 }
 
-fn iter_all_versions_next<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+fn iter_all_versions_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -113,9 +113,8 @@ where
   assert_eq!(i, N);
 }
 
-fn iter_all_versions_next_by_entry<M>(
-  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
-) where
+fn iter_all_versions_next_by_entry<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
@@ -139,7 +138,7 @@ fn iter_all_versions_next_by_entry<M>(
 }
 
 fn iter_all_versions_next_by_versioned_entry<M>(
-  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
+  wal: &mut multiple_version::OrderWal<String, String, M>,
 ) where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -185,7 +184,7 @@ fn iter_all_versions_next_by_versioned_entry<M>(
   assert!(ent.is_none());
 }
 
-fn range_next<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+fn range_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -209,7 +208,7 @@ where
   assert_eq!(i, 51);
 }
 
-fn iter_all_versions_prev<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+fn iter_all_versions_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -232,9 +231,8 @@ where
   assert_eq!(i, 0);
 }
 
-fn iter_all_versions_prev_by_entry<M>(
-  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
-) where
+fn iter_all_versions_prev_by_entry<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
@@ -258,7 +256,7 @@ fn iter_all_versions_prev_by_entry<M>(
 }
 
 fn iter_all_versions_prev_by_versioned_entry<M>(
-  wal: &mut multiple_version::GenericOrderWal<String, String, M>,
+  wal: &mut multiple_version::OrderWal<String, String, M>,
 ) where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -306,7 +304,7 @@ fn iter_all_versions_prev_by_versioned_entry<M>(
   assert!(ent.is_none());
 }
 
-fn range_prev<M>(wal: &mut multiple_version::GenericOrderWal<String, String, M>)
+fn range_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,

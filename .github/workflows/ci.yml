@@ -238,18 +238,14 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         cfg:
-          - unsync_insert
-          - unsync_iters
-          - unsync_get
-          - unsync_constructor
           - swmr_insert
           - swmr_iters
           - swmr_get
           - swmr_constructor
-          - swmr_insert
-          - swmr_iters
-          - swmr_get
-          - swmr_constructor
+          - swmr_multiple_version_insert
+          - swmr_multiple_version_iters
+          - swmr_multiple_version_get
+          - swmr_multiple_version_constructor
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest

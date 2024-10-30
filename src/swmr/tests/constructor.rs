@@ -4,7 +4,7 @@ use crate::memtable::{Memtable, MemtableEntry};
 
 use super::*;
 
-fn zero_reserved<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn zero_reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -19,7 +19,7 @@ where
   }
 }
 
-fn reserved<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -37,13 +37,13 @@ where
 }
 
 expand_unit_tests!(
-  "linked": GenericOrderWal<Person, String, LinkedTable<Person, String>> {
+  "linked": OrderWal<Person, String, LinkedTable<Person, String>> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "linked": GenericOrderWal<Person, String, LinkedTable<Person, String>> {
+  "linked": OrderWal<Person, String, LinkedTable<Person, String>> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -53,13 +53,13 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  "arena": GenericOrderWal<Person, String, ArenaTable<Person, String>> {
+  "arena": OrderWal<Person, String, ArenaTable<Person, String>> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "arena": GenericOrderWal<Person, String, ArenaTable<Person, String>> {
+  "arena": OrderWal<Person, String, ArenaTable<Person, String>> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)

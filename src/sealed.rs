@@ -15,7 +15,7 @@ use skl::KeySize;
 
 use crate::{
   memtable::{MemtableEntry, MultipleVersionMemtableEntry},
-  merge_lengths, split_lengths,
+  utils::{merge_lengths, split_lengths},
   wal::{KeyPointer, ValuePointer},
 };
 

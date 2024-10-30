@@ -1,10 +1,10 @@
 use dbutils::leb128::encoded_u64_varint_len;
 pub use dbutils::{
-  buffer::{BufWriter, BufWriterOnce},
+  buffer::{BufWriter, BufWriterOnce, VacantBuffer},
   traits::MaybeStructured,
 };
 
-use crate::{merge_lengths, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
+use crate::{utils::merge_lengths, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
 
 pub(crate) mod base;
 pub(crate) mod multiple_version;

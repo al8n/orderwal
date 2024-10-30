@@ -10,7 +10,7 @@
 
 FEATURES
 
-- Support `K: ?Sized` and `V: ?Sized` for `GenericOrderWal`.
+- Support `K: ?Sized` and `V: ?Sized` for `OrderWal`.
 - Use `flush_header_and_range` instead of `flush_range` when insertion.
 
 ## 0.1.0 (Sep 14th, 2024)

@@ -8,7 +8,7 @@ use crate::{
 
 use dbutils::{equivalent::Comparable, traits::Type};
 
-use super::{GenericQueryRange, Query};
+use super::{Query, QueryRange};
 
 /// Iterator over the entries in the WAL.
 pub struct BaseIter<'a, I, M>
@@ -259,7 +259,7 @@ where
   B::Key: Type + Ord,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
-  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
+  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
 }
 
 impl<'a, R, Q, B> Range<'a, R, Q, B>
@@ -272,7 +272,7 @@ where
 {
   #[inline]
   pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
+    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
   ) -> Self {
     Self { iter }
   }
@@ -285,8 +285,7 @@ where
   B: Memtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
-    Iterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   type Item = Entry<'a, B::Item<'a>>;
@@ -304,7 +303,7 @@ where
   B: Memtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
@@ -321,7 +320,7 @@ where
   B: Memtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
@@ -336,7 +335,7 @@ where
   B::Key: Type + Ord,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
-  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
+  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
 }
 
 impl<'a, R, Q, B> RangeKeys<'a, R, Q, B>
@@ -349,7 +348,7 @@ where
 {
   #[inline]
   pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
+    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
   ) -> Self {
     Self { iter }
   }
@@ -361,8 +360,7 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: Memtable + 'a,
   B::Key: Type + Ord,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
-    Iterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   type Item = Key<'a, B::Item<'a>>;
@@ -379,7 +377,7 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: Memtable + 'a,
   B::Key: Type + Ord,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
@@ -395,7 +393,7 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: Memtable + 'a,
   B::Key: Type + Ord,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
@@ -410,7 +408,7 @@ where
   B::Key: Type + Ord,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
-  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
+  iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
 }
 
 impl<'a, R, Q, B> RangeValues<'a, R, Q, B>
@@ -423,7 +421,7 @@ where
 {
   #[inline]
   pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>, B>,
+    iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
   ) -> Self {
     Self { iter }
   }
@@ -436,8 +434,7 @@ where
   B: Memtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
-    Iterator<Item = B::Item<'a>>,
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   type Item = Value<'a, B::Item<'a>>;
@@ -455,7 +452,7 @@ where
   B: Memtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
@@ -472,7 +469,7 @@ where
   B: Memtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::Range<'a, Query<'a, B::Key, Q>, GenericQueryRange<'a, B::Key, Q, R>>:
+  B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {

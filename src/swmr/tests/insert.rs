@@ -10,7 +10,7 @@ use crate::{
 
 use super::*;
 
-fn concurrent_basic<M>(mut w: GenericOrderWal<u32, [u8; 4], M>)
+fn concurrent_basic<M>(mut w: OrderWal<u32, [u8; 4], M>)
 where
   M: Memtable<Key = u32, Value = [u8; 4]> + Send + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -40,7 +40,7 @@ where
   }
 }
 
-fn concurrent_one_key<M>(mut w: GenericOrderWal<u32, [u8; 4], M>)
+fn concurrent_one_key<M>(mut w: OrderWal<u32, [u8; 4], M>)
 where
   M: Memtable<Key = u32, Value = [u8; 4]> + Send + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -64,9 +64,7 @@ where
   }
 }
 
-fn insert_batch<M>(
-  mut wal: GenericOrderWal<Person, String, M>,
-) -> (Person, Vec<(Person, String)>, Person)
+fn insert_batch<M>(mut wal: OrderWal<Person, String, M>) -> (Person, Vec<(Person, String)>, Person)
 where
   M: Memtable<Key = Person, Value = String> + Send + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -121,7 +119,7 @@ where
 }
 
 fn insert_batch_with_key_builder<M>(
-  mut wal: GenericOrderWal<Person, String, M>,
+  mut wal: OrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: Memtable<Key = Person, Value = String> + Send + 'static,
@@ -180,7 +178,7 @@ where
 }
 
 fn insert_batch_with_value_builder<M>(
-  mut wal: GenericOrderWal<Person, String, M>,
+  mut wal: OrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: Memtable<Key = Person, Value = String> + Send + 'static,
@@ -238,7 +236,7 @@ where
 }
 
 fn insert_batch_with_builders<M>(
-  mut wal: GenericOrderWal<Person, String, M>,
+  mut wal: OrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: Memtable<Key = Person, Value = String> + Send + 'static,
@@ -299,27 +297,27 @@ where
 }
 
 expand_unit_tests!(
-  move "linked": GenericOrderWalLinkedTable<u32, [u8; 4]> {
+  move "linked": OrderWalLinkedTable<u32, [u8; 4]> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(&i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(&1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "linked": GenericOrderWalLinkedTable<Person, String> {
+  move "linked": OrderWalLinkedTable<Person, String> {
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -332,7 +330,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -345,7 +343,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -358,7 +356,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -372,27 +370,27 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  move "arena": GenericOrderWalArenaTable<u32, [u8; 4]> {
+  move "arena": OrderWalArenaTable<u32, [u8; 4]> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(&i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<GenericOrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(&1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "arena": GenericOrderWalArenaTable<Person, String> {
+  move "arena": OrderWalArenaTable<Person, String> {
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -405,7 +403,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -418,7 +416,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -431,7 +429,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<GenericOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
           .unwrap()
       };
 

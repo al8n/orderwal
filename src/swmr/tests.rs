@@ -1,7 +1,7 @@
 use core::cmp;
 use std::thread::spawn;
 
-use base::{ArenaTable, GenericOrderWal, GenericOrderWalReader, LinkedTable};
+use base::{ArenaTable, LinkedTable, OrderWal, OrderWalReader};
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
@@ -134,19 +134,19 @@ macro_rules! expand_unit_tests {
   };
 }
 
-type GenericOrderWalLinkedTable<K, V> = GenericOrderWal<K, V, LinkedTable<K, V>>;
-type GenericOrderWalArenaTable<K, V> = GenericOrderWal<K, V, ArenaTable<K, V>>;
-type GenericOrderWalReaderLinkedTable<K, V> = GenericOrderWalReader<K, V, LinkedTable<K, V>>;
-type GenericOrderWalReaderArenaTable<K, V> = GenericOrderWalReader<K, V, ArenaTable<K, V>>;
+type OrderWalLinkedTable<K, V> = OrderWal<K, V, LinkedTable<K, V>>;
+type OrderWalArenaTable<K, V> = OrderWal<K, V, ArenaTable<K, V>>;
+type OrderWalReaderLinkedTable<K, V> = OrderWalReader<K, V, LinkedTable<K, V>>;
+type OrderWalReaderArenaTable<K, V> = OrderWalReader<K, V, ArenaTable<K, V>>;
 
-type MultipleVersionGenericOrderWalLinkedTable<K, V> =
-  multiple_version::GenericOrderWal<K, V, multiple_version::LinkedTable<K, V>>;
-type MultipleVersionGenericOrderWalArenaTable<K, V> =
-  multiple_version::GenericOrderWal<K, V, multiple_version::ArenaTable<K, V>>;
-type MultipleVersionGenericOrderWalReaderLinkedTable<K, V> =
-  multiple_version::GenericOrderWalReader<K, V, multiple_version::LinkedTable<K, V>>;
-type MultipleVersionGenericOrderWalReaderArenaTable<K, V> =
-  multiple_version::GenericOrderWalReader<K, V, multiple_version::ArenaTable<K, V>>;
+type MultipleVersionOrderWalLinkedTable<K, V> =
+  multiple_version::OrderWal<K, V, multiple_version::LinkedTable<K, V>>;
+type MultipleVersionOrderWalArenaTable<K, V> =
+  multiple_version::OrderWal<K, V, multiple_version::ArenaTable<K, V>>;
+type MultipleVersionOrderWalReaderLinkedTable<K, V> =
+  multiple_version::OrderWalReader<K, V, multiple_version::LinkedTable<K, V>>;
+type MultipleVersionOrderWalReaderArenaTable<K, V> =
+  multiple_version::OrderWalReader<K, V, multiple_version::ArenaTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

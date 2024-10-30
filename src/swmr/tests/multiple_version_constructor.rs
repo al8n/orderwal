@@ -1,10 +1,10 @@
-use multiple_version::{GenericOrderWal, Reader, Writer};
+use multiple_version::{OrderWal, Reader, Writer};
 
 use crate::memtable::{MultipleVersionMemtable, MultipleVersionMemtableEntry};
 
 use super::*;
 
-fn zero_reserved<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn zero_reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -19,7 +19,7 @@ where
   }
 }
 
-fn reserved<M>(wal: &mut GenericOrderWal<Person, String, M>)
+fn reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -37,13 +37,13 @@ where
 }
 
 expand_unit_tests!(
-  "linked": MultipleVersionGenericOrderWalLinkedTable<Person, String> {
+  "linked": MultipleVersionOrderWalLinkedTable<Person, String> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "linked": MultipleVersionGenericOrderWalLinkedTable<Person, String> {
+  "linked": MultipleVersionOrderWalLinkedTable<Person, String> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -53,13 +53,13 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  "arena": MultipleVersionGenericOrderWalArenaTable<Person, String> {
+  "arena": MultipleVersionOrderWalArenaTable<Person, String> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "arena": MultipleVersionGenericOrderWalArenaTable<Person, String> {
+  "arena": MultipleVersionOrderWalArenaTable<Person, String> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -81,7 +81,7 @@ fn reopen_wrong_kind() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<GenericOrderWal<Person, String>, _>(path.as_path())
+      .map_mut::<OrderWal<Person, String>, _>(path.as_path())
       .unwrap()
   };
 
@@ -89,7 +89,7 @@ fn reopen_wrong_kind() {
     Builder::new()
       .with_capacity(MB)
       .with_read(true)
-      .map_mut::<crate::base::GenericOrderWal<Person, String>, _>(path.as_path())
+      .map_mut::<crate::base::OrderWal<Person, String>, _>(path.as_path())
       .unwrap_err()
   };
   assert!(matches!(err, crate::error::Error::KindMismatch { .. }));

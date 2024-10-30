@@ -20,7 +20,7 @@ use crate::{
   Options,
 };
 
-use super::{GenericQueryRange, Query, Slice};
+use super::{Query, QueryRange, Slice};
 
 mod iter;
 pub use iter::*;
@@ -129,9 +129,7 @@ pub trait Reader: Constructable {
     <Self::Memtable as BaseTable>::Key: Type + Ord,
     <Self::Memtable as BaseTable>::Value: Type,
   {
-    Range::new(BaseIter::new(
-      self.as_wal().range(GenericQueryRange::new(range)),
-    ))
+    Range::new(BaseIter::new(self.as_wal().range(QueryRange::new(range))))
   }
 
   /// Returns an iterator over the keys in the WAL.
@@ -168,7 +166,7 @@ pub trait Reader: Constructable {
   {
     RangeKeys::new(BaseIter::new(WalReader::range(
       self.as_wal(),
-      GenericQueryRange::new(range),
+      QueryRange::new(range),
     )))
   }
 
@@ -204,9 +202,7 @@ pub trait Reader: Constructable {
     <Self::Memtable as BaseTable>::Value: Type,
     for<'b> <Self::Memtable as BaseTable>::Item<'b>: MemtableEntry<'b>,
   {
-    RangeValues::new(BaseIter::new(
-      self.as_wal().range(GenericQueryRange::new(range)),
-    ))
+    RangeValues::new(BaseIter::new(self.as_wal().range(QueryRange::new(range))))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
