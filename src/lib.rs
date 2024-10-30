@@ -17,7 +17,6 @@ pub use dbutils::{
   checksum::{self, Crc32},
   equivalent::{Comparable, Equivalent},
   traits::{KeyRef, Type, TypeRef},
-  CheapClone,
 };
 
 #[cfg(feature = "xxhash3")]

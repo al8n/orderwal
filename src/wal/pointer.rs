@@ -4,7 +4,6 @@ use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
   traits::{KeyRef, Type, TypeRef},
-  CheapClone,
 };
 
 use crate::types::EntryFlags;
@@ -39,12 +38,6 @@ impl<V: ?Sized> Clone for ValuePointer<V> {
 
 impl<V: ?Sized> Copy for ValuePointer<V> {}
 
-impl<V: ?Sized> CheapClone for ValuePointer<V> {
-  #[inline]
-  fn cheap_clone(&self) -> Self {
-    *self
-  }
-}
 
 impl<V: ?Sized> ValuePointer<V> {
   #[inline]
@@ -135,13 +128,6 @@ impl<K: ?Sized> Clone for KeyPointer<K> {
 }
 
 impl<K: ?Sized> Copy for KeyPointer<K> {}
-
-impl<K: ?Sized> CheapClone for KeyPointer<K> {
-  #[inline]
-  fn cheap_clone(&self) -> Self {
-    *self
-  }
-}
 
 impl<K: ?Sized> KeyPointer<K> {
   #[inline]
