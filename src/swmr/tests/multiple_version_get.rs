@@ -1,11 +1,14 @@
 use core::ops::Bound;
 
-use crate::memtable::{MultipleVersionMemtable, MultipleVersionMemtableEntry};
+use crate::memtable::{
+  alternative::{MultipleVersionTable, TableOptions},
+  MultipleVersionMemtable, MultipleVersionMemtableEntry,
+};
 use multiple_version::{Reader, Writer};
 
 use super::*;
 
-expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<str, str> {
+expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<str, str> [TableOptions::Linked]: MultipleVersionTable<_, _> {
   mvcc,
   gt,
   ge,
@@ -13,7 +16,7 @@ expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<str, str> {
   lt,
 });
 
-expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<str, str> {
+expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<str, str> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
   mvcc,
   gt,
   ge,

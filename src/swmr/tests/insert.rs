@@ -3,7 +3,10 @@ use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 
 use crate::{
   batch::BatchEntry,
-  memtable::{Memtable, MemtableEntry},
+  memtable::{
+    alternative::{Table, TableOptions},
+    Memtable, MemtableEntry,
+  },
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -297,27 +300,27 @@ where
 }
 
 expand_unit_tests!(
-  move "linked": OrderWalLinkedTable<u32, [u8; 4]> {
+  move "linked": OrderWalAlternativeTable<u32, [u8; 4]> [TableOptions::Linked]: Table<_, _> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<OrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(&i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<OrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(&1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "linked": OrderWalLinkedTable<Person, String> {
+  move "linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -330,7 +333,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -343,7 +346,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -356,7 +359,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -370,27 +373,27 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  move "arena": OrderWalArenaTable<u32, [u8; 4]> {
+  move "arena": OrderWalAlternativeTable<u32, [u8; 4]> [TableOptions::Arena(Default::default())]: Table<_, _> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<OrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(&i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<OrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(&1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "arena": OrderWalArenaTable<Person, String> {
+  move "arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -403,7 +406,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -416,7 +419,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -429,7 +432,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 

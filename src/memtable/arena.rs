@@ -26,11 +26,11 @@ impl Default for TableOptions {
 impl TableOptions {
   /// Creates a new instance of `TableOptions` with the default options.
   #[inline]
-  pub fn new() -> Self {
+  pub const fn new() -> Self {
     Self {
       capacity: 8192,
       map_anon: false,
-      max_height: Height::try_from(20u8).unwrap(),
+      max_height: Height::new(),
     }
   }
 
@@ -51,6 +51,8 @@ impl TableOptions {
   }
 
   /// Sets the maximum height of the table.
+  /// 
+  /// Default is `20`.
   #[inline]
   pub const fn with_max_height(mut self, max_height: Height) -> Self {
     self.max_height = max_height;

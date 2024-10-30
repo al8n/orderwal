@@ -1,6 +1,9 @@
 use base::{Reader, Writer};
 
-use crate::memtable::{Memtable, MemtableEntry};
+use crate::memtable::{
+  alternative::{Table, TableOptions},
+  Memtable, MemtableEntry,
+};
 
 use super::*;
 
@@ -37,13 +40,13 @@ where
 }
 
 expand_unit_tests!(
-  "linked": OrderWal<Person, String, LinkedTable<Person, String>> {
+  "linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "linked": OrderWal<Person, String, LinkedTable<Person, String>> {
+  "linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -53,13 +56,13 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  "arena": OrderWal<Person, String, ArenaTable<Person, String>> {
+  "arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "arena": OrderWal<Person, String, ArenaTable<Person, String>> {
+  "arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)

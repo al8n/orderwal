@@ -1,7 +1,7 @@
 use core::cmp;
 use std::thread::spawn;
 
-use base::{ArenaTable, LinkedTable, OrderWal, OrderWalReader};
+use base::{AlternativeTable, OrderWal, OrderWalReader};
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
@@ -13,13 +13,14 @@ use super::*;
 const MB: u32 = 1024 * 1024;
 
 macro_rules! expand_unit_tests {
-  ($prefix:literal: $wal:ty { $($name:ident $({ $($tt:tt)* })?), +$(,)? }) => {
+  ($prefix:literal: $wal:ty [$memtable_opts:expr]: $table:ty { $($name:ident $({ $($tt:tt)* })?), +$(,)? }) => {
     $(
       paste::paste! {
         #[test]
         fn [< test_ $prefix _ $name _inmemory >]() {
-          $name(&mut $crate::Builder::new()
+          $name(&mut $crate::Builder::<$table>::new()
             .with_capacity(MB)
+            .with_memtable_options($memtable_opts)
             .alloc::<$wal>()
             .unwrap()
           );
@@ -27,8 +28,9 @@ macro_rules! expand_unit_tests {
 
         #[test]
         fn [< test_ $prefix _ $name _map_anon >]() {
-          $name(&mut $crate::Builder::new()
+          $name(&mut $crate::Builder::<$table>::new()
             .with_capacity(MB)
+            .with_memtable_options($memtable_opts)
             .map_anon::<$wal>().unwrap()
           );
         }
@@ -39,11 +41,12 @@ macro_rules! expand_unit_tests {
           let dir = ::tempfile::tempdir().unwrap();
           $name(
             &mut unsafe {
-              $crate::Builder::new()
+              $crate::Builder::<$table>::new()
                 .with_create_new(true)
                 .with_read(true)
                 .with_write(true)
                 .with_capacity(MB as u32)
+                .with_memtable_options($memtable_opts)
                 .map_mut::<$wal, _>(
                   dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file")
                 ),
@@ -54,17 +57,17 @@ macro_rules! expand_unit_tests {
       }
     )*
   };
-  (move $prefix:literal: $wal:ty { $($name:ident $($block:expr)?), +$(,)? }) => {
+  (move $prefix:literal: $wal:ty [$memtable_opts:expr]: $table:ty { $($name:ident $($block:expr)?), +$(,)? }) => {
     $(
       paste::paste! {
         #[test]
         fn [< test_ $prefix _ $name _inmemory >]() {
-          $name($crate::Builder::new().with_capacity(MB).alloc::<$wal>().unwrap());
+          $name($crate::Builder::<$table>::new().with_memtable_options($memtable_opts).with_capacity(MB).alloc::<$wal>().unwrap());
         }
 
         #[test]
         fn [< test_ $prefix _ $name _map_anon >]() {
-          $name($crate::Builder::new().with_capacity(MB).map_anon::<$wal>().unwrap());
+          $name($crate::Builder::<$table>::new().with_memtable_options($memtable_opts).with_capacity(MB).map_anon::<$wal>().unwrap());
         }
 
         #[test]
@@ -73,7 +76,8 @@ macro_rules! expand_unit_tests {
           let dir = ::tempfile::tempdir().unwrap();
           let p = dir.path().join(concat!("test_", $prefix, "_", stringify!($name), "_map_file"));
           let wal = unsafe {
-            $crate::Builder::new()
+            $crate::Builder::<$table>::new()
+              .with_memtable_options($memtable_opts)
               .with_create_new(true)
                 .with_read(true)
                 .with_write(true)
@@ -96,7 +100,7 @@ macro_rules! expand_unit_tests {
       }
     )*
   };
-  ($prefix:literal: $wal:ty { $($name:ident($builder:expr) $({ $($tt:tt)* })?), +$(,)? }) => {
+  ($prefix:literal: $wal:ty [$memtable_opts:expr]: $table:ty { $($name:ident($builder:expr) $({ $($tt:tt)* })?), +$(,)? }) => {
     $(
       paste::paste! {
         #[test]
@@ -134,19 +138,13 @@ macro_rules! expand_unit_tests {
   };
 }
 
-type OrderWalLinkedTable<K, V> = OrderWal<K, V, LinkedTable<K, V>>;
-type OrderWalArenaTable<K, V> = OrderWal<K, V, ArenaTable<K, V>>;
-type OrderWalReaderLinkedTable<K, V> = OrderWalReader<K, V, LinkedTable<K, V>>;
-type OrderWalReaderArenaTable<K, V> = OrderWalReader<K, V, ArenaTable<K, V>>;
+type OrderWalAlternativeTable<K, V> = OrderWal<K, V, AlternativeTable<K, V>>;
+type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<K, V, AlternativeTable<K, V>>;
 
-type MultipleVersionOrderWalLinkedTable<K, V> =
-  multiple_version::OrderWal<K, V, multiple_version::LinkedTable<K, V>>;
-type MultipleVersionOrderWalArenaTable<K, V> =
-  multiple_version::OrderWal<K, V, multiple_version::ArenaTable<K, V>>;
-type MultipleVersionOrderWalReaderLinkedTable<K, V> =
-  multiple_version::OrderWalReader<K, V, multiple_version::LinkedTable<K, V>>;
-type MultipleVersionOrderWalReaderArenaTable<K, V> =
-  multiple_version::OrderWalReader<K, V, multiple_version::ArenaTable<K, V>>;
+type MultipleVersionOrderWalAlternativeTable<K, V> =
+  multiple_version::OrderWal<K, V, multiple_version::AlternativeTable<K, V>>;
+type MultipleVersionOrderWalReaderAlternativeTable<K, V> =
+  multiple_version::OrderWalReader<K, V, multiple_version::AlternativeTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

@@ -5,7 +5,7 @@ use dbutils::{buffer::VacantBuffer, traits::MaybeStructured};
 use std::collections::BTreeMap;
 
 use crate::{
-  memtable::{Memtable, MemtableEntry},
+  memtable::{alternative::TableOptions, Memtable, MemtableEntry},
   swmr::base::{Reader, Writer},
   types::{KeyBuilder, ValueBuilder},
 };
@@ -229,7 +229,7 @@ where
   }
 }
 
-expand_unit_tests!("linked": OrderWalLinkedTable<Person, String> {
+expand_unit_tests!("linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: crate::memtable::alternative::Table<_, _> {
   first,
   last,
   insert,
@@ -239,7 +239,7 @@ expand_unit_tests!("linked": OrderWalLinkedTable<Person, String> {
   insert_with_builders,
 });
 
-expand_unit_tests!("arena": OrderWalArenaTable<Person, String> {
+expand_unit_tests!("arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: crate::memtable::alternative::Table<_, _> {
   first,
   last,
   insert,

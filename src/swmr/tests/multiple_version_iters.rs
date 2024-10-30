@@ -1,17 +1,20 @@
-use crate::memtable::{arena::TableOptions, MultipleVersionMemtable, MultipleVersionMemtableEntry};
+use crate::memtable::{
+  alternative::{MultipleVersionTable, TableOptions},
+  MultipleVersionMemtable, MultipleVersionMemtableEntry,
+};
 use multiple_version::{Reader, Writer};
 
 use super::*;
 
-expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<str, str> {
+expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<str, str> [TableOptions::Linked]: MultipleVersionTable<_, _> {
   iter_all_versions_mvcc,
 });
 
-expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<str, str> {
+expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<str, str> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
   iter_all_versions_mvcc,
 });
 
-expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<String, String> {
+expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<String, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
   iter_next,
   iter_all_versions_next_by_entry,
   iter_all_versions_next_by_versioned_entry,
@@ -25,12 +28,16 @@ expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<String, String> 
 macro_rules! arena_builder {
   () => {{
     crate::Builder::new()
-      .with_memtable_options(TableOptions::new().with_capacity(1024 * 1024))
+      .with_memtable_options(
+        crate::memtable::arena::TableOptions::new()
+          .with_capacity(1024 * 1024)
+          .into(),
+      )
       .with_capacity(8 * 1024)
   }};
 }
 
-expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<String, String> {
+expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<String, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
   iter_next(arena_builder!()),
   iter_all_versions_next_by_entry(arena_builder!()),
   iter_all_versions_next_by_versioned_entry(arena_builder!()),

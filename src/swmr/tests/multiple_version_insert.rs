@@ -3,7 +3,10 @@ use multiple_version::{Reader, Writer};
 
 use crate::{
   batch::BatchEntry,
-  memtable::{MultipleVersionMemtable, MultipleVersionMemtableEntry},
+  memtable::{
+    alternative::{MultipleVersionTable, TableOptions},
+    MultipleVersionMemtable, MultipleVersionMemtableEntry,
+  },
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -367,27 +370,27 @@ where
 }
 
 expand_unit_tests!(
-  move "linked": MultipleVersionOrderWalLinkedTable<u32, [u8; 4]> {
+  move "linked": MultipleVersionOrderWalAlternativeTable<u32, [u8; 4]> [TableOptions::Linked]: MultipleVersionTable<_, _> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(0, &i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderLinkedTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(0, &1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "linked": MultipleVersionOrderWalLinkedTable<Person, String> {
+  move "linked": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -400,7 +403,7 @@ expand_unit_tests!(
     insert_batch_with_tombstone |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -413,8 +416,8 @@ expand_unit_tests!(
     },
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
-        Builder::new()
-          .map::<MultipleVersionOrderWalReaderLinkedTable<Person, String>, _>(&p)
+        Builder::<MultipleVersionTable<_, _>>::new()
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -427,7 +430,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -440,7 +443,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderLinkedTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -454,27 +457,27 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  move "arena": MultipleVersionOrderWalArenaTable<u32, [u8; 4]> {
+  move "arena": MultipleVersionOrderWalAlternativeTable<u32, [u8; 4]> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(0, &i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderArenaTable<u32, [u8; 4]>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<MultipleVersionOrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
       assert!(wal.contains_key(0, &1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "arena": MultipleVersionOrderWalArenaTable<Person, String> {
+  move "arena": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
     insert_batch |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -487,7 +490,7 @@ expand_unit_tests!(
     insert_batch_with_tombstone |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -501,7 +504,7 @@ expand_unit_tests!(
     insert_batch_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -514,7 +517,7 @@ expand_unit_tests!(
     insert_batch_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 
@@ -527,7 +530,7 @@ expand_unit_tests!(
     insert_batch_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<MultipleVersionOrderWalReaderArenaTable<Person, String>, _>(&p)
+          .map::<MultipleVersionOrderWalReaderAlternativeTable<Person, String>, _>(&p)
           .unwrap()
       };
 

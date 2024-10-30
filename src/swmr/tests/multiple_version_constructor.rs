@@ -1,6 +1,9 @@
 use multiple_version::{OrderWal, Reader, Writer};
 
-use crate::memtable::{MultipleVersionMemtable, MultipleVersionMemtableEntry};
+use crate::memtable::{
+  alternative::{MultipleVersionTable, TableOptions},
+  MultipleVersionMemtable, MultipleVersionMemtableEntry,
+};
 
 use super::*;
 
@@ -37,13 +40,13 @@ where
 }
 
 expand_unit_tests!(
-  "linked": MultipleVersionOrderWalLinkedTable<Person, String> {
+  "linked": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "linked": MultipleVersionOrderWalLinkedTable<Person, String> {
+  "linked": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -53,13 +56,13 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  "arena": MultipleVersionOrderWalArenaTable<Person, String> {
+  "arena": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "arena": MultipleVersionOrderWalArenaTable<Person, String> {
+  "arena": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)

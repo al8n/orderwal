@@ -191,13 +191,35 @@ macro_rules! base_entry {
 }
 
 /// The sum type for different memtable implementations options.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[non_exhaustive]
 pub enum TableOptions {
   /// The options for the arena memtable.
   Arena(super::arena::TableOptions),
   /// The options for the linked memtable.
+  #[default]
   Linked,
+}
+
+impl From<super::arena::TableOptions> for TableOptions {
+  #[inline]
+  fn from(opts: super::arena::TableOptions) -> Self {
+    Self::Arena(opts)
+  }
+}
+
+impl TableOptions {
+  /// Create a new arena memtable options with the default values.
+  #[inline]
+  pub const fn arena() -> Self {
+    Self::Arena(super::arena::TableOptions::new())
+  }
+
+  /// Create a new linked memtable options with the default values.
+  #[inline]
+  pub const fn linked() -> Self {
+    Self::Linked
+  }
 }
 
 /// The sum type of error for different memtable implementations.

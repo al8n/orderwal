@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 
 use base::{OrderWal, Reader, Writer};
 
-use crate::memtable::{Memtable, MemtableEntry};
+use crate::memtable::{
+  alternative::{Table, TableOptions},
+  Memtable, MemtableEntry,
+};
 
 use super::*;
 
@@ -263,22 +266,22 @@ where
   }
 }
 
-expand_unit_tests!("linked": OrderWalLinkedTable<u32, u32> {
+expand_unit_tests!("linked": OrderWalAlternativeTable<u32, u32> [TableOptions::Linked]: Table<_, _> {
   bounds,
   entry_iter,
 });
 
-expand_unit_tests!("arena": OrderWalArenaTable<u32, u32> {
+expand_unit_tests!("arena": OrderWalAlternativeTable<u32, u32> [TableOptions::Arena(Default::default())]: Table<_, _> {
   bounds,
   entry_iter,
 });
 
-expand_unit_tests!("linked": OrderWalLinkedTable<Person, String> {
+expand_unit_tests!("linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
   range,
   iter,
 });
 
-expand_unit_tests!("arena": OrderWalArenaTable<Person, String> {
+expand_unit_tests!("arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
   range,
   iter,
 });
