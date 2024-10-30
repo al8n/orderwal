@@ -12,11 +12,11 @@ expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<str, str> {
 });
 
 expand_unit_tests!("linked": MultipleVersionOrderWalLinkedTable<String, String> {
-  iter_all_versions_next,
+  iter_next,
   iter_all_versions_next_by_entry,
   iter_all_versions_next_by_versioned_entry,
   range_next,
-  iter_all_versions_prev,
+  iter_prev,
   range_prev,
   iter_all_versions_prev_by_entry,
   iter_all_versions_prev_by_versioned_entry,
@@ -31,11 +31,11 @@ macro_rules! arena_builder {
 }
 
 expand_unit_tests!("arena": MultipleVersionOrderWalArenaTable<String, String> {
-  iter_all_versions_next(arena_builder!()),
+  iter_next(arena_builder!()),
   iter_all_versions_next_by_entry(arena_builder!()),
   iter_all_versions_next_by_versioned_entry(arena_builder!()),
   range_next(arena_builder!()),
-  iter_all_versions_prev(arena_builder!()),
+  iter_prev(arena_builder!()),
   range_prev(arena_builder!()),
   iter_all_versions_prev_by_entry(arena_builder!()),
   iter_all_versions_prev_by_versioned_entry(arena_builder!()),
@@ -89,7 +89,7 @@ where
   assert_eq!(num, 4);
 }
 
-fn iter_all_versions_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn iter_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -107,6 +107,16 @@ where
   for ent in iter {
     assert_eq!(ent.key(), make_int_key(i).as_str());
     assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, N);
+
+  let iter = wal.iter(0);
+  let mut i = 0;
+  for ent in iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.value(), make_value(i).as_str());
     i += 1;
   }
 
@@ -208,7 +218,7 @@ where
   assert_eq!(i, 51);
 }
 
-fn iter_all_versions_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn iter_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -225,6 +235,16 @@ where
   for ent in iter {
     assert_eq!(ent.key(), make_int_key(i - 1).as_str());
     assert_eq!(ent.value().unwrap(), make_value(i - 1).as_str());
+    i -= 1;
+  }
+
+  assert_eq!(i, 0);
+
+  let iter = wal.iter(0).rev();
+  let mut i = N;
+  for ent in iter {
+    assert_eq!(ent.key(), make_int_key(i - 1).as_str());
+    assert_eq!(ent.value(), make_value(i - 1).as_str());
     i -= 1;
   }
 
