@@ -11,6 +11,7 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
+use skl::KeySize;
 
 use crate::{
   memtable::{MemtableEntry, MultipleVersionMemtableEntry},
@@ -457,7 +458,7 @@ pub trait Wal<S> {
 
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
-  fn maximum_key_size(&self) -> u32 {
+  fn maximum_key_size(&self) -> KeySize {
     self.options().maximum_key_size()
   }
 
@@ -685,7 +686,7 @@ pub trait Wal<S> {
         klen,
         vlen,
         version.is_some(),
-        self.maximum_key_size(),
+        self.maximum_key_size().to_u32(),
         self.maximum_value_size(),
         self.read_only(),
       )
@@ -817,7 +818,7 @@ pub trait Wal<S> {
     }
 
     let opts = self.options();
-    let maximum_key_size = opts.maximum_key_size();
+    let maximum_key_size = opts.maximum_key_size().to_u32();
     let minimum_value_size = opts.maximum_value_size();
     let start_offset = unsafe {
       let (mut cursor, allocator, mut buf) = batch

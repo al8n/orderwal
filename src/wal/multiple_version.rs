@@ -9,7 +9,7 @@ use dbutils::{
 };
 use rarena_allocator::Allocator;
 use ref_cast::RefCast;
-use skl::either::Either;
+use skl::{either::Either, KeySize};
 
 use crate::{
   batch::Batch,
@@ -48,7 +48,7 @@ pub trait Reader: Constructable {
 
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
-  fn maximum_key_size(&self) -> u32 {
+  fn maximum_key_size(&self) -> KeySize {
     self.as_wal().maximum_key_size()
   }
 

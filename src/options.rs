@@ -1,14 +1,13 @@
 use rarena_allocator::{Freelist, Options as ArenaOptions};
-// use skl::Height;
+pub use skl::KeySize;
 
 use super::{CURRENT_VERSION, HEADER_SIZE};
 
 /// Options for the WAL.
 #[derive(Debug, Clone)]
 pub struct Options {
-  maximum_key_size: u32,
+  maximum_key_size: KeySize,
   maximum_value_size: u32,
-  // maximum_height: Height,
   sync: bool,
   magic_version: u16,
   cap: Option<u32>,
@@ -50,7 +49,7 @@ impl Options {
   #[inline]
   pub const fn new() -> Self {
     Self {
-      maximum_key_size: u16::MAX as u32,
+      maximum_key_size: KeySize::new(),
       maximum_value_size: u32::MAX,
       sync: true,
       magic_version: 0,
@@ -198,13 +197,13 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Options;
+  /// use orderwal::{Options, KeySize};
   ///
-  /// let options = Options::new().with_maximum_key_size(1024);
-  /// assert_eq!(options.maximum_key_size(), 1024);
+  /// let options = Options::new().with_maximum_key_size(KeySize::with(1024));
+  /// assert_eq!(options.maximum_key_size(), KeySize::with(1024));
   /// ```
   #[inline]
-  pub const fn maximum_key_size(&self) -> u32 {
+  pub const fn maximum_key_size(&self) -> KeySize {
     self.maximum_key_size
   }
 
@@ -267,13 +266,13 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::Options;
+  /// use orderwal::{Options, KeySize};
   ///
-  /// let options = Options::new().with_maximum_key_size(1024);
-  /// assert_eq!(options.maximum_key_size(), 1024);
+  /// let options = Options::new().with_maximum_key_size(KeySize::with(1024));
+  /// assert_eq!(options.maximum_key_size(), KeySize::with(1024));
   /// ```
   #[inline]
-  pub const fn with_maximum_key_size(mut self, size: u32) -> Self {
+  pub const fn with_maximum_key_size(mut self, size: KeySize) -> Self {
     self.maximum_key_size = size;
     self
   }

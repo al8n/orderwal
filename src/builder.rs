@@ -2,7 +2,7 @@ use dbutils::{
   checksum::Crc32,
   traits::{KeyRef, Type},
 };
-use skl::either::Either;
+use skl::{either::Either, KeySize};
 
 use super::{
   checksum::BuildChecksumer,
@@ -276,13 +276,13 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, KeySize, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
-  /// assert_eq!(options.maximum_key_size(), 1024);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_key_size(KeySize::with(1024));
+  /// assert_eq!(options.maximum_key_size(), KeySize::with(1024));
   /// ```
   #[inline]
-  pub const fn maximum_key_size(&self) -> u32 {
+  pub const fn maximum_key_size(&self) -> KeySize {
     self.opts.maximum_key_size()
   }
 
@@ -345,13 +345,13 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, KeySize, multiple_version::LinkedTable};
   ///
-  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
-  /// assert_eq!(options.maximum_key_size(), 1024);
+  /// let options = Builder::<LinkedTable<[u8], [u8]>>::new().with_maximum_key_size(KeySize::with(1024));
+  /// assert_eq!(options.maximum_key_size(), KeySize::with(1024));
   /// ```
   #[inline]
-  pub const fn with_maximum_key_size(mut self, size: u32) -> Self {
+  pub const fn with_maximum_key_size(mut self, size: KeySize) -> Self {
     self.opts = self.opts.with_maximum_key_size(size);
     self
   }

@@ -49,6 +49,7 @@ pub mod types;
 
 mod options;
 pub use options::Options;
+pub use skl::KeySize;
 
 /// Batch insertions related traits and structs.
 pub mod batch;
