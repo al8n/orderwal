@@ -13,6 +13,9 @@ pub mod linked;
 /// Memtable implementation based on ARNEA based [`SkipMap`](skl).
 pub mod arena;
 
+/// Sum type for different memtable implementations.
+pub mod alternative;
+
 /// An entry which is stored in the memory table.
 pub trait BaseEntry<'a>: Sized {
   /// The key type.

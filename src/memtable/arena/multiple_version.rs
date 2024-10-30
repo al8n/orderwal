@@ -7,11 +7,12 @@ use dbutils::{
 };
 use skl::{
   either::Either,
-  versioned::{
-    sync::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry},
-    VersionedMap as _,
-  },
+  versioned::{sync::SkipMap, VersionedMap as _},
   Options, VersionedContainer as _,
+};
+
+pub use skl::versioned::sync::{
+  AllVersionsIter, AllVersionsRange, Entry, Iter, Range, VersionedEntry,
 };
 
 use crate::{

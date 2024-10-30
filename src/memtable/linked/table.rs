@@ -1,6 +1,6 @@
 use core::{convert::Infallible, ops::RangeBounds};
 
-use crossbeam_skiplist::{map::Entry, SkipMap};
+use crossbeam_skiplist::SkipMap;
 use dbutils::{
   equivalent::Comparable,
   traits::{KeyRef, Type},
@@ -12,6 +12,8 @@ use crate::{
   types::Kind,
   wal::{KeyPointer, ValuePointer},
 };
+
+pub use crossbeam_skiplist::map::{Entry, Iter, Range};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipMap`].
 pub struct Table<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);
@@ -92,12 +94,12 @@ where
     Self: 'a;
 
   type Iterator<'a>
-    = crossbeam_skiplist::map::Iter<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
+    = Iter<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = crossbeam_skiplist::map::Range<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
+    = Range<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,

@@ -19,7 +19,10 @@ pub mod base {
   use dbutils::checksum::Crc32;
 
   use super::{reader, writer};
-  use crate::memtable::{arena::Table as BaseArenaTable, linked::Table as BaseLinkedTable};
+  use crate::memtable::{
+    alternative::Table as BaseAlternativeTable, arena::Table as BaseArenaTable,
+    linked::Table as BaseLinkedTable,
+  };
 
   pub use crate::{
     memtable::arena::TableOptions as ArenaTableOptions,
@@ -32,6 +35,9 @@ pub mod base {
 
   /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`arena::Table`](BaseArenaTable).
   pub type ArenaTable<K, V> = BaseArenaTable<K, V>;
+
+  /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`alternative::Table`](BaseAlternativeTable).
+  pub type AlternativeTable<K, V> = BaseAlternativeTable<K, V>;
 
   /// A generic ordered write-ahead log implementation for multiple threads environments.
   ///
@@ -63,6 +69,7 @@ pub mod multiple_version {
 
   use super::{reader, writer};
   use crate::memtable::{
+    alternative::MultipleVersionTable as BaseAlternativeTable,
     arena::MultipleVersionTable as BaseArenaTable, linked::MultipleVersionTable as BaseLinkedTable,
   };
 
@@ -79,6 +86,9 @@ pub mod multiple_version {
 
   /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`arena::MultipleVersionTable`](BaseArenaTable).
   pub type ArenaTable<K, V> = BaseArenaTable<K, V>;
+
+  /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`alternative::MultipleVersionTable`](BaseAlternativeTable).
+  pub type AlternativeTable<K, V> = BaseAlternativeTable<K, V>;
 
   /// A multiple versioned generic ordered write-ahead log implementation for multiple threads environments.
   ///

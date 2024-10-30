@@ -7,10 +7,7 @@ use dbutils::{
 };
 use skl::{
   either::Either,
-  map::{
-    sync::{Entry, Iter, Range, SkipMap},
-    Map as _,
-  },
+  map::{sync::SkipMap, Map as _},
   Arena as _, Container as _, EntryRef, Options,
 };
 
@@ -22,6 +19,8 @@ use crate::{
 };
 
 use super::TableOptions;
+
+pub use skl::map::sync::{Entry, Iter, Range};
 
 impl<'a, K, V> BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where

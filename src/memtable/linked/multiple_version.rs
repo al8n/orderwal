@@ -3,9 +3,11 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use crossbeam_skiplist_mvcc::nested::{
-  AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+use crossbeam_skiplist_mvcc::nested::SkipMap;
+pub use crossbeam_skiplist_mvcc::nested::{
+  AllVersionsIter, AllVersionsRange, Entry, Iter, Range, VersionedEntry,
 };
+
 use dbutils::{
   equivalent::Comparable,
   traits::{KeyRef, Type},
