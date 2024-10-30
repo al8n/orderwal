@@ -51,7 +51,7 @@ impl TableOptions {
   }
 
   /// Sets the maximum height of the table.
-  /// 
+  ///
   /// Default is `20`.
   #[inline]
   pub const fn with_max_height(mut self, max_height: Height) -> Self {
