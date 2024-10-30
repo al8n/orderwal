@@ -38,7 +38,6 @@ impl<V: ?Sized> Clone for ValuePointer<V> {
 
 impl<V: ?Sized> Copy for ValuePointer<V> {}
 
-
 impl<V: ?Sized> ValuePointer<V> {
   #[inline]
   pub(crate) fn new(len: usize, ptr: *const u8) -> Self {
