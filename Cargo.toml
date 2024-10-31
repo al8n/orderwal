@@ -1,14 +1,14 @@
 [package]
 name = "orderwal"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
 documentation = "https://docs.rs/orderwal"
-description = "A generic-purpose, atomic, ordered, zero-copy, Write-Ahead Log implementation for Rust."
+description = "A generic-purpose, atomic, ordered, zero-copy read, zero-cost (in-place) write, Write-Ahead Log implementation for Rust."
 license = "MIT OR Apache-2.0"
-rust-version = "1.80"
-categories = ["filesystem", "database-implementations", "development-tools", "data-structures"]
+rust-version = "1.81.0"
+categories = ["filesystem", "database-implementations", "development-tools", "data-structures", "no-std"]
 keywords = ["wal", "write-ahead-log", "append-only", "append-only-log", "bitcask"]
 
 [[bench]]
@@ -17,8 +17,10 @@ name = "foo"
 harness = false
 
 [features]
-default = ["std"]
-std = ["rarena-allocator/default", "crossbeam-skiplist/default", "bitflags/std", "dbutils/default", "among/default", "faststr?/default", "bytes?/default", "smol_str?/default"]
+default = ["memmap"]
+alloc = ["rarena-allocator/alloc", "skl/alloc", "dbutils/alloc"]
+std = ["rarena-allocator/default", "crossbeam-skiplist/default", "crossbeam-skiplist-mvcc/default", "bitflags/std", "dbutils/default", "among/default", "skl/std"]
+memmap = ["std", "rarena-allocator/memmap", "skl/memmap"]
 
 xxhash3 = ["dbutils/xxhash3", "std"]
 xxhash64 = ["dbutils/xxhash64", "std"]
@@ -28,23 +30,18 @@ tracing = ["dep:tracing", "dbutils/tracing"]
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "2", default-features = false }
-dbutils = { version = "0.6", default-features = false, features = ["crc32fast"] }
+dbutils = { version = "0.9", default-features = false, features = ["crc32fast"] }
+derive-where = "1"
 ref-cast = "1"
-rarena-allocator = { version = "0.4", default-features = false, features = ["memmap"] }
-crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132" }
+rarena-allocator = { version = "0.4", default-features = false }
+crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132", optional = true }
+crossbeam-skiplist-mvcc = { version = "0.2", optional = true }
+skl = { version = "0.19", default-features = false, features = ["alloc"] }
 paste = "1"
-thiserror = "1"
-
-bytes = { version = "1", default-features = false, optional = true }
-smallvec = { version = "1", default-features = false, optional = true, features = ["const_generics"] }
-smallvec-wrapper = { version = "0.1", optional = true, default-features = false, features = ["const_generics"] }
-smol_str = { version = "0.3", default-features = false, optional = true }
-faststr = { version = "0.2", default-features = false, optional = true }
 
 tracing = { version = "0.1", default-features = false, optional = true }
 
 [dev-dependencies]
-arbitrary = { version = "1", features = ["derive"] }
 criterion = "0.5"
 names = "0.14"
 rand = "0.8"
@@ -68,17 +65,28 @@ rustdoc-args = ["--cfg", "docsrs"]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(all_tests)',
-  'cfg(test_unsync_constructor)',
-  'cfg(test_unsync_insert)',
-  'cfg(test_unsync_iters)',
-  'cfg(test_unsync_get)',
+  'cfg(all_orderwal_tests)',
   'cfg(test_swmr_constructor)',
   'cfg(test_swmr_insert)',
   'cfg(test_swmr_iters)',
   'cfg(test_swmr_get)',
-  'cfg(test_swmr_generic_constructor)',
-  'cfg(test_swmr_generic_insert)',
-  'cfg(test_swmr_generic_iters)',
-  'cfg(test_swmr_generic_get)',
+  'cfg(test_swmr_multiple_version_constructor)',
+  'cfg(test_swmr_multiple_version_insert)',
+  'cfg(test_swmr_multiple_version_iters)',
+  'cfg(test_swmr_multiple_version_get)',
 ] }
+
+[[example]]
+name = "zero_cost"
+path = "examples/zero_cost.rs"
+required-features = ["memmap"]
+
+[[example]]
+name = "multiple_version"
+path = "examples/multiple_version.rs"
+required-features = ["memmap"]
+
+[[example]]
+name = "generic_not_sized"
+path = "examples/generic_not_sized.rs"
+required-features = ["memmap"]

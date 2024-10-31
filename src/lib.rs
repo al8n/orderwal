@@ -1,28 +1,24 @@
 //! An ordered Write-Ahead Log implementation for Rust.
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity)]
 
-use core::{borrow::Borrow, marker::PhantomData, mem};
+use core::mem;
 
 pub use among;
-use among::Among;
-use crossbeam_skiplist::SkipSet;
-use error::Error;
-use rarena_allocator::{
-  either::{self, Either},
-  Allocator, Buffer, Freelist, Options as ArenaOptions,
-};
 
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(not(feature = "std"))]
+extern crate alloc as std;
+
 pub use dbutils::{
   checksum::{self, Crc32},
-  Ascend, CheapClone, Comparator, Descend,
+  equivalent::{Comparable, ComparableRangeBounds, Equivalent},
 };
 
 #[cfg(feature = "xxhash3")]
@@ -33,67 +29,49 @@ pub use dbutils::checksum::XxHash3;
 #[cfg_attr(docsrs, doc(cfg(feature = "xxhash64")))]
 pub use dbutils::checksum::XxHash64;
 
-const STATUS_SIZE: usize = mem::size_of::<u8>();
+const RECORD_FLAG_SIZE: usize = mem::size_of::<Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;
-const MAGIC_TEXT: [u8; 6] = *b"ordwal";
+const MAGIC_TEXT: [u8; 5] = *b"order";
 const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
+const WAL_KIND_SIZE: usize = mem::size_of::<types::Kind>();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
-const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
-
-#[cfg(all(
-  test,
-  any(
-    all_tests,
-    test_unsync_constructor,
-    test_unsync_insert,
-    test_unsync_get,
-    test_unsync_iters,
-    test_swmr_constructor,
-    test_swmr_insert,
-    test_swmr_get,
-    test_swmr_iters,
-    test_swmr_generic_constructor,
-    test_swmr_generic_insert,
-    test_swmr_generic_get,
-    test_swmr_generic_iters,
-  )
-))]
-#[macro_use]
-mod tests;
+const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + WAL_KIND_SIZE + MAGIC_VERSION_SIZE;
+/// The mvcc version size.
+const VERSION_SIZE: usize = mem::size_of::<u64>();
 
 /// Error types.
 pub mod error;
 
-mod buffer;
-pub use buffer::*;
-
 mod builder;
 pub use builder::Builder;
 
-mod entry;
-pub use entry::*;
-
-/// Utilities.
-pub mod utils;
-use utils::*;
-
-mod wal;
-pub use wal::{ImmutableWal, Wal};
+/// Types
+pub mod types;
 
 mod options;
 pub use options::Options;
+pub use skl::KeySize;
+
+/// Batch insertions related traits and structs.
+pub mod batch;
 
 /// A single writer multiple readers ordered write-ahead Log implementation.
-pub mod swmr;
+mod swmr;
+mod wal;
+pub use swmr::*;
 
-/// An ordered write-ahead Log implementation.
-pub mod unsync;
+/// The memory table implementation.
+pub mod memtable;
 
-mod pointer;
+mod sealed;
+pub use sealed::Immutable;
+
+/// The utilities functions.
+pub mod utils;
 
 bitflags::bitflags! {
-  /// The flags of the entry.
+  /// The flags for each atomic write.
   struct Flags: u8 {
     /// First bit: 1 indicates committed, 0 indicates uncommitted
     const COMMITTED = 0b00000001;

@@ -1,8 +1,10 @@
 use std::{cmp, sync::Arc, thread::spawn};
 
+use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
 use orderwal::{
-  swmr::generic::{Comparable, Equivalent, GenericBuilder, KeyRef, Type, TypeRef},
-  utils::*,
+  base::{OrderWal, Reader, Writer},
+  types::{KeyRef, Type, TypeRef},
+  Builder, Comparable, Equivalent,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -20,7 +22,7 @@ impl Person {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct PersonRef<'a> {
   id: u64,
   name: &'a str,
@@ -35,7 +37,7 @@ impl PartialEq for PersonRef<'_> {
 impl Eq for PersonRef<'_> {}
 
 impl PartialOrd for PersonRef<'_> {
-  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+  fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
@@ -56,7 +58,7 @@ impl Equivalent<Person> for PersonRef<'_> {
 }
 
 impl Comparable<Person> for PersonRef<'_> {
-  fn compare(&self, key: &Person) -> std::cmp::Ordering {
+  fn compare(&self, key: &Person) -> core::cmp::Ordering {
     self.id.cmp(&key.id).then_with(|| self.name.cmp(&key.name))
   }
 }
@@ -68,7 +70,7 @@ impl Equivalent<PersonRef<'_>> for Person {
 }
 
 impl Comparable<PersonRef<'_>> for Person {
-  fn compare(&self, key: &PersonRef<'_>) -> std::cmp::Ordering {
+  fn compare(&self, key: &PersonRef<'_>) -> core::cmp::Ordering {
     self
       .id
       .cmp(&key.id)
@@ -79,7 +81,7 @@ impl Comparable<PersonRef<'_>> for Person {
 impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
   fn compare<Q>(&self, a: &Q) -> cmp::Ordering
   where
-    Q: ?Sized + Ord + Comparable<Self>,
+    Q: ?Sized + Comparable<Self>,
   {
     Comparable::compare(a, self).reverse()
   }
@@ -115,7 +117,10 @@ impl Type for Person {
   }
 
   #[inline]
-  fn encode_to_buffer(&self, buf: &mut orderwal::VacantBuffer<'_>) -> Result<usize, Self::Error> {
+  fn encode_to_buffer(
+    &self,
+    buf: &mut orderwal::types::VacantBuffer<'_>,
+  ) -> Result<usize, Self::Error> {
     let id_size = buf.put_u64_varint(self.id)?;
     buf.put_slice_unchecked(self.name.as_bytes());
     Ok(id_size + self.name.len())
@@ -137,18 +142,18 @@ fn main() {
   let people = (0..100)
     .map(|_| {
       let p = Person::random();
-      let v = format!("My name is {}", p.name);
+      let v = std::format!("My name is {}", p.name);
       (p, v)
     })
     .collect::<Vec<_>>();
 
   let mut wal = unsafe {
-    GenericBuilder::new()
+    Builder::new()
       .with_capacity(1024 * 1024)
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<Person, String, _>(&path)
+      .map_mut::<OrderWal<Person, String>, _>(&path)
       .unwrap()
   };
 

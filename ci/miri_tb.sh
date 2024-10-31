@@ -1,5 +1,10 @@
 #!/bin/bash
-set -e
+set -euxo pipefail
+IFS=$'\n\t'
+
+# We need 'ts' for the per-line timing
+sudo apt-get -y install moreutils
+echo
 
 # Check if TARGET and CONFIG_FLAGS are provided, otherwise panic
 if [ -z "$1" ]; then
@@ -19,9 +24,9 @@ rustup toolchain install nightly --component miri
 rustup override set nightly
 cargo miri setup
 
+# Zmiri-ignore-leaks needed because of https://github.com/crossbeam-rs/crossbeam/issues/579
 export MIRIFLAGS="-Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-tree-borrows -Zmiri-ignore-leaks"
-
 export RUSTFLAGS="--cfg test_$CONFIG_FLAGS"
 
-cargo miri test --tests --target $TARGET --lib
+cargo miri test --tests --target $TARGET --lib 2>&1 | ts -i '%.s  '
 

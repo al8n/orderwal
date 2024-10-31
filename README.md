@@ -3,7 +3,7 @@
 </div>
 <div align="center">
 
-A generic-purpose, atomic, ordered, zero-copy, Write-Ahead Log implementation for Rust.
+A generic-purpose, atomic, ordered, zero-copy read, zero-cost (in-place) write, Write-Ahead Log implementation for Rust.
 
 [<img alt="github" src="https://img.shields.io/badge/github-al8n/orderwal-8da0cb?style=for-the-badge&logo=Github" height="22">][Github-url]
 <img alt="LoC" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fal8n%2F327b2a8aef9003246e45c6e47fe63937%2Fraw%2Forderwal" height="22">
@@ -21,16 +21,32 @@ English | [简体中文][zh-cn-url]
 
 ## Introduction
 
-`orderwal` is generic-purpose, atomic, ordered, zero-copy, concurrent-safe, pre-allocate style (memory map) write-ahead-log for developing databases.
+`orderwal` is generic-purpose, atomic, ordered, zero-copy read, zero-cost (in-place) write, concurrent-safe, pre-allocate style (memory map) write-ahead-log for developing databases.
 
 `orderwal` also supports generic structured key and value types, which is not limited to just bytes like other implementations.
 
 ## Installation
 
-```toml
-[dependencies]
-orderwal = "0.4"
-```
+- Default (with on-disk support)
+  
+  ```toml
+  [dependencies]
+  orderwal = "0.5"
+  ```
+
+- `std` only (without on-disk support)
+
+  ```toml
+  [dependencies]
+  orderwal = { version = "0.5", default-features = false, features = ["std"] } 
+  ```
+
+- `no-std` (`alloc` required)
+
+  ```toml
+  [dependencies]
+  orderwal = { version = "0.5", default-features = false, features = ["alloc"] }
+  ```
 
 ## Example
 
@@ -40,6 +56,8 @@ See [examples](./examples/) for more information.
 
 - [`aol`](https://github.com/al8n/aol): Yet another generic purpose, append-only write-ahead log implementation based on `std::fs::File`.
 - [`skl`](https://github.com/al8n/skl): A lock-free, ARNEA based skiplist implementation, which supports in-memory and on-disk, suitable for frozen durable data file or memtable for LSM database.
+- [`valog`](https://github.com/al8n/valog): A lock-free, generic, lightweight value log for WiscKey or Bitcask architecture databases.
+- [`dtlog`](https://github.com/al8n/dtlog): A log for tracking discard stats of multi-files databases.
 
 #### License
 

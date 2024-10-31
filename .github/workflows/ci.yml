@@ -82,9 +82,9 @@ jobs:
           - powerpc64-unknown-linux-gnu
           # - mips64-unknown-linux-gnuabi64
           - riscv64gc-unknown-linux-gnu
-          # - wasm32-unknown-unknown
-          # - wasm32-unknown-emscripten
-          # - wasm32-wasi
+          - wasm32-unknown-unknown
+          - wasm32-unknown-emscripten
+          - wasm32-wasi
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,22 +100,10 @@ jobs:
             ${{ runner.os }}-cross-
       - name: Install Rust
         run: rustup update stable && rustup default stable
-      - name: cross build --target ${{ matrix.target }}
+      - name: cargo build --target ${{ matrix.target }}
         run: |
-          cargo install cross
-          cross build --target ${{ matrix.target }} --all-features
-        # if: matrix.target != 'wasm32-unknown-unknown' && matrix.target != 'wasm32-wasi'
-      # # WASM support
-      # - name: cargo build --target ${{ matrix.target }}
-      #   run: |
-      #     rustup target add ${{ matrix.target }}
-      #     cargo build --target ${{ matrix.target }}
-      #   if: matrix.target == 'wasm32-unknown-unknown' || matrix.target == 'wasm32-wasi'
-      # - name: cargo build --target ${{ matrix.target }}
-      #   run: |
-      #     rustup target add ${{ matrix.target }}
-      #     cargo +nightly build --no-default-features --features alloc --target ${{ matrix.target }} -Z build-std=core,alloc
-      #   if: matrix.target == 'mips64-unknown-linux-gnuabi64'
+          rustup target add ${{ matrix.target }}
+          cargo build --target ${{ matrix.target }} 
 
   build:
     name: build
@@ -150,7 +138,47 @@ jobs:
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run build
       run: cargo hack build --feature-powerset --exclude-no-default-features --group-features xxhash64,xxhash3 --exclude-features tracing
-  
+  no-std:
+    name: no-std
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Cache cargo build and registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-test-
+    - name: Install Rust
+      # --no-self-update is necessary because the windows environment cannot self-update rustup.exe.
+      run: rustup update stable --no-self-update && rustup default stable
+    - name: Install cargo-hack
+      run: cargo install cargo-hack
+    - name: Cache ~/.cargo
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo
+        key: ${{ runner.os }}-coverage-dotcargo
+    - name: Run test (Unix)
+      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --no-default-features --features alloc
+      if: matrix.os != 'windows-latest'
+    - name: Run test (Windows)
+      shell: pwsh
+      run: |
+        $env:RUSTFLAGS="--cfg all_orderwal_tests"
+        cargo test --no-default-features --features alloc
+      if: matrix.os == 'windows-latest'
+ 
   test:
     name: test
     strategy:
@@ -183,12 +211,12 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test (Unix)
-      run: RUSTFLAGS="--cfg all_tests" cargo test --all-features
+      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --all-features
       if: matrix.os != 'windows-latest'
     - name: Run test (Windows)
       shell: pwsh
       run: |
-        $env:RUSTFLAGS="--cfg all_tests"
+        $env:RUSTFLAGS="--cfg all_orderwal_tests"
         cargo test --all-features
       if: matrix.os == 'windows-latest'
 
@@ -238,18 +266,14 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         cfg:
-          - unsync_insert
-          - unsync_iters
-          - unsync_get
-          - unsync_constructor
           - swmr_insert
           - swmr_iters
           - swmr_get
           - swmr_constructor
-          - swmr_generic_insert
-          - swmr_generic_iters
-          - swmr_generic_get
-          - swmr_generic_constructor
+          - swmr_multiple_version_insert
+          - swmr_multiple_version_iters
+          - swmr_multiple_version_get
+          - swmr_multiple_version_constructor
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -303,10 +327,10 @@ jobs:
   #         - swmr_iters
   #         - swmr_get
   #         - swmr_constructor
-  #         - swmr_generic_insert
-  #         - swmr_generic_iters
-  #         - swmr_generic_get
-  #         - swmr_generic_constructor
+  #         - swmr_insert
+  #         - swmr_iters
+  #         - swmr_get
+  #         - swmr_constructor
   #       # Exclude invalid combinations
   #       exclude:
   #         - os: ubuntu-latest
@@ -408,6 +432,7 @@ jobs:
       - build
       - cross
       - test
+      - no-std
       - sanitizer
     steps:
       - uses: actions/checkout@v4
@@ -433,7 +458,7 @@ jobs:
       - name: Run tarpaulin
         uses: actions-rs/cargo@v1
         env:
-          RUSTFLAGS: "--cfg all_tests"
+          RUSTFLAGS: "--cfg all_orderwal_tests"
         with:
           command: tarpaulin
           args: --all-features --run-types tests --run-types doctests --workspace --out xml
