@@ -1,4 +1,5 @@
 use multiple_version::{OrderWal, Reader, Writer};
+use skl::KeySize;
 
 use crate::memtable::{
   alternative::{MultipleVersionTable, TableOptions},
@@ -78,15 +79,25 @@ fn reopen_wrong_kind() {
 
   let dir = tempfile::tempdir().unwrap();
   let path = dir.path().join("test_reopen_wrong_kind");
-  let _ = unsafe {
+  let wal = unsafe {
     Builder::new()
       .with_capacity(MB)
+      .with_maximum_key_size(KeySize::with(10))
+      .with_maximum_value_size(10)
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
       .map_mut::<OrderWal<Person, String>, _>(path.as_path())
       .unwrap()
   };
+
+  assert!(!wal.read_only());
+  assert_eq!(wal.capacity(), MB);
+  assert!(wal.remaining() < MB);
+  assert_eq!(wal.maximum_key_size(), 10);
+  assert_eq!(wal.maximum_value_size(), 10);
+  assert_eq!(wal.path().unwrap().as_path(), path.as_path());
+  assert_eq!(wal.options().maximum_key_size(), 10);
 
   let err = unsafe {
     Builder::new()

@@ -1,4 +1,7 @@
-use core::marker::PhantomData;
+use core::{
+  marker::PhantomData,
+  sync::atomic::{AtomicU64, Ordering},
+};
 
 use rarena_allocator::sync::Arena;
 
@@ -11,8 +14,8 @@ where
 {
   pub(super) arena: Arena,
   pub(super) map: M,
-  pub(super) max_version: u64,
-  pub(super) min_version: u64,
+  pub(super) max_version: AtomicU64,
+  pub(super) min_version: AtomicU64,
   pub(super) opts: Options,
   pub(super) cks: S,
   pub(super) _m: PhantomData<(fn() -> K, fn() -> V)>,
@@ -66,8 +69,8 @@ where
       arena,
       map: set,
       opts,
-      max_version: maximum_version,
-      min_version: minimum_version,
+      max_version: AtomicU64::new(maximum_version),
+      min_version: AtomicU64::new(minimum_version),
       cks: checksumer,
       _m: PhantomData,
     }
@@ -80,22 +83,38 @@ where
 
   #[inline]
   fn maximum_version(&self) -> u64 {
-    self.max_version
+    self.max_version.load(Ordering::Acquire)
   }
 
   #[inline]
   fn minimum_version(&self) -> u64 {
-    self.min_version
+    self.min_version.load(Ordering::Acquire)
   }
 
   #[inline]
-  fn update_maximum_version(&mut self, version: u64) {
-    self.max_version = version;
+  fn update_maximum_version(&self, version: u64) {
+    let _ = self
+      .max_version
+      .fetch_update(Ordering::Release, Ordering::Acquire, |v| {
+        if v < version {
+          Some(version)
+        } else {
+          None
+        }
+      });
   }
 
   #[inline]
-  fn update_minimum_version(&mut self, version: u64) {
-    self.min_version = version;
+  fn update_minimum_version(&self, version: u64) {
+    let _ = self
+      .min_version
+      .fetch_update(Ordering::Release, Ordering::Acquire, |v| {
+        if v > version {
+          Some(version)
+        } else {
+          None
+        }
+      });
   }
 
   #[inline]

@@ -548,14 +548,14 @@ pub trait Wal<S> {
   fn minimum_version(&self) -> u64;
 
   #[inline]
-  fn update_versions(&mut self, version: u64) {
+  fn update_versions(&self, version: u64) {
     self.update_maximum_version(version);
     self.update_minimum_version(version);
   }
 
-  fn update_maximum_version(&mut self, version: u64);
+  fn update_maximum_version(&self, version: u64);
 
-  fn update_minimum_version(&mut self, version: u64);
+  fn update_minimum_version(&self, version: u64);
 
   #[inline]
   fn insert_pointer<'a>(
@@ -785,12 +785,19 @@ pub trait Wal<S> {
     };
 
     res.and_then(|(offset, kp, vp)| {
-      self.insert_pointer(version, kp, vp).map_err(|e| {
-        unsafe {
-          self.allocator().rewind(ArenaPosition::Start(offset as u32));
-        };
-        Among::Right(e)
-      })
+      self
+        .insert_pointer(version, kp, vp)
+        .map(|_| {
+          if let Some(version) = version {
+            self.update_versions(version)
+          }
+        })
+        .map_err(|e| {
+          unsafe {
+            self.allocator().rewind(ArenaPosition::Start(offset as u32));
+          };
+          Among::Right(e)
+        })
     })
   }
 
@@ -820,6 +827,8 @@ pub trait Wal<S> {
     let opts = self.options();
     let maximum_key_size = opts.maximum_key_size().to_u32();
     let minimum_value_size = opts.maximum_value_size();
+    let mut minimum_version = self.minimum_version();
+    let mut maximum_version = self.maximum_version();
     let start_offset = unsafe {
       let (mut cursor, allocator, mut buf) = batch
         .iter_mut()
@@ -864,9 +873,6 @@ pub trait Wal<S> {
         })
         .map_err(Among::Right)?;
 
-      let mut minimum = self.minimum_version();
-      let mut maximum = self.maximum_version();
-
       for ent in batch.iter_mut() {
         let meta = ent.encoded_meta();
         let version_size = if ent.internal_version().is_some() {
@@ -896,12 +902,12 @@ pub trait Wal<S> {
         let (key_ptr, val_ptr) = if let Some(version) = ent.internal_version() {
           buf.put_u64_le_unchecked(version);
 
-          if maximum < version {
-            maximum = version;
+          if maximum_version < version {
+            maximum_version = version;
           }
 
-          if minimum > version {
-            minimum = version;
+          if minimum_version > version {
+            minimum_version = version;
           }
 
           (
@@ -977,6 +983,10 @@ pub trait Wal<S> {
         let (kp, vp) = e.take_pointer().unwrap();
         (e.internal_version(), kp, vp)
       }))
+      .map(|_| {
+        self.update_maximum_version(maximum_version);
+        self.update_minimum_version(minimum_version);
+      })
       .map_err(|e| {
         // Safety: the writer is single threaded, the memory chunk in buf cannot be accessed by other threads,
         // so it's safe to rewind the arena.

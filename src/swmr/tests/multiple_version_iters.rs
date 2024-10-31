@@ -1,3 +1,5 @@
+use core::ops::Bound;
+
 use crate::memtable::{
   alternative::{MultipleVersionTable, TableOptions},
   MultipleVersionMemtable, MultipleVersionMemtableEntry,
@@ -94,6 +96,38 @@ where
     num += 1;
   }
   assert_eq!(num, 4);
+
+  let upper_bound = wal.upper_bound(1, Bound::Included("b")).unwrap();
+  assert_eq!(upper_bound.value(), "a1");
+
+  let upper_bound = wal.upper_bound_versioned(1, Bound::Included("b")).unwrap();
+  assert_eq!(upper_bound.value().unwrap(), "a1");
+
+  let upper_bound = unsafe { wal.upper_bound_by_bytes(1, Bound::Included(b"b")).unwrap() };
+  assert_eq!(upper_bound.value(), "a1");
+
+  let upper_bound = unsafe {
+    wal
+      .upper_bound_versioned_by_bytes(1, Bound::Included(b"b"))
+      .unwrap()
+  };
+  assert_eq!(upper_bound.value().unwrap(), "a1");
+
+  let lower_bound = wal.lower_bound(1, Bound::Included("b")).unwrap();
+  assert_eq!(lower_bound.value(), "c1");
+
+  let lower_bound = wal.lower_bound_versioned(1, Bound::Included("b")).unwrap();
+  assert_eq!(lower_bound.value().unwrap(), "c1");
+
+  let lower_bound = unsafe { wal.lower_bound_by_bytes(1, Bound::Included(b"b")).unwrap() };
+  assert_eq!(lower_bound.value(), "c1");
+
+  let lower_bound = unsafe {
+    wal
+      .lower_bound_versioned_by_bytes(1, Bound::Included(b"b"))
+      .unwrap()
+  };
+  assert_eq!(lower_bound.value().unwrap(), "c1");
 }
 
 fn iter_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
@@ -128,6 +162,25 @@ where
   }
 
   assert_eq!(i, N);
+
+  let iter = wal.values(0);
+
+  let mut i = 0;
+  for ent in iter {
+    assert_eq!(ent.value(), make_value(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, N);
+
+  let iter = wal.keys(0);
+  let mut i = 0;
+  for ent in iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, N);
 }
 
 fn iter_all_versions_next_by_entry<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
@@ -147,6 +200,26 @@ where
   let mut i = 0;
   while let Some(ref mut entry) = ent {
     assert_eq!(entry.key(), make_int_key(i).as_str());
+    assert_eq!(entry.value(), make_value(i).as_str());
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N);
+
+  let mut ent = wal.keys(0).next();
+
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    assert_eq!(entry.key(), make_int_key(i).as_str());
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N);
+
+  let mut ent = wal.values(0).next();
+
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
     assert_eq!(entry.value(), make_value(i).as_str());
     ent = entry.next();
     i += 1;
@@ -215,13 +288,40 @@ where
 
   let upper = make_int_key(50);
   let mut i = 0;
-  let mut iter = wal.range(0, ..=upper);
+  let mut iter = wal.range(0, ..=upper.as_str());
   for ent in &mut iter {
     assert_eq!(ent.key(), make_int_key(i).as_str());
     assert_eq!(ent.value(), make_value(i).as_str());
     i += 1;
   }
 
+  assert_eq!(i, 51);
+
+  let mut i = 0;
+  let mut iter = wal.range_all_versions(0, ..=upper.as_str());
+  for ent in &mut iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, 51);
+
+  let mut i = 0;
+  let mut iter = wal.range_keys(0, ..=upper.as_str());
+  for ent in &mut iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    i += 1;
+  }
+
+  assert_eq!(i, 51);
+
+  let mut i = 0;
+  let mut iter = wal.range_values(0, ..=upper.as_str());
+  for ent in &mut iter {
+    assert_eq!(ent.value(), make_value(i).as_str());
+    i += 1;
+  }
   assert_eq!(i, 51);
 }
 
@@ -256,6 +356,24 @@ where
   }
 
   assert_eq!(i, 0);
+
+  let iter = wal.values(0).rev();
+  let mut i = N;
+  for ent in iter {
+    assert_eq!(ent.value(), make_value(i - 1).as_str());
+    i -= 1;
+  }
+
+  assert_eq!(i, 0);
+
+  let iter = wal.keys(0).rev();
+  let mut i = N;
+  for ent in iter {
+    assert_eq!(ent.key(), make_int_key(i - 1).as_str());
+    i -= 1;
+  }
+
+  assert_eq!(i, 0);
 }
 
 fn iter_all_versions_prev_by_entry<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
@@ -279,6 +397,28 @@ where
     assert_eq!(entry.value(), make_value(N - i).as_str());
     ent = entry.prev();
   }
+  assert_eq!(i, N);
+
+  let mut ent = wal.values(0).next_back();
+
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    i += 1;
+    assert_eq!(entry.value(), make_value(N - i).as_str());
+    ent = entry.prev();
+  }
+
+  assert_eq!(i, N);
+
+  let mut ent = wal.keys(0).next_back();
+
+  let mut i = 0;
+  while let Some(ref mut entry) = ent {
+    i += 1;
+    assert_eq!(entry.key(), make_int_key(N - i).as_str());
+    ent = entry.prev();
+  }
+
   assert_eq!(i, N);
 }
 
@@ -344,7 +484,7 @@ where
   }
 
   let lower = make_int_key(50);
-  let it = wal.range(0, lower..).rev();
+  let it = wal.range(0, lower.as_str()..).rev();
   let mut i = N - 1;
 
   for ent in it {
@@ -352,4 +492,33 @@ where
     assert_eq!(ent.value(), make_value(i).as_str());
     i -= 1;
   }
+
+  assert_eq!(i, 49);
+
+  let it = wal.range_all_versions(0, lower.as_str()..).rev();
+  let mut i = N - 1;
+
+  for ent in it {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+    i -= 1;
+  }
+
+  assert_eq!(i, 49);
+
+  let mut i = N - 1;
+  let mut iter = wal.range_keys(0, lower.as_str()..).rev();
+  for ent in &mut iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    i -= 1;
+  }
+  assert_eq!(i, 49);
+
+  let mut i = N - 1;
+  let mut iter = wal.range_values(0, lower.as_str()..).rev();
+  for ent in &mut iter {
+    assert_eq!(ent.value(), make_value(i).as_str());
+    i -= 1;
+  }
+  assert_eq!(i, 49);
 }

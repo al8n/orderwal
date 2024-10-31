@@ -1,10 +1,15 @@
 use core::ops::Bound;
 
-use crate::memtable::{
-  alternative::{MultipleVersionTable, TableOptions},
-  MultipleVersionMemtable, MultipleVersionMemtableEntry,
+use crate::{
+  memtable::{
+    alternative::{MultipleVersionTable, TableOptions},
+    MultipleVersionMemtable, MultipleVersionMemtableEntry,
+  },
+  types::{KeyBuilder, ValueBuilder},
 };
+use dbutils::traits::MaybeStructured;
 use multiple_version::{Reader, Writer};
+use skl::VacantBuffer;
 
 use super::*;
 
@@ -22,6 +27,22 @@ expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<str, str> [T
   ge,
   le,
   lt,
+});
+
+expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
+  insert,
+  insert_with_value_builder,
+  insert_with_key_builder,
+  insert_with_bytes,
+  insert_with_builders,
+});
+
+expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
+  insert,
+  insert_with_value_builder,
+  insert_with_key_builder,
+  insert_with_bytes,
+  insert_with_builders,
 });
 
 fn mvcc<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
@@ -422,4 +443,161 @@ where
   assert_eq!(ent.key(), "c");
   assert_eq!(ent.value(), "c2");
   assert_eq!(ent.version(), 3);
+}
+
+#[allow(clippy::needless_borrows_for_generic_args)]
+fn insert<M>(wal: &mut OrderWal<Person, String, M>)
+where
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal.insert(0, &p, &v).unwrap();
+      (p, v)
+    })
+    .collect::<Vec<_>>();
+
+  for (p, pv) in &people {
+    assert!(wal.contains_key(0, p));
+
+    assert_eq!(wal.get(0, p).unwrap().value(), pv);
+  }
+}
+
+fn insert_with_value_builder<M>(wal: &mut OrderWal<Person, String, M>)
+where
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      wal
+        .insert_with_value_builder(
+          0,
+          &p,
+          ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
+            buf.put_slice(v.as_bytes()).map(|_| v.len())
+          }),
+        )
+        .unwrap();
+      (p, v)
+    })
+    .collect::<Vec<_>>();
+
+  for (p, _) in &people {
+    assert!(wal.contains_key(0, p));
+    assert!(wal.contains_key(0, &p.as_ref()));
+  }
+}
+
+#[allow(clippy::needless_borrows_for_generic_args)]
+fn insert_with_key_builder<M>(wal: &mut OrderWal<Person, String, M>)
+where
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let pvec = p.to_vec();
+      let v = format!("My name is {}", p.name);
+      unsafe {
+        wal
+          .insert(0, MaybeStructured::from_slice(pvec.as_ref()), &v)
+          .unwrap();
+      }
+      (p, v)
+    })
+    .collect::<Vec<_>>();
+
+  for (p, pv) in &people {
+    assert!(wal.contains_key(0, p));
+    assert_eq!(wal.get(0, p).unwrap().value(), pv);
+  }
+}
+
+fn insert_with_bytes<M>(wal: &mut OrderWal<Person, String, M>)
+where
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  let people = (0..100)
+    .map(|_| {
+      let p = Person::random();
+      let v = format!("My name is {}", p.name);
+      unsafe {
+        wal
+          .insert(
+            0,
+            MaybeStructured::from_slice(p.to_vec().as_slice()),
+            MaybeStructured::from_slice(v.as_bytes()),
+          )
+          .unwrap();
+      }
+      (p, v)
+    })
+    .collect::<Vec<_>>();
+
+  for (p, pv) in &people {
+    assert!(wal.contains_key(0, p));
+    assert!(wal.contains_key(0, &p.as_ref()));
+    assert_eq!(wal.get(0, p).unwrap().value(), pv);
+  }
+}
+
+fn insert_with_builders<M>(wal: &mut OrderWal<Person, String, M>)
+where
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+{
+  let people = (0..1)
+    .map(|_| {
+      let p = Person::random();
+      let pvec = p.to_vec();
+      let v = format!("My name is {}", p.name);
+      wal
+        .insert_with_builders(
+          0,
+          KeyBuilder::new(pvec.len(), |buf: &mut VacantBuffer<'_>| {
+            p.encode_to_buffer(buf)
+          }),
+          ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
+            buf.put_slice(v.as_bytes()).map(|_| v.len())
+          }),
+        )
+        .unwrap();
+      (p, pvec, v)
+    })
+    .collect::<Vec<_>>();
+
+  for (p, pvec, pv) in &people {
+    assert!(wal.contains_key(0, p));
+    assert!(wal.contains_key_versioned(0, p));
+    assert_eq!(wal.get(0, p).unwrap().value(), pv);
+    assert_eq!(wal.get_versioned(0, p).unwrap().value().unwrap(), pv);
+
+    unsafe {
+      assert!(wal.contains_key_by_bytes(0, pvec));
+      assert!(wal.contains_key_versioned_by_bytes(0, pvec));
+      assert_eq!(wal.get_by_bytes(0, pvec.as_ref()).unwrap().value(), pv);
+      assert_eq!(
+        wal
+          .get_versioned_by_bytes(0, pvec)
+          .unwrap()
+          .value()
+          .unwrap(),
+        pv
+      );
+    }
+  }
 }
