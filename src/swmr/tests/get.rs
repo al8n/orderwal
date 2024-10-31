@@ -140,7 +140,10 @@ where
       let v = format!("My name is {}", p.name);
       unsafe {
         wal
-          .insert(MaybeStructured::from_slice(pvec.as_ref()), &v)
+          .insert_with_key_builder(
+            KeyBuilder::once(p.encoded_len(), |buf| p.encode_to_buffer(buf)),
+            &v,
+          )
           .unwrap();
       }
       (p, v)

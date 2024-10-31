@@ -41,6 +41,30 @@ where
     assert_eq!(&pwal.1, pvec.value());
   }
 
+  let mut iter = wal.keys();
+
+  for (pwal, pvec) in people.iter().zip(iter.by_ref()) {
+    assert!(pwal.0.equivalent(pvec.key()));
+  }
+
+  let mut rev_iter = wal.keys().rev();
+
+  for (pwal, pvec) in people.iter().rev().zip(rev_iter.by_ref()) {
+    assert!(pwal.0.equivalent(pvec.key()));
+  }
+
+  let mut iter = wal.values();
+
+  for (pwal, pvec) in people.iter().zip(iter.by_ref()) {
+    assert_eq!(&pwal.1, pvec.value());
+  }
+
+  let mut rev_iter = wal.values().rev();
+
+  for (pwal, pvec) in people.iter().rev().zip(rev_iter.by_ref()) {
+    assert_eq!(&pwal.1, pvec.value());
+  }
+
   let wal = wal.reader();
   let mut iter = wal.iter();
 
@@ -219,6 +243,32 @@ where
 
   assert!(iter.next().is_none());
 
+  let mut iter = wal.range_keys::<Person, _>(&mid..);
+  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
+    assert!(pwal.0.equivalent(pvec.clone().key()));
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut rev_iter = wal.range_keys::<Person, _>(&mid..).rev();
+
+  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
+    assert!(pwal.0.equivalent(pvec.key()));
+  }
+
+  let mut iter = wal.range_values::<Person, _>(&mid..);
+  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
+    assert_eq!(&pwal.1, pvec.clone().value());
+  }
+
+  assert!(iter.next().is_none());
+
+  let mut rev_iter = wal.range_values::<Person, _>(&mid..).rev();
+
+  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
+    assert_eq!(&pwal.1, pvec.value());
+  }
+
   let wal = wal.reader();
   let mut iter = wal.range::<Person, _>(&mid..);
 
@@ -238,7 +288,7 @@ where
 fn entry_iter<M>(wal: &mut OrderWal<u32, u32, M>)
 where
   M: Memtable<Key = u32, Value = u32> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: MemtableEntry<'a> + std::fmt::Debug,
   M::Error: std::fmt::Debug,
 {
   for i in 0..100u32 {
@@ -246,6 +296,7 @@ where
   }
 
   let mut curr = wal.first();
+  println!("{:?}", curr);
   let mut cursor = 0;
   while let Some(mut ent) = curr {
     assert_eq!(ent.key(), &cursor);
@@ -261,6 +312,44 @@ where
   while let Some(mut ent) = curr {
     cursor -= 1;
     assert_eq!(ent.key(), &cursor);
+    assert_eq!(ent.value(), &cursor);
+    curr = ent.prev();
+  }
+
+  let mut curr = wal.keys().next();
+  println!("{:?}", curr);
+  let mut cursor = 0;
+  while let Some(mut ent) = curr {
+    assert_eq!(ent.key(), &cursor);
+    cursor += 1;
+    curr = ent.next();
+  }
+
+  let curr = wal.keys().next_back();
+
+  let mut curr = curr.clone();
+  let mut cursor = 100;
+  while let Some(mut ent) = curr {
+    cursor -= 1;
+    assert_eq!(ent.key(), &cursor);
+    curr = ent.prev();
+  }
+
+  let mut curr = wal.values().next();
+  println!("{:?}", curr);
+  let mut cursor = 0;
+  while let Some(mut ent) = curr {
+    assert_eq!(ent.value(), &cursor);
+    cursor += 1;
+    curr = ent.next();
+  }
+
+  let curr = wal.values().next_back();
+
+  let mut curr = curr.clone();
+  let mut cursor = 100;
+  while let Some(mut ent) = curr {
+    cursor -= 1;
     assert_eq!(ent.value(), &cursor);
     curr = ent.prev();
   }

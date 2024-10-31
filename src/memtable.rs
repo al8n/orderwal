@@ -162,11 +162,8 @@ where
   for<'a> Self::Item<'a>: MultipleVersionMemtableEntry<'a>,
 {
   /// The item returned by the iterator or query methods.
-  type MultipleVersionItem<'a>: MultipleVersionMemtableEntry<
-    'a,
-    Key = Self::Key,
-    Value = Self::Value,
-  >
+  type MultipleVersionItem<'a>: MultipleVersionMemtableEntry<'a, Key = Self::Key, Value = Self::Value>
+    + Clone
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a;

@@ -482,7 +482,7 @@ where
         .insert_with_value_builder(
           0,
           &p,
-          ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
+          ValueBuilder::once(v.len(), |buf: &mut VacantBuffer<'_>| {
             buf.put_slice(v.as_bytes()).map(|_| v.len())
           }),
         )
@@ -497,7 +497,6 @@ where
   }
 }
 
-#[allow(clippy::needless_borrows_for_generic_args)]
 fn insert_with_key_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
@@ -507,13 +506,14 @@ where
   let people = (0..100)
     .map(|_| {
       let p = Person::random();
-      let pvec = p.to_vec();
       let v = format!("My name is {}", p.name);
-      unsafe {
-        wal
-          .insert(0, MaybeStructured::from_slice(pvec.as_ref()), &v)
-          .unwrap();
-      }
+      wal
+        .insert_with_key_builder(
+          0,
+          KeyBuilder::once(p.encoded_len(), |buf| p.encode_to_buffer(buf)),
+          &v,
+        )
+        .unwrap();
       (p, v)
     })
     .collect::<Vec<_>>();

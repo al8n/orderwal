@@ -195,8 +195,8 @@ where
     wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
   }
 
-  let mut ent = wal.first(0);
-
+  let mut ent = wal.first(0).clone();
+  std::println!("{ent:?}");
   let mut i = 0;
   while let Some(ref mut entry) = ent {
     assert_eq!(entry.key(), make_int_key(i).as_str());
@@ -206,7 +206,8 @@ where
   }
   assert_eq!(i, N);
 
-  let mut ent = wal.keys(0).next();
+  let mut ent = wal.keys(0).next().clone();
+  std::println!("{ent:?}");
 
   let mut i = 0;
   while let Some(ref mut entry) = ent {
@@ -216,7 +217,8 @@ where
   }
   assert_eq!(i, N);
 
-  let mut ent = wal.values(0).next();
+  let mut ent = wal.values(0).next().clone();
+  std::println!("{ent:?}");
 
   let mut i = 0;
   while let Some(ref mut entry) = ent {
@@ -243,7 +245,7 @@ fn iter_all_versions_next_by_versioned_entry<M>(
     wal.remove(1, &k).unwrap();
   }
 
-  let mut ent = wal.first(0);
+  let mut ent = wal.first(0).clone();
   let mut i = 0;
   while let Some(ref mut entry) = ent {
     assert_eq!(entry.key(), make_int_key(i).as_str());
@@ -253,7 +255,7 @@ fn iter_all_versions_next_by_versioned_entry<M>(
   }
   assert_eq!(i, N);
 
-  let mut ent = wal.first_versioned(1);
+  let mut ent = wal.first_versioned(1).clone();
   let mut i = 0;
   while let Some(ref mut entry) = ent {
     if i % 2 == 1 {
@@ -490,6 +492,7 @@ where
   for ent in it {
     assert_eq!(ent.key(), make_int_key(i).as_str());
     assert_eq!(ent.value(), make_value(i).as_str());
+    assert_eq!(ent.version(), 0);
     i -= 1;
   }
 
@@ -501,6 +504,7 @@ where
   for ent in it {
     assert_eq!(ent.key(), make_int_key(i).as_str());
     assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+    assert_eq!(ent.version(), 0);
     i -= 1;
   }
 
@@ -510,6 +514,7 @@ where
   let mut iter = wal.range_keys(0, lower.as_str()..).rev();
   for ent in &mut iter {
     assert_eq!(ent.key(), make_int_key(i).as_str());
+    assert_eq!(ent.version(), 0);
     i -= 1;
   }
   assert_eq!(i, 49);
@@ -518,6 +523,7 @@ where
   let mut iter = wal.range_values(0, lower.as_str()..).rev();
   for ent in &mut iter {
     assert_eq!(ent.value(), make_value(i).as_str());
+    assert_eq!(ent.version(), 0);
     i -= 1;
   }
   assert_eq!(i, 49);
