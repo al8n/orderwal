@@ -88,9 +88,9 @@ pub mod multiple_version {
 
   pub use crate::{
     memtable::arena::TableOptions as ArenaTableOptions,
-    types::multiple_version::{Entry, Key, MultipleVersionEntry, Value},
+    types::multiple_version::{Entry, Key, Value, VersionedEntry},
     wal::multiple_version::{
-      Iter, Keys, MultipleVersionIter, MultipleVersionRange, RangeKeys, RangeValues, Reader, Writer,
+      Iter, IterAll, Keys, RangeAll, RangeKeys, RangeValues, Reader, Writer,
     },
   };
 

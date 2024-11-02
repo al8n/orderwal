@@ -4,7 +4,7 @@ use dbutils::{equivalent::Comparable, types::Type};
 
 use crate::{
   memtable::{BaseEntry, MultipleVersionMemtable, VersionedMemtableEntry},
-  types::multiple_version::{Entry, Key, MultipleVersionEntry, Value},
+  types::multiple_version::{Entry, Key, Value, VersionedEntry},
   wal::{KeyPointer, ValuePointer},
 };
 
@@ -694,7 +694,7 @@ where
 }
 
 /// Iterator over the entries in the WAL.
-pub struct MultipleVersionIter<'a, I, M>
+pub struct IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable,
   for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
@@ -704,7 +704,7 @@ where
   version: u64,
 }
 
-impl<'a, I, M> MultipleVersionIter<'a, I, M>
+impl<'a, I, M> IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable,
   for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
@@ -725,7 +725,7 @@ where
   }
 }
 
-impl<'a, I, M> Iterator for MultipleVersionIter<'a, I, M>
+impl<'a, I, M> Iterator for IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
   M::Key: Type + Ord,
@@ -734,18 +734,18 @@ where
   for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
   I: Iterator<Item = M::VersionedItem<'a>>,
 {
-  type Item = MultipleVersionEntry<'a, M::VersionedItem<'a>>;
+  type Item = VersionedEntry<'a, M::VersionedItem<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| MultipleVersionEntry::with_version(ent, self.version))
+      .map(|ent| VersionedEntry::with_version(ent, self.version))
   }
 }
 
-impl<'a, I, M> DoubleEndedIterator for MultipleVersionIter<'a, I, M>
+impl<'a, I, M> DoubleEndedIterator for IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
   M::Key: Type + Ord,
@@ -759,11 +759,11 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| MultipleVersionEntry::with_version(ent, self.version))
+      .map(|ent| VersionedEntry::with_version(ent, self.version))
   }
 }
 
-impl<'a, I, M> FusedIterator for MultipleVersionIter<'a, I, M>
+impl<'a, I, M> FusedIterator for IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
   M::Key: Type + Ord,
@@ -775,7 +775,7 @@ where
 }
 
 /// An iterator over a subset of the entries in the WAL.
-pub struct MultipleVersionRange<'a, R, Q, B>
+pub struct RangeAll<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
@@ -792,7 +792,7 @@ where
   version: u64,
 }
 
-impl<'a, R, Q, B> MultipleVersionRange<'a, R, Q, B>
+impl<'a, R, Q, B> RangeAll<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
@@ -822,7 +822,7 @@ where
   }
 }
 
-impl<'a, R, Q, B> Iterator for MultipleVersionRange<'a, R, Q, B>
+impl<'a, R, Q, B> Iterator for RangeAll<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
@@ -834,18 +834,18 @@ where
   for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
   for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
 {
-  type Item = MultipleVersionEntry<'a, B::VersionedItem<'a>>;
+  type Item = VersionedEntry<'a, B::VersionedItem<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self
       .iter
       .next()
-      .map(|ent| MultipleVersionEntry::with_version(ent, self.version))
+      .map(|ent| VersionedEntry::with_version(ent, self.version))
   }
 }
 
-impl<'a, R, Q, B> DoubleEndedIterator for MultipleVersionRange<'a, R, Q, B>
+impl<'a, R, Q, B> DoubleEndedIterator for RangeAll<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
@@ -862,11 +862,11 @@ where
     self
       .iter
       .next_back()
-      .map(|ent| MultipleVersionEntry::with_version(ent, self.version))
+      .map(|ent| VersionedEntry::with_version(ent, self.version))
   }
 }
 
-impl<'a, R, Q, B> FusedIterator for MultipleVersionRange<'a, R, Q, B>
+impl<'a, R, Q, B> FusedIterator for RangeAll<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,

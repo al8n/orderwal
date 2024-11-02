@@ -378,7 +378,7 @@ where
 }
 
 /// The reference to an entry in the generic WALs.
-pub struct MultipleVersionEntry<'a, E>
+pub struct VersionedEntry<'a, E>
 where
   E: VersionedMemtableEntry<'a>,
   E::Key: Type,
@@ -391,14 +391,14 @@ where
   query_version: u64,
 }
 
-impl<'a, E> core::fmt::Debug for MultipleVersionEntry<'a, E>
+impl<'a, E> core::fmt::Debug for VersionedEntry<'a, E>
 where
   E: VersionedMemtableEntry<'a> + core::fmt::Debug,
   E::Key: Type,
   E::Value: Type,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("MultipleVersionEntry")
+    f.debug_struct("VersionedEntry")
       .field("key", &self.key())
       .field("value", &self.value())
       .field("version", &self.version)
@@ -406,7 +406,7 @@ where
   }
 }
 
-impl<'a, E> Clone for MultipleVersionEntry<'a, E>
+impl<'a, E> Clone for VersionedEntry<'a, E>
 where
   E: VersionedMemtableEntry<'a> + Clone,
   E::Key: Type,
@@ -424,7 +424,7 @@ where
   }
 }
 
-impl<'a, E> MultipleVersionEntry<'a, E>
+impl<'a, E> VersionedEntry<'a, E>
 where
   E: VersionedMemtableEntry<'a>,
   E::Key: Type,
@@ -447,7 +447,7 @@ where
   }
 }
 
-impl<'a, E> MultipleVersionEntry<'a, E>
+impl<'a, E> VersionedEntry<'a, E>
 where
   E: VersionedMemtableEntry<'a>,
   E::Key: Ord + Type,
@@ -478,7 +478,7 @@ where
   }
 }
 
-impl<'a, E> MultipleVersionEntry<'a, E>
+impl<'a, E> VersionedEntry<'a, E>
 where
   E: VersionedMemtableEntry<'a>,
   E::Key: Type,
@@ -502,7 +502,7 @@ where
     self
       .key
       .raw()
-      .expect("MultipleVersionEntry's raw key cannot be None")
+      .expect("VersionedEntry's raw key cannot be None")
   }
 
   /// Returns the value of the entry.
@@ -518,7 +518,7 @@ where
       None => None,
       Some(v) => Some(
         v.raw()
-          .expect("MultipleVersionEntry's raw value cannot be None if value exists"),
+          .expect("VersionedEntry's raw value cannot be None if value exists"),
       ),
     }
   }

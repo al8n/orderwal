@@ -18,7 +18,7 @@ use crate::{
   memtable::{BaseTable, MultipleVersionMemtable, VersionedMemtableEntry},
   sealed::{Constructable, MultipleVersionWalReader, Wal},
   types::{
-    multiple_version::{Entry, MultipleVersionEntry},
+    multiple_version::{Entry, VersionedEntry},
     BufWriter, KeyBuilder, ValueBuilder,
   },
   Options,
@@ -135,7 +135,7 @@ pub trait Reader: Constructable {
   fn iter_all_versions(
     &self,
     version: u64,
-  ) -> MultipleVersionIter<
+  ) -> IterAll<
     '_,
     <<Self::Wal as Wal<Self::Checksumer>>::Memtable as MultipleVersionMemtable>::IterAll<'_>,
     Self::Memtable,
@@ -148,7 +148,7 @@ pub trait Reader: Constructable {
     <Self::Memtable as BaseTable>::Value: Type,
     for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
   {
-    MultipleVersionIter::new(MultipleVersionBaseIter::new(
+    IterAll::new(MultipleVersionBaseIter::new(
       version,
       self.as_wal().iter_all_versions(version),
     ))
@@ -185,7 +185,7 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     range: R,
-  ) -> MultipleVersionRange<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
+  ) -> RangeAll<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
@@ -198,7 +198,7 @@ pub trait Reader: Constructable {
     for<'b> <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'b>:
       VersionedMemtableEntry<'b>,
   {
-    MultipleVersionRange::new(MultipleVersionBaseIter::new(
+    RangeAll::new(MultipleVersionBaseIter::new(
       version,
       self
         .as_wal()
@@ -329,9 +329,7 @@ pub trait Reader: Constructable {
   fn first_versioned(
     &self,
     version: u64,
-  ) -> Option<
-    MultipleVersionEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>,
-  >
+  ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>>
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
@@ -345,7 +343,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .first_versioned(version)
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -373,9 +371,7 @@ pub trait Reader: Constructable {
   fn last_versioned(
     &self,
     version: u64,
-  ) -> Option<
-    MultipleVersionEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>,
-  >
+  ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>>
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
@@ -389,7 +385,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .last_versioned(version)
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -507,9 +503,7 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     key: &Q,
-  ) -> Option<
-    MultipleVersionEntry<'a, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'a>>,
-  >
+  ) -> Option<VersionedEntry<'a, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'a>>>
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
@@ -524,7 +518,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .get_versioned(version, Query::<_, Q>::ref_cast(key))
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Gets the value associated with the key.
@@ -565,9 +559,7 @@ pub trait Reader: Constructable {
     &self,
     version: u64,
     key: &[u8],
-  ) -> Option<
-    MultipleVersionEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>,
-  >
+  ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>>
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
@@ -581,7 +573,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .get_versioned(version, Slice::ref_cast(key))
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -618,9 +610,7 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<
-    MultipleVersionEntry<'a, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'a>>,
-  >
+  ) -> Option<VersionedEntry<'a, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'a>>>
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
@@ -635,7 +625,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .upper_bound_versioned(version, bound.map(Query::ref_cast))
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -677,9 +667,7 @@ pub trait Reader: Constructable {
     &self,
     version: u64,
     bound: Bound<&[u8]>,
-  ) -> Option<
-    MultipleVersionEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>,
-  >
+  ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>>
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
@@ -693,7 +681,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .upper_bound_versioned(version, bound.map(Slice::ref_cast))
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -731,9 +719,7 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<
-    MultipleVersionEntry<'a, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'a>>,
-  >
+  ) -> Option<VersionedEntry<'a, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'a>>>
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
@@ -748,7 +734,7 @@ pub trait Reader: Constructable {
     self
       .as_wal()
       .lower_bound_versioned(version, bound.map(Query::ref_cast))
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -791,9 +777,7 @@ pub trait Reader: Constructable {
     &self,
     version: u64,
     bound: Bound<&[u8]>,
-  ) -> Option<
-    MultipleVersionEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>,
-  >
+  ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>>
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
@@ -810,7 +794,7 @@ pub trait Reader: Constructable {
         version,
         bound.map(Slice::<<Self::Memtable as BaseTable>::Key>::ref_cast),
       )
-      .map(|ent| MultipleVersionEntry::with_version(ent, version))
+      .map(|ent| VersionedEntry::with_version(ent, version))
   }
 }
 
