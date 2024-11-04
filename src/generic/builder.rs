@@ -1,11 +1,11 @@
-use dbutils::checksum::Crc32;
-use skl::KeySize;
-
-use super::{
-  error::Error,
-  memtable::BaseTable,
-  options::{arena_options, Options},
-  sealed::Constructable,
+use {
+  super::{memtable::BaseTable, sealed::Constructable},
+  crate::{
+    error::Error,
+    options::{arena_options, Options},
+  },
+  dbutils::checksum::Crc32,
+  skl::KeySize,
 };
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]

@@ -16,16 +16,18 @@ mod tests;
 
 /// The ordered write-ahead log without multiple version support.
 pub mod base {
-  use dbutils::checksum::Crc32;
-
-  use super::{reader, writer};
   #[cfg(feature = "std")]
-  use crate::memtable::linked::Table as BaseLinkedTable;
-  use crate::memtable::{
-    alternative::Table as BaseAlternativeTable, arena::Table as BaseArenaTable,
+  use crate::generic::memtable::linked::Table as BaseLinkedTable;
+
+  use {
+    super::{reader, writer},
+    crate::generic::memtable::{
+      alternative::Table as BaseAlternativeTable, arena::Table as BaseArenaTable,
+    },
+    dbutils::checksum::Crc32,
   };
 
-  pub use crate::{
+  pub use crate::generic::{
     memtable::arena::TableOptions as ArenaTableOptions,
     types::base::{Entry, Key, Value},
     wal::base::{Iter, Keys, RangeKeys, RangeValues, Reader, Writer},
@@ -76,17 +78,19 @@ pub mod base {
 
 /// A multiple version ordered write-ahead log implementation for multiple threads environments.
 pub mod multiple_version {
-  use dbutils::checksum::Crc32;
-
-  use super::{reader, writer};
   #[cfg(feature = "std")]
-  use crate::memtable::linked::MultipleVersionTable as BaseLinkedTable;
-  use crate::memtable::{
-    alternative::MultipleVersionTable as BaseAlternativeTable,
-    arena::MultipleVersionTable as BaseArenaTable,
+  use crate::generic::memtable::linked::MultipleVersionTable as BaseLinkedTable;
+
+  use {
+    super::{reader, writer},
+    crate::generic::memtable::{
+      alternative::MultipleVersionTable as BaseAlternativeTable,
+      arena::MultipleVersionTable as BaseArenaTable,
+    },
+    dbutils::checksum::Crc32,
   };
 
-  pub use crate::{
+  pub use crate::generic::{
     memtable::arena::TableOptions as ArenaTableOptions,
     types::multiple_version::{Entry, Key, Value, VersionedEntry},
     wal::multiple_version::{

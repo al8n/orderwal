@@ -1,11 +1,8 @@
-use crate::{
-  memtable::BaseTable,
-  wal::{KeyPointer, ValuePointer},
-};
-
 use super::{
-  sealed::{WithVersion, WithoutVersion},
+  super::{WithVersion, WithoutVersion},
+  memtable::BaseTable,
   types::{BufWriter, EncodedEntryMeta, EntryFlags},
+  wal::{KeyPointer, ValuePointer},
 };
 
 /// An entry can be inserted into the WALs through [`Batch`].

@@ -1,43 +1,34 @@
-use core::{
-  ops::{Bound, RangeBounds},
-  ptr::NonNull,
+use {
+  super::{
+    batch::Batch,
+    memtable::{BaseTable, Memtable, MultipleVersionMemtable},
+    memtable::{MemtableEntry, VersionedMemtableEntry},
+    types::{BufWriter, EncodedEntryMeta, EntryFlags},
+    wal::{KeyPointer, ValuePointer},
+  },
+  crate::{
+    checksum::{BuildChecksumer, Checksumer},
+    error::Error,
+    options::Options,
+    types::Flags,
+    utils::merge_lengths,
+    CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
+    WAL_KIND_SIZE,
+  },
+  among::Among,
+  core::{
+    ops::{Bound, RangeBounds},
+    ptr::NonNull,
+  },
+  dbutils::{
+    buffer::VacantBuffer,
+    equivalent::Comparable,
+    leb128::encoded_u64_varint_len,
+    types::{KeyRef, Type},
+  },
+  rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer},
+  skl::KeySize,
 };
-
-use among::Among;
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalent::Comparable,
-  leb128::encoded_u64_varint_len,
-  types::{KeyRef, Type},
-};
-use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
-use skl::KeySize;
-
-use crate::{
-  memtable::{MemtableEntry, VersionedMemtableEntry},
-  utils::merge_lengths,
-  wal::{KeyPointer, ValuePointer},
-};
-
-use super::{
-  batch::Batch,
-  checksum::{BuildChecksumer, Checksumer},
-  error::Error,
-  memtable::{BaseTable, Memtable, MultipleVersionMemtable},
-  options::Options,
-  types::{BufWriter, EncodedEntryMeta, EntryFlags},
-  Flags, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
-  WAL_KIND_SIZE,
-};
-
-/// A marker trait which indicates that such pointer has a version.
-pub trait WithVersion {}
-
-/// A marker trait which indicates that such pointer does not have a version.
-pub trait WithoutVersion {}
-
-/// A marker trait which indicates that such WAL is immutable.
-pub trait Immutable {}
 
 pub trait WalReader<S> {
   type Allocator: Allocator;
@@ -1071,8 +1062,10 @@ pub trait Constructable: Sized {
     <<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>:
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
-    use super::{types::Kind, utils::split_lengths};
-    use dbutils::leb128::decode_u64_varint;
+    use {
+      crate::{types::Kind, utils::split_lengths},
+      dbutils::leb128::decode_u64_varint,
+    };
 
     let slice = arena.reserved_slice();
     let mut cursor = 0;

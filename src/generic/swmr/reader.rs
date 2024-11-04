@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
-use rarena_allocator::sync::Arena;
-
-use crate::{
-  memtable::BaseTable,
-  sealed::{Constructable, Immutable},
-  swmr::wal::OrderCore,
+use {
+  super::{
+    super::{memtable::BaseTable, sealed::Constructable, swmr::wal::OrderCore},
+    writer::OrderWal,
+  },
+  crate::Immutable,
+  rarena_allocator::sync::Arena,
+  std::sync::Arc,
 };
-
-use super::writer::OrderWal;
 
 /// An [`OrderWal`] reader.
 pub struct OrderWalReader<K: ?Sized, V: ?Sized, P, S>(OrderWal<K, V, P, S>);

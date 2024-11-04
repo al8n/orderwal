@@ -1,11 +1,12 @@
-use super::*;
-use crate::{options::ArenaOptionsExt, sealed::Immutable};
-
-use dbutils::{
-  checksum::BuildChecksumer,
-  types::{KeyRef, Type},
+use {
+  super::*,
+  crate::{options::ArenaOptionsExt, Immutable},
+  dbutils::{
+    checksum::BuildChecksumer,
+    types::{KeyRef, Type},
+  },
+  skl::either::Either,
 };
-use skl::either::Either;
 
 impl<M, S> Builder<M, S>
 where

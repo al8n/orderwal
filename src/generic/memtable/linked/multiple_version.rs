@@ -1,22 +1,24 @@
-use core::{
-  convert::Infallible,
-  ops::{Bound, RangeBounds},
+use {
+  crate::{
+    generic::{
+      memtable::{self, BaseEntry, VersionedMemtableEntry},
+      wal::{KeyPointer, ValuePointer},
+    },
+    types::Kind,
+    WithVersion,
+  },
+  core::{
+    convert::Infallible,
+    ops::{Bound, RangeBounds},
+  },
+  crossbeam_skiplist_mvcc::nested::SkipMap,
+  dbutils::{
+    equivalent::Comparable,
+    types::{KeyRef, Type},
+  },
 };
 
-use crossbeam_skiplist_mvcc::nested::SkipMap;
 pub use crossbeam_skiplist_mvcc::nested::{Entry, Iter, IterAll, Range, RangeAll, VersionedEntry};
-
-use dbutils::{
-  equivalent::Comparable,
-  types::{KeyRef, Type},
-};
-
-use crate::{
-  memtable::{self, BaseEntry, VersionedMemtableEntry},
-  sealed::WithVersion,
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
-};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
 pub struct MultipleVersionTable<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);

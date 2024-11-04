@@ -1,7 +1,7 @@
-use dbutils::types::{KeyRef, Type};
-use skl::LazyRef;
-
-use crate::{memtable::MemtableEntry, sealed::WithoutVersion};
+use {
+  crate::{generic::memtable::MemtableEntry, WithoutVersion},
+  dbutils::types::{KeyRef, LazyRef, Type},
+};
 
 /// The reference to an entry in the generic WALs.
 pub struct Entry<'a, E>

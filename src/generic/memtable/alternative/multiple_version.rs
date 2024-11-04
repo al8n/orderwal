@@ -1,36 +1,37 @@
-use core::ops::{Bound, RangeBounds};
-
-use crate::{
-  memtable::{
-    arena::{
-      multiple_version::{
-        Entry as ArenaEntry, Iter as ArenaIter, IterAll as ArenaIterAll, Range as ArenaRange,
-        RangeAll as ArenaRangeAll, VersionedEntry as ArenaVersionedEntry,
+use {
+  super::TableOptions,
+  crate::{
+    generic::{
+      memtable::{
+        arena::{
+          multiple_version::{
+            Entry as ArenaEntry, Iter as ArenaIter, IterAll as ArenaIterAll, Range as ArenaRange,
+            RangeAll as ArenaRangeAll, VersionedEntry as ArenaVersionedEntry,
+          },
+          MultipleVersionTable as ArenaTable,
+        },
+        BaseEntry, BaseTable, MultipleVersionMemtable, VersionedMemtableEntry,
       },
-      MultipleVersionTable as ArenaTable,
+      wal::{KeyPointer, ValuePointer},
     },
-    BaseEntry, BaseTable, MultipleVersionMemtable, VersionedMemtableEntry,
+    types::Kind,
+    WithVersion,
   },
-  sealed::WithVersion,
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
+  core::ops::{Bound, RangeBounds},
+  dbutils::{
+    equivalent::Comparable,
+    types::{KeyRef, Type},
+  },
 };
 
 #[cfg(feature = "std")]
-use crate::memtable::linked::{
+use crate::generic::memtable::linked::{
   multiple_version::{
     Entry as LinkedEntry, Iter as LinkedIter, IterAll as LinkedIterAll, Range as LinkedRange,
     RangeAll as LinkedRangeAll, VersionedEntry as LinkedVersionedEntry,
   },
   MultipleVersionTable as LinkedTable,
 };
-
-use dbutils::{
-  equivalent::Comparable,
-  types::{KeyRef, Type},
-};
-
-use super::TableOptions;
 
 base_entry!(
   enum Entry {

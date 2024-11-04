@@ -1,26 +1,27 @@
-use core::ops::{Bound, RangeBounds};
-
-use among::Among;
-use dbutils::{
-  equivalent::Comparable,
-  types::{KeyRef, Type},
-};
-use skl::{
-  either::Either,
-  multiple_version::{sync::SkipMap, Map as _},
-  Options,
+use {
+  super::TableOptions,
+  crate::{
+    generic::{
+      memtable::{BaseEntry, BaseTable, MultipleVersionMemtable, VersionedMemtableEntry},
+      wal::{KeyPointer, ValuePointer},
+    },
+    types::Kind,
+    WithVersion,
+  },
+  among::Among,
+  core::ops::{Bound, RangeBounds},
+  dbutils::{
+    equivalent::Comparable,
+    types::{KeyRef, Type},
+  },
+  skl::{
+    either::Either,
+    multiple_version::{sync::SkipMap, Map as _},
+    Options,
+  },
 };
 
 pub use skl::multiple_version::sync::{Entry, Iter, IterAll, Range, RangeAll, VersionedEntry};
-
-use crate::{
-  memtable::{BaseEntry, BaseTable, MultipleVersionMemtable, VersionedMemtableEntry},
-  sealed::WithVersion,
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
-};
-
-use super::TableOptions;
 
 impl<'a, K, V> BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where

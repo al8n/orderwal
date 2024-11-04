@@ -1,15 +1,21 @@
-use crate::{
-  memtable::{BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, VersionedMemtableEntry},
-  sealed::{Constructable, WithVersion},
+use {
+  super::{reader::OrderWalReader, wal::OrderCore},
+  crate::{
+    generic::{
+      memtable::{
+        BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, VersionedMemtableEntry,
+      },
+      sealed::Constructable,
+    },
+    WithVersion,
+  },
+  dbutils::{checksum::Crc32, types::Type},
+  rarena_allocator::sync::Arena,
+  std::sync::Arc,
 };
-use dbutils::{checksum::Crc32, types::Type};
-use rarena_allocator::sync::Arena;
+
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-
-use std::sync::Arc;
-
-use super::{reader::OrderWalReader, wal::OrderCore};
 
 /// A ordered write-ahead log implementation for concurrent thread environments.
 pub struct OrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
@@ -90,7 +96,7 @@ where
   }
 }
 
-impl<K, V, M, S> crate::wal::base::Writer for OrderWal<K, V, M, S>
+impl<K, V, M, S> crate::generic::wal::base::Writer for OrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
@@ -104,7 +110,7 @@ where
   }
 }
 
-impl<K, V, M, S> crate::wal::multiple_version::Writer for OrderWal<K, V, M, S>
+impl<K, V, M, S> crate::generic::wal::multiple_version::Writer for OrderWal<K, V, M, S>
 where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,

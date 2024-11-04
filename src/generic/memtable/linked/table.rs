@@ -1,16 +1,18 @@
-use core::{convert::Infallible, ops::RangeBounds};
-
-use crossbeam_skiplist::SkipMap;
-use dbutils::{
-  equivalent::Comparable,
-  types::{KeyRef, Type},
-};
-
-use crate::{
-  memtable,
-  sealed::WithoutVersion,
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
+use {
+  crate::{
+    generic::{
+      memtable,
+      wal::{KeyPointer, ValuePointer},
+    },
+    types::Kind,
+    WithoutVersion,
+  },
+  core::{convert::Infallible, ops::RangeBounds},
+  crossbeam_skiplist::SkipMap,
+  dbutils::{
+    equivalent::Comparable,
+    types::{KeyRef, Type},
+  },
 };
 
 pub use crossbeam_skiplist::map::{Entry, Iter, Range};

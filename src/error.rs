@@ -2,7 +2,7 @@ use among::Among;
 use dbutils::error::InsufficientBuffer;
 use derive_where::derive_where;
 
-use crate::memtable::BaseTable;
+use crate::generic::memtable::BaseTable;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use crate::types::Kind;
@@ -170,25 +170,6 @@ where
       ),
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       Self::IO(e) => write!(f, "{e}"),
-    }
-  }
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl Kind {
-  #[inline]
-  const fn display_created_err_msg(&self) -> &'static str {
-    match self {
-      Self::Plain => "created without multiple versions support",
-      Self::MultipleVersion => "created with multiple versions support",
-    }
-  }
-
-  #[inline]
-  const fn display_open_err_msg(&self) -> &'static str {
-    match self {
-      Self::Plain => "opened without multiple versions support",
-      Self::MultipleVersion => "opened with multiple versions support",
     }
   }
 }

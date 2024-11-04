@@ -1,30 +1,31 @@
-use core::ops::{Bound, RangeBounds};
-
-use crate::{
-  memtable::{
-    arena::{
-      table::{Entry as ArenaEntry, Iter as ArenaIter, Range as ArenaRange},
-      Table as ArenaTable,
+use {
+  super::TableOptions,
+  crate::{
+    generic::{
+      memtable::{
+        arena::{
+          table::{Entry as ArenaEntry, Iter as ArenaIter, Range as ArenaRange},
+          Table as ArenaTable,
+        },
+        BaseEntry, BaseTable, Memtable, MemtableEntry,
+      },
+      wal::{KeyPointer, ValuePointer},
     },
-    BaseEntry, BaseTable, Memtable, MemtableEntry,
+    types::Kind,
+    WithoutVersion,
   },
-  sealed::WithoutVersion,
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
+  core::ops::{Bound, RangeBounds},
+  dbutils::{
+    equivalent::Comparable,
+    types::{KeyRef, Type},
+  },
 };
 
 #[cfg(feature = "std")]
-use crate::memtable::linked::{
+use crate::generic::memtable::linked::{
   table::{Entry as LinkedEntry, Iter as LinkedIter, Range as LinkedRange},
   Table as LinkedTable,
 };
-
-use dbutils::{
-  equivalent::Comparable,
-  types::{KeyRef, Type},
-};
-
-use super::TableOptions;
 
 base_entry!(
   enum Entry {

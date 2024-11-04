@@ -1,10 +1,8 @@
-use core::ops::{Bound, RangeBounds};
-use dbutils::equivalent::Comparable;
-
-use crate::{
-  sealed::{WithVersion, WithoutVersion},
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
+use {
+  super::wal::{KeyPointer, ValuePointer},
+  crate::{types::Kind, WithVersion, WithoutVersion},
+  core::ops::{Bound, RangeBounds},
+  dbutils::equivalent::Comparable,
 };
 
 /// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].

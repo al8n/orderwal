@@ -1,8 +1,11 @@
-use core::marker::PhantomData;
-
-use rarena_allocator::sync::Arena;
-
-use crate::{memtable::BaseTable, sealed::Wal, Options};
+use {
+  crate::{
+    generic::{memtable::BaseTable, sealed::Wal},
+    Options,
+  },
+  core::marker::PhantomData,
+  rarena_allocator::sync::Arena,
+};
 
 pub struct OrderCore<K, V, M, S>
 where
