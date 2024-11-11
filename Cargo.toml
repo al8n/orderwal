@@ -30,7 +30,7 @@ tracing = ["dep:tracing", "dbutils/tracing"]
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "2", default-features = false }
-dbutils = { version = "0.9", default-features = false, features = ["crc32fast"] }
+dbutils = { version = "0.10", default-features = false, features = ["crc32fast"] }
 derive-where = "1"
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false }
