@@ -2,7 +2,7 @@ use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 
 use dbutils::{equivalent::Comparable, types::Type};
 
-use crate::{
+use crate::generic::{
   memtable::{BaseEntry, MultipleVersionMemtable, VersionedMemtableEntry},
   types::multiple_version::{Entry, Key, Value, VersionedEntry},
   wal::{KeyPointer, ValuePointer},

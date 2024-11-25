@@ -12,14 +12,12 @@ use rarena_allocator::Allocator;
 use ref_cast::RefCast;
 use skl::{either::Either, KeySize};
 
-use crate::{
+use crate::{generic::{
   batch::Batch,
-  error::Error,
   memtable::{BaseTable, Memtable, MemtableEntry},
   sealed::{Constructable, Wal, WalReader},
-  types::{base::Entry, BufWriter, KeyBuilder, ValueBuilder},
-  Options,
-};
+  types::{base::Entry, BufWriter},
+}, error::Error, Options, types::{KeyBuilder, ValueBuilder}};
 
 use super::{Query, QueryRange, Slice};
 

@@ -12,17 +12,15 @@ use rarena_allocator::Allocator;
 use ref_cast::RefCast;
 use skl::{either::Either, KeySize};
 
-use crate::{
+use crate::{generic::{
   batch::Batch,
-  error::Error,
   memtable::{BaseTable, MultipleVersionMemtable, VersionedMemtableEntry},
   sealed::{Constructable, MultipleVersionWalReader, Wal},
   types::{
     multiple_version::{Entry, VersionedEntry},
-    BufWriter, KeyBuilder, ValueBuilder,
+    BufWriter,
   },
-  Options,
-};
+}, error::Error, Options, types::{KeyBuilder, ValueBuilder,}};
 
 use super::{Query, QueryRange, Slice};
 

@@ -1,9 +1,9 @@
 use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 
 use crate::{
-  memtable::{BaseEntry, Memtable, MemtableEntry},
-  types::base::{Entry, Key, Value},
-  wal::{KeyPointer, ValuePointer},
+  generic::memtable::{BaseEntry, Memtable, MemtableEntry},
+  generic::types::base::{Entry, Key, Value},
+  generic::wal::{KeyPointer, ValuePointer},
 };
 
 use dbutils::{equivalent::Comparable, types::Type};

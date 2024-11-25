@@ -1,7 +1,7 @@
 use super::{
-  super::{WithVersion, WithoutVersion},
+  super::{WithVersion, WithoutVersion, types::{EntryFlags, EncodedEntryMeta}},
   memtable::BaseTable,
-  types::{BufWriter, EncodedEntryMeta, EntryFlags},
+  types::BufWriter,
   wal::{KeyPointer, ValuePointer},
 };
 
