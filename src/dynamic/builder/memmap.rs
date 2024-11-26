@@ -533,8 +533,6 @@ where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<Memtable = M, Checksumer = S> + Immutable,
-    M::Key: Type + Ord + 'static,
-    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     self
       .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -581,8 +579,6 @@ where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
     W: Constructable<Memtable = M, Checksumer = S> + Immutable,
-    M::Key: Type + Ord + 'static,
-    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     let Self {
       opts,
@@ -637,8 +633,6 @@ where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     W: Constructable<Memtable = M, Checksumer = S>,
-    M::Key: Type + Ord + 'static,
-    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     self
       .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -684,8 +678,6 @@ where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
     W: Constructable<Memtable = M, Checksumer = S>,
-    M::Key: Type + Ord + 'static,
-    <M::Key as Type>::Ref<'a>: KeyRef<'a, M::Key>,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();

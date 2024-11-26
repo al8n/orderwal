@@ -1,7 +1,7 @@
 use {
   super::wal::{KeyPointer, ValuePointer},
   crate::{types::Kind, WithVersion, WithoutVersion},
-  core::{ops::{Bound, RangeBounds}, borrow::Borrow},
+  core::{borrow::Borrow, ops::{Bound, RangeBounds}},
 };
 
 // /// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].
@@ -14,6 +14,9 @@ use {
 
 // /// Sum type for different memtable implementations.
 // pub mod alternative;
+
+/// Memtable implementation based on ARNEA based [`SkipMap`](skl).
+pub mod bounded;
 
 /// An entry which is stored in the memory table.
 pub trait BaseEntry<'a>: Sized {
@@ -85,6 +88,17 @@ pub trait BaseTable {
 
   /// Removes the pointer associated with the key.
   fn remove(&self, version: Option<u64>, key: KeyPointer) -> Result<(), Self::Error>;
+
+  /// Inserts a range deletion pointer into the memtable.
+  fn remove_range(&self, version: Option<u64>, rp: KeyPointer) -> Result<(), Self::Error>;
+
+  /// Inserts an range update pointer into the memtable.
+  fn update_range(
+    &self,
+    version: Option<u64>,
+    rp: KeyPointer,
+    vp: ValuePointer,
+  ) -> Result<(), Self::Error>;
 
   /// Returns the kind of the memtable.
   fn kind() -> Kind;
