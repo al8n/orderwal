@@ -27,7 +27,9 @@ bitflags::bitflags! {
     /// Fourth bit: 1 indicates the entry is range deletion
     /// 
     /// [Reference link](https://github.com/cockroachdb/pebble/blob/master/docs/rocksdb.md#range-deletions) 
-    const RANGE_DELETIONS = 0b00001000;
+    const RANGE_DELETION = 0b00001000;
+    /// Fifth bit: 1 indicates the entry is range update
+    const RANGE_UPDATE = 0b00010000;
   }
 }
 

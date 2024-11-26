@@ -2,7 +2,7 @@ use among::Among;
 use dbutils::error::InsufficientBuffer;
 use derive_where::derive_where;
 
-use crate::generic::memtable::BaseTable;
+use crate::dynamic::memtable::BaseTable;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use crate::types::Kind;

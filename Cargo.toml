@@ -30,15 +30,15 @@ tracing = ["dep:tracing", "dbutils/tracing"]
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "2", default-features = false }
-dbutils = { version = "0.9", default-features = false, features = ["crc32fast"] }
+dbutils = { version = "0.11", default-features = false, features = ["crc32fast"] }
 derive-where = "1"
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false }
 crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132", optional = true }
 crossbeam-skiplist-mvcc = { version = "0.2", optional = true }
-skl = { version = "0.19", default-features = false, features = ["alloc"] }
+skl = { version = "0.20", default-features = false, features = ["alloc"] }
 paste = "1"
-
+zerocopy = { version = "0.8", features = ["derive"] }
 tracing = { version = "0.1", default-features = false, optional = true }
 
 [dev-dependencies]

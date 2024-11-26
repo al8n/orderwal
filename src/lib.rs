@@ -6,7 +6,7 @@
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity)]
 
-use core::mem;
+use core::{mem, slice};
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -53,8 +53,8 @@ mod types;
 /// Dynamic ordered write-ahead log implementation.
 pub mod dynamic;
 
-/// Generic ordered write-ahead log implementation.
-pub mod generic;
+// /// Generic ordered write-ahead log implementation.
+// pub mod generic;
 
 /// The utilities functions.
 pub mod utils;
@@ -67,3 +67,94 @@ pub trait WithoutVersion {}
 
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
+
+#[derive(Clone, Copy)]
+struct Pointer {
+  offset: u32,
+  len: u32,
+}
+
+impl Pointer {
+  #[inline]
+  const fn new(offset: u32, len: u32) -> Self {
+    Self { offset, len }
+  }
+}
+
+struct WalComparator<P: ?Sized, C> {
+  /// The start pointer of the parent ARENA.
+  ptr: *const u8,
+  cmp: C,
+  _p: core::marker::PhantomData<P>,
+}
+
+impl<P: ?Sized, C> Clone for WalComparator<P, C>
+where
+  C: Clone
+{
+  #[inline]
+  fn clone(&self) -> Self {
+    Self {
+      ptr: self.ptr,
+      cmp: self.cmp.clone(),
+      _p: core::marker::PhantomData,
+    }
+  }
+}
+
+impl<P: ?Sized, C> Copy for WalComparator<P, C> where C: Copy {}
+
+impl<P: ?Sized, C> core::fmt::Debug for WalComparator<P, C>
+where
+  C: core::fmt::Debug,
+{
+  #[inline]
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("WalComparator")
+      .field("ptr", &self.ptr)
+      .field("cmp", &self.cmp)
+      .finish()
+  }
+}
+
+impl<P, C> dbutils::equivalentor::Equivalentor for WalComparator<P, C>
+where
+  P: ?Sized,
+  C: dbutils::equivalentor::Equivalentor,
+{
+  #[inline]
+  fn equivalent(&self, a: &[u8], b: &[u8]) -> bool {
+    let aoffset = u32::from_le_bytes(a[0..4].try_into().unwrap()) as usize;
+    let alen = u32::from_le_bytes(a[4..8].try_into().unwrap()) as usize;
+
+    let boffset = u32::from_le_bytes(b[0..4].try_into().unwrap()) as usize;
+    let blen = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
+
+    unsafe {
+      let a = slice::from_raw_parts(self.ptr.add(aoffset), alen);
+      let b = slice::from_raw_parts(self.ptr.add(boffset), blen);
+      self.cmp.equivalent(a, b)
+    }
+  }
+}
+
+impl<P, C> dbutils::equivalentor::Comparator for WalComparator<P, C>
+where
+  P: ?Sized,
+  C: dbutils::equivalentor::Comparator,
+{
+  #[inline]
+  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
+    let aoffset = u32::from_le_bytes(a[0..4].try_into().unwrap()) as usize;
+    let alen = u32::from_le_bytes(a[4..8].try_into().unwrap()) as usize;
+
+    let boffset = u32::from_le_bytes(b[0..4].try_into().unwrap()) as usize;
+    let blen = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
+
+    unsafe {
+      let a = slice::from_raw_parts(self.ptr.add(aoffset), alen);
+      let b = slice::from_raw_parts(self.ptr.add(boffset), blen);
+      self.cmp.compare(a, b)
+    }
+  }
+}
