@@ -257,9 +257,7 @@ where
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   #[inline]
-  pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Q, R>, B>,
-  ) -> Self {
+  pub(super) fn new(iter: BaseIter<'a, B::Range<'a, Q, R>, B>) -> Self {
     Self { iter }
   }
 }
@@ -285,8 +283,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
   B: Memtable + 'a,
-  B::Range<'a, Q, R>:
-    DoubleEndedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Q, R>: DoubleEndedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   #[inline]
@@ -300,8 +297,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
   B: Memtable + 'a,
-  B::Range<'a, Q, R>:
-    FusedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Q, R>: FusedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
 }
@@ -325,9 +321,7 @@ where
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   #[inline]
-  pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Q, R>, B>,
-  ) -> Self {
+  pub(super) fn new(iter: BaseIter<'a, B::Range<'a, Q, R>, B>) -> Self {
     Self { iter }
   }
 }
@@ -353,8 +347,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
   B: Memtable + 'a,
-  B::Range<'a, Q, R>:
-    DoubleEndedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Q, R>: DoubleEndedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   #[inline]
@@ -368,8 +361,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
   B: Memtable + 'a,
-  B::Range<'a, Q, R>:
-    FusedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Q, R>: FusedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
 }
@@ -393,9 +385,7 @@ where
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   #[inline]
-  pub(super) fn new(
-    iter: BaseIter<'a, B::Range<'a, Q, R>, B>,
-  ) -> Self {
+  pub(super) fn new(iter: BaseIter<'a, B::Range<'a, Q, R>, B>) -> Self {
     Self { iter }
   }
 }
@@ -421,8 +411,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
   B: Memtable + 'a,
-  B::Range<'a, Q, R>:
-    DoubleEndedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Q, R>: DoubleEndedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
   #[inline]
@@ -436,8 +425,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
   B: Memtable + 'a,
-  B::Range<'a, Q, R>:
-    FusedIterator<Item = B::Item<'a>>,
+  B::Range<'a, Q, R>: FusedIterator<Item = B::Item<'a>>,
   for<'b> B::Item<'b>: MemtableEntry<'b>,
 {
 }

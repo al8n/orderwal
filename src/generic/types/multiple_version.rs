@@ -1,12 +1,12 @@
 use {
-  crate::generic::memtable::VersionedMemtableEntry,
+  crate::generic::memtable::MultipleVersionMemtableEntry,
   dbutils::types::{KeyRef, LazyRef, Type},
 };
 
 /// The reference to an entry in the generic WALs.
 pub struct Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
   E::Value: Type,
 {
@@ -19,7 +19,7 @@ where
 
 impl<'a, E> core::fmt::Debug for Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
   E::Key: Type,
   E::Value: Type,
 {
@@ -34,7 +34,7 @@ where
 
 impl<'a, E> Clone for Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
   E::Key: Type,
   E::Value: Type,
 {
@@ -52,7 +52,7 @@ where
 
 impl<'a, E> Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
   E::Value: Type,
 {
@@ -78,7 +78,7 @@ where
 
 impl<'a, E> Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type + Ord,
   <E::Key as Type>::Ref<'a>: KeyRef<'a, E::Key>,
   E::Value: Type,
@@ -109,7 +109,7 @@ where
 
 impl<'a, E> Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
   E::Value: Type,
 {
@@ -147,7 +147,7 @@ where
 /// The reference to a key of the entry in the generic WALs.
 pub struct Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
 {
   ent: E,
@@ -158,7 +158,7 @@ where
 
 impl<'a, E> core::fmt::Debug for Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
   E::Key: Type,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -171,7 +171,7 @@ where
 
 impl<'a, E> Clone for Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
   E::Key: Type,
 {
   #[inline]
@@ -187,7 +187,7 @@ where
 
 impl<'a, E> Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
 {
   #[inline]
@@ -207,7 +207,7 @@ impl<'a, E> Key<'a, E>
 where
   E::Key: Type + Ord,
   <E::Key as Type>::Ref<'a>: KeyRef<'a, E::Key>,
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -236,7 +236,7 @@ where
 impl<'a, E> Key<'a, E>
 where
   E::Key: Type,
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -261,7 +261,7 @@ where
 pub struct Value<'a, E>
 where
   E::Value: Type,
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   ent: E,
   raw_key: &'a [u8],
@@ -272,7 +272,7 @@ where
 
 impl<'a, E> core::fmt::Debug for Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
   E::Value: Type,
   <E::Value as Type>::Ref<'a>: core::fmt::Debug,
 {
@@ -286,7 +286,7 @@ where
 
 impl<'a, E> Clone for Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
   E::Value: Type,
 {
   #[inline]
@@ -303,7 +303,7 @@ where
 
 impl<'a, E> Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Value: Type,
 {
   #[inline]
@@ -326,7 +326,7 @@ where
 
 impl<'a, E> Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Value: Type,
 {
   /// Returns the next entry in the generic WALs.
@@ -355,7 +355,7 @@ where
 
 impl<'a, E> Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Value: Type,
 {
   /// Returns the version of the entry.
@@ -380,7 +380,7 @@ where
 /// The reference to an entry in the generic WALs.
 pub struct VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
   E::Value: Type,
 {
@@ -393,7 +393,7 @@ where
 
 impl<'a, E> core::fmt::Debug for VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
   E::Key: Type,
   E::Value: Type,
 {
@@ -408,7 +408,7 @@ where
 
 impl<'a, E> Clone for VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
   E::Key: Type,
   E::Value: Type,
 {
@@ -426,7 +426,7 @@ where
 
 impl<'a, E> VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
   E::Value: Type,
 {
@@ -449,7 +449,7 @@ where
 
 impl<'a, E> VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Ord + Type,
   for<'b> <E::Key as Type>::Ref<'b>: KeyRef<'b, E::Key>,
   E::Value: Type,
@@ -480,7 +480,7 @@ where
 
 impl<'a, E> VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
   E::Key: Type,
   E::Value: Type,
 {

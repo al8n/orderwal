@@ -2,7 +2,7 @@ use {
   super::TableOptions,
   crate::{
     generic::{
-      memtable::{BaseEntry, BaseTable, MultipleVersionMemtable, VersionedMemtableEntry},
+      memtable::{BaseEntry, BaseTable, MultipleVersionMemtable, MultipleVersionMemtableEntry},
       wal::{KeyPointer, ValuePointer},
     },
     types::Kind,
@@ -21,7 +21,7 @@ use {
   },
 };
 
-pub use skl::multiple_version::sync::{Entry, Iter, IterAll, Range, RangeAll, VersionedEntry};
+pub use skl::multiple_version::sync::{Entry, Iter, IterAll, Range, MultipleVersionRange, VersionedEntry};
 
 impl<'a, K, V> BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
@@ -48,7 +48,7 @@ where
   }
 }
 
-impl<'a, K, V> VersionedMemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
@@ -97,7 +97,7 @@ where
   }
 }
 
-impl<'a, K, V> VersionedMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
@@ -209,7 +209,7 @@ where
   for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
   V: ?Sized + Type + 'static,
 {
-  type VersionedItem<'a>
+  type MultipleVersionEntry<'a>
     = VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
   where
     Self: 'a;
@@ -219,8 +219,8 @@ where
   where
     Self: 'a;
 
-  type RangeAll<'a, Q, R>
-    = RangeAll<'a, KeyPointer<K>, ValuePointer<V>, Q, R>
+  type MultipleVersionRange<'a, Q, R>
+    = MultipleVersionRange<'a, KeyPointer<K>, ValuePointer<V>, Q, R>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
@@ -252,7 +252,7 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<K>>,
   {
@@ -270,7 +270,7 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<K>>,
   {
@@ -284,7 +284,7 @@ where
     self.map.first(version)
   }
 
-  fn first_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<K>: Ord,
   {
@@ -298,7 +298,7 @@ where
     self.map.last(version)
   }
 
-  fn last_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<K>: Ord,
   {
@@ -312,7 +312,7 @@ where
     self.map.get(version, key)
   }
 
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::VersionedItem<'_>>
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<K>>,
   {
@@ -349,7 +349,7 @@ where
     self.map.range(version, range)
   }
 
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangeAll<'a, Q, R>
+  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<K>>,

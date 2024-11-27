@@ -1,7 +1,10 @@
 use core::marker::PhantomData;
 
 use super::{
-  super::{WithVersion, WithoutVersion, types::{EntryFlags, EncodedEntryMeta}},
+  super::{
+    types::{EncodedEntryMeta, EntryFlags},
+    WithVersion, WithoutVersion,
+  },
   memtable::BaseTable,
   types::BufWriter,
   wal::{KeyPointer, ValuePointer},
@@ -156,9 +159,7 @@ where
   }
 
   #[inline]
-  pub(crate) fn take_pointer(
-    &mut self,
-  ) -> Option<(KeyPointer, Option<ValuePointer>)> {
+  pub(crate) fn take_pointer(&mut self) -> Option<(KeyPointer, Option<ValuePointer>)> {
     self.pointers.take()
   }
 

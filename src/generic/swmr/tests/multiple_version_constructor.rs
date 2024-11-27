@@ -3,7 +3,7 @@ use skl::KeySize;
 
 use crate::memtable::{
   alternative::{MultipleVersionTable, TableOptions},
-  MultipleVersionMemtable, VersionedMemtableEntry,
+  MultipleVersionMemtable, MultipleVersionMemtableEntry,
 };
 
 use super::*;
@@ -12,7 +12,7 @@ fn zero_reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   unsafe {
     assert_eq!(wal.reserved_slice(), b"");
@@ -27,7 +27,7 @@ fn reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   unsafe {
     let buf = wal.reserved_slice_mut();

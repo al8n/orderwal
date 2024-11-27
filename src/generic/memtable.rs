@@ -40,7 +40,7 @@ pub trait MemtableEntry<'a>: BaseEntry<'a> + WithoutVersion {
 }
 
 /// An entry which is stored in the multiple versioned memory table.
-pub trait VersionedMemtableEntry<'a>: BaseEntry<'a> + WithVersion {
+pub trait MultipleVersionMemtableEntry<'a>: BaseEntry<'a> + WithVersion {
   /// Returns the value in the entry.
   fn value(&self) -> Option<ValuePointer<Self::Value>>;
 
@@ -159,22 +159,22 @@ where
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait MultipleVersionMemtable: BaseTable
 where
-  for<'a> Self::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> Self::Item<'a>: MultipleVersionMemtableEntry<'a>,
 {
   /// The item returned by the iterator or query methods.
-  type VersionedItem<'a>: VersionedMemtableEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
+  type MultipleVersionEntry<'a>: MultipleVersionMemtableEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a;
 
   /// The iterator type which can yields all the entries in the memtable.
-  type IterAll<'a>: DoubleEndedIterator<Item = Self::VersionedItem<'a>>
+  type IterAll<'a>: DoubleEndedIterator<Item = Self::MultipleVersionEntry<'a>>
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a;
 
   /// The range iterator type which can yields all the entries in the memtable.
-  type RangeAll<'a, Q, R>: DoubleEndedIterator<Item = Self::VersionedItem<'a>>
+  type MultipleVersionRange<'a, Q, R>: DoubleEndedIterator<Item = Self::MultipleVersionEntry<'a>>
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a,
@@ -200,7 +200,7 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
@@ -214,7 +214,7 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
@@ -224,7 +224,7 @@ where
     KeyPointer<Self::Key>: Ord;
 
   /// Returns the first pointer in the memtable.
-  fn first_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<Self::Key>: Ord;
 
@@ -234,7 +234,7 @@ where
     KeyPointer<Self::Key>: Ord;
 
   /// Returns the last pointer in the memtable.
-  fn last_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<Self::Key>: Ord;
 
@@ -244,7 +244,7 @@ where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
   /// Returns the pointer associated with the key.
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::VersionedItem<'_>>
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
@@ -271,7 +271,7 @@ where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 
   /// Returns an iterator over all the entries in a subset of the memtable.
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangeAll<'a, Q, R>
+  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>;

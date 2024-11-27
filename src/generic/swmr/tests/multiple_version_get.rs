@@ -3,7 +3,7 @@ use core::ops::Bound;
 use crate::{
   memtable::{
     alternative::{MultipleVersionTable, TableOptions},
-    MultipleVersionMemtable, VersionedMemtableEntry,
+    MultipleVersionMemtable, MultipleVersionMemtableEntry,
   },
   types::{KeyBuilder, ValueBuilder},
 };
@@ -51,7 +51,7 @@ fn mvcc<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -128,7 +128,7 @@ fn gt<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -234,7 +234,7 @@ fn ge<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -340,7 +340,7 @@ fn le<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -468,7 +468,7 @@ fn lt<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -571,7 +571,7 @@ fn insert<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   let people = (0..100)
     .map(|_| {
@@ -593,7 +593,7 @@ fn insert_with_value_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   let people = (0..100)
     .map(|_| {
@@ -622,7 +622,7 @@ fn insert_with_key_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   let people = (0..100)
     .map(|_| {
@@ -649,7 +649,7 @@ fn insert_with_bytes<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   let people = (0..100)
     .map(|_| {
@@ -679,7 +679,7 @@ fn insert_with_builders<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   let people = (0..1)
     .map(|_| {

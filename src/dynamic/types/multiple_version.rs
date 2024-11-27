@@ -1,11 +1,11 @@
 use core::slice;
 
-use crate::dynamic::memtable::VersionedMemtableEntry;
+use crate::dynamic::memtable::MultipleVersionMemtableEntry;
 
 /// The reference to an entry in the generic WALs.
 pub struct Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   ent: E,
   key: &'a [u8],
@@ -17,7 +17,7 @@ where
 
 impl<'a, E> core::fmt::Debug for Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Entry")
@@ -30,7 +30,7 @@ where
 
 impl<'a, E> Clone for Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -47,15 +47,13 @@ where
 
 impl<'a, E> Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   #[inline]
   pub(crate) fn with_version(ptr: *const u8, ent: E, query_version: u64) -> Self {
     let version = ent.version();
     let kp = ent.key();
-    let vp = ent
-      .value()
-      .expect("value must be present on Entry");
+    let vp = ent.value().expect("value must be present on Entry");
     unsafe {
       Self {
         key: slice::from_raw_parts(ptr.add(kp.offset()), kp.len()),
@@ -71,7 +69,7 @@ where
 
 impl<'a, E> Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -99,7 +97,7 @@ where
 
 impl<'a, E> Entry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -123,7 +121,7 @@ where
 /// The reference to a key of the entry in the generic WALs.
 pub struct Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   ent: E,
   key: &'a [u8],
@@ -134,8 +132,7 @@ where
 
 impl<'a, E> core::fmt::Debug for Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
-  
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Key")
@@ -147,7 +144,7 @@ where
 
 impl<'a, E> Clone for Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -156,14 +153,14 @@ where
       key: self.key,
       version: self.version,
       query_version: self.query_version,
-      ptr: self.ptr
+      ptr: self.ptr,
     }
   }
 }
 
 impl<'a, E> Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   #[inline]
   pub(crate) fn with_version(ptr: *const u8, ent: E, query_version: u64) -> Self {
@@ -183,7 +180,7 @@ where
 
 impl<'a, E> Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -211,7 +208,7 @@ where
 
 impl<'a, E> Key<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -229,7 +226,7 @@ where
 /// The reference to a value of the entry in the generic WALs.
 pub struct Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   ent: E,
   key: &'a [u8],
@@ -241,7 +238,7 @@ where
 
 impl<'a, E> core::fmt::Debug for Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Value")
@@ -253,7 +250,7 @@ where
 
 impl<'a, E> Clone for Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -270,14 +267,12 @@ where
 
 impl<'a, E> Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   #[inline]
   pub(crate) fn with_version(ptr: *const u8, ent: E, query_version: u64) -> Self {
     let kp = ent.key();
-    let vp = ent
-      .value()
-      .expect("value must be present on Value");
+    let vp = ent.value().expect("value must be present on Value");
     let version = ent.version();
     unsafe {
       Self {
@@ -294,7 +289,7 @@ where
 
 impl<'a, E> Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -322,7 +317,7 @@ where
 
 impl<'a, E> Value<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -340,7 +335,7 @@ where
 /// The reference to an entry in the generic WALs.
 pub struct VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   ent: E,
   key: &'a [u8],
@@ -352,7 +347,7 @@ where
 
 impl<'a, E> core::fmt::Debug for VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + core::fmt::Debug,
+  E: MultipleVersionMemtableEntry<'a> + core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("VersionedEntry")
@@ -365,7 +360,7 @@ where
 
 impl<'a, E> Clone for VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a> + Clone,
+  E: MultipleVersionMemtableEntry<'a> + Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -382,7 +377,7 @@ where
 
 impl<'a, E> VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   #[inline]
   pub(crate) fn with_version(ptr: *const u8, ent: E, query_version: u64) -> Self {
@@ -404,7 +399,7 @@ where
 
 impl<'a, E> VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the next entry in the generic WALs.
   ///
@@ -432,7 +427,7 @@ where
 
 impl<'a, E> VersionedEntry<'a, E>
 where
-  E: VersionedMemtableEntry<'a>,
+  E: MultipleVersionMemtableEntry<'a>,
 {
   /// Returns the version of the entry.
   #[inline]

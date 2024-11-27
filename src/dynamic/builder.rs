@@ -1,12 +1,10 @@
-use {
-  super::{memtable::BaseTable, sealed::Constructable},
-  crate::{
-    error::Error,
-    options::{arena_options, Options},
-  },
-  dbutils::checksum::Crc32,
-  skl::KeySize,
+use super::{memtable::BaseTable, sealed::Constructable};
+use crate::{
+  error::Error,
+  options::{arena_options, Options},
 };
+use dbutils::checksum::Crc32;
+use skl::KeySize;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]

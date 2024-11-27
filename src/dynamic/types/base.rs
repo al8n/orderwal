@@ -84,7 +84,6 @@ where
 impl<'a, E> Entry<'a, E>
 where
   E: MemtableEntry<'a>,
-  
 {
   /// Returns the key of the entry.
   #[inline]
@@ -121,7 +120,6 @@ where
 impl<'a, E> Clone for Key<'a, E>
 where
   E: MemtableEntry<'a> + Clone,
-  
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -157,7 +155,6 @@ where
 
 impl<'a, E> Key<'a, E>
 where
-  
   E: MemtableEntry<'a>,
 {
   /// Returns the key of the entry.
@@ -219,7 +216,6 @@ where
 impl<'a, E> Value<'a, E>
 where
   E: MemtableEntry<'a>,
-  
 {
   #[inline]
   pub(crate) fn new((ptr, ent): (*const u8, E)) -> Self {

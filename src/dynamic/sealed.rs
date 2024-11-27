@@ -1,24 +1,29 @@
-use {
-  super::{
-    batch::Batch,
-    memtable::{BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, VersionedMemtableEntry},
-    types::BufWriter,
-    wal::{KeyPointer, ValuePointer},
+use super::{
+  batch::Batch,
+  memtable::{
+    BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry,
   },
-  crate::{
-    checksum::{BuildChecksumer, Checksumer}, error::Error, options::Options, types::{EncodedEntryMeta, EntryFlags, Flags}, utils::merge_lengths, CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE, WAL_KIND_SIZE
-  },
-  among::Among,
-  core::{
-    borrow::Borrow, ops::{Bound, RangeBounds}, ptr::NonNull
-  },
-  dbutils::{
-    buffer::VacantBuffer,
-    leb128::encoded_u64_varint_len,
-  },
-  rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer},
-  skl::KeySize,
+  types::BufWriter,
+  wal::{Arena, KeyPointer, ValuePointer},
 };
+use crate::{
+  checksum::{BuildChecksumer, Checksumer},
+  error::Error,
+  options::Options,
+  types::{EncodedEntryMeta, EntryFlags, Flags},
+  utils::merge_lengths,
+  CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
+  WAL_KIND_SIZE,
+};
+use among::Among;
+use core::{
+  borrow::Borrow,
+  ops::{Bound, RangeBounds},
+  ptr::NonNull,
+};
+use dbutils::{buffer::VacantBuffer, leb128::encoded_u64_varint_len};
+use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
+use skl::KeySize;
 
 pub trait WalReader<S> {
   type Allocator: Allocator;
@@ -142,7 +147,7 @@ pub trait MultipleVersionWalReader<S> {
   where
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     MultipleVersionMemtable::iter(self.memtable(), version)
   }
@@ -154,7 +159,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     MultipleVersionMemtable::range(self.memtable(), version, range)
   }
@@ -163,11 +168,11 @@ pub trait MultipleVersionWalReader<S> {
   fn iter_all_versions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as MultipleVersionMemtable>::IterAll<'_>
+  ) -> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionIterator<'_>
   where
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     MultipleVersionMemtable::iter_all_versions(self.memtable(), version)
   }
@@ -177,13 +182,13 @@ pub trait MultipleVersionWalReader<S> {
     &self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as MultipleVersionMemtable>::RangeAll<'_, Q, R>
+  ) -> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionRange<'_, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().range_all_versions(version, range)
   }
@@ -194,7 +199,7 @@ pub trait MultipleVersionWalReader<S> {
   where
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().first(version)
   }
@@ -207,11 +212,11 @@ pub trait MultipleVersionWalReader<S> {
   fn first_versioned(
     &self,
     version: u64,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>
   where
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().first_versioned(version)
   }
@@ -221,7 +226,7 @@ pub trait MultipleVersionWalReader<S> {
   where
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().last(version)
   }
@@ -233,11 +238,11 @@ pub trait MultipleVersionWalReader<S> {
   fn last_versioned(
     &self,
     version: u64,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>
   where
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().last_versioned(version)
   }
@@ -248,7 +253,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().contains(version, key)
   }
@@ -262,7 +267,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().contains_versioned(version, key)
   }
@@ -274,7 +279,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().get(version, key)
   }
@@ -287,12 +292,12 @@ pub trait MultipleVersionWalReader<S> {
     &self,
     version: u64,
     key: &Q,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().get_versioned(version, key)
   }
@@ -306,7 +311,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().upper_bound(version, bound)
   }
@@ -315,12 +320,12 @@ pub trait MultipleVersionWalReader<S> {
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().upper_bound_versioned(version, bound)
   }
@@ -334,7 +339,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().lower_bound(version, bound)
   }
@@ -343,12 +348,12 @@ pub trait MultipleVersionWalReader<S> {
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::VersionedItem<'_>>
+  ) -> Option<<Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
 
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
+    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     self.memtable().lower_bound_versioned(version, bound)
   }
@@ -487,7 +492,6 @@ pub trait Wal<S> {
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
-    
   {
     let t = self.memtable();
     if let Some(vp) = vp {
@@ -500,13 +504,7 @@ pub trait Wal<S> {
   #[inline]
   fn insert_pointers(
     &self,
-    mut ptrs: impl Iterator<
-      Item = (
-        Option<u64>,
-        KeyPointer,
-        Option<ValuePointer>,
-      ),
-    >,
+    mut ptrs: impl Iterator<Item = (Option<u64>, KeyPointer, Option<ValuePointer>)>,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
@@ -525,7 +523,6 @@ pub trait Wal<S> {
     VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
-    
   {
     self.update(version, kb, Some(vb))
   }
@@ -539,7 +536,6 @@ pub trait Wal<S> {
     KE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
-    
   {
     struct Noop;
 
@@ -575,7 +571,6 @@ pub trait Wal<S> {
     VE: super::types::BufWriterOnce,
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
-    
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -686,9 +681,8 @@ pub trait Wal<S> {
             let ko = eoffset + encoded_entry_meta.key_offset();
             let vo = eoffset + encoded_entry_meta.value_offset();
             let kp = KeyPointer::new(entry_flag, ko as u32, encoded_entry_meta.klen as u32);
-            let vp = (!remove).then(|| {
-              ValuePointer::new(vo as u32, encoded_entry_meta.vlen as u32)
-            });
+            let vp =
+              (!remove).then(|| ValuePointer::new(vo as u32, encoded_entry_meta.vlen as u32));
             Ok((buf.buffer_offset(), kp, vp))
           }
         }
@@ -719,7 +713,6 @@ pub trait Wal<S> {
     S: BuildChecksumer,
     W: Constructable<Wal = Self, Memtable = Self::Memtable>,
     Self::Memtable: BaseTable,
-    
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -801,15 +794,9 @@ pub trait Wal<S> {
         let (ko, vo) = if let Some(version) = ent.internal_version() {
           buf.put_u64_le_unchecked(version);
 
-          (
-            cursor + meta.key_offset(),
-            cursor + meta.value_offset(),
-          )
+          (cursor + meta.key_offset(), cursor + meta.value_offset())
         } else {
-          (
-            cursor + meta.key_offset(),
-            cursor + meta.value_offset(),
-          )
+          (cursor + meta.key_offset(), cursor + meta.value_offset())
         };
         let kp = ptr.add(ko);
         let vp = ptr.add(vo);
@@ -838,7 +825,9 @@ pub trait Wal<S> {
 
         let entry_size = meta.entry_size as usize;
         let kp = KeyPointer::new(ent.flag, ko as u32, meta.klen as u32);
-        let vp = vb.is_some().then(|| ValuePointer::new(vo as u32, meta.vlen as u32));
+        let vp = vb
+          .is_some()
+          .then(|| ValuePointer::new(vo as u32, meta.vlen as u32));
         ent.set_pointer(kp, vp);
         cursor += entry_size;
       }
@@ -909,8 +898,9 @@ impl<S, T> MultipleVersionWalReader<S> for T
 where
   T: Wal<S>,
   T::Memtable: MultipleVersionMemtable,
-  for<'a> <T::Memtable as BaseTable>::Item<'a>: VersionedMemtableEntry<'a>,
-  for<'a> <T::Memtable as MultipleVersionMemtable>::VersionedItem<'a>: VersionedMemtableEntry<'a>,
+  for<'a> <T::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
+  for<'a> <T::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'a>:
+    MultipleVersionMemtableEntry<'a>,
 {
   type Allocator = T::Allocator;
 
@@ -961,7 +951,7 @@ pub trait Constructable: Sized {
       .flush_range(0, HEADER_SIZE)
       .map_err(Into::into)
       .and_then(|_| {
-        Self::Memtable::new(memtable_opts)
+        Self::Memtable::new(Arena::new(arena.clone()), memtable_opts)
           .map(|memtable| {
             <Self::Wal as Wal<Self::Checksumer>>::construct(arena, memtable, opts, cks)
           })
@@ -988,10 +978,8 @@ pub trait Constructable: Sized {
   where
     Self::Checksumer: BuildChecksumer,
   {
-    use {
-      crate::{types::Kind, utils::split_lengths},
-      dbutils::leb128::decode_u64_varint,
-    };
+    use crate::{dynamic::wal::Arena, types::Kind, utils::split_lengths};
+    use dbutils::leb128::decode_u64_varint;
 
     let slice = arena.reserved_slice();
     let mut cursor = 0;
@@ -1012,8 +1000,9 @@ pub trait Constructable: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let set = <Self::Wal as Wal<Self::Checksumer>>::Memtable::new(memtable_opts)
-      .map_err(Error::memtable)?;
+    let set =
+      <Self::Wal as Wal<Self::Checksumer>>::Memtable::new(Arena::new(arena.clone()), memtable_opts)
+        .map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -1186,7 +1175,11 @@ pub trait Constructable: Sized {
               minimum_version = minimum_version.min(version);
               maximum_version = maximum_version.max(version);
               let ent_len = kvlen + EntryFlags::SIZE + VERSION_SIZE + klen + vlen;
-              (Some(version), ent_len, eoffset + EntryFlags::SIZE + VERSION_SIZE)
+              (
+                Some(version),
+                ent_len,
+                eoffset + EntryFlags::SIZE + VERSION_SIZE,
+              )
             } else {
               let ent_len = kvlen + EntryFlags::SIZE + klen + vlen;
               (None, ent_len, eoffset + EntryFlags::SIZE)

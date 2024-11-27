@@ -1,4 +1,5 @@
-pub use {builder::Builder, swmr::*};
+pub use builder::Builder;
+pub use swmr::*;
 
 /// Batch insertions related traits and structs.
 pub mod batch;

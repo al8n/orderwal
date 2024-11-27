@@ -3,7 +3,7 @@ use {
   crate::{
     generic::{
       memtable::{
-        BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, VersionedMemtableEntry,
+        BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry,
       },
       sealed::Constructable,
     },
@@ -115,8 +115,8 @@ where
   K: ?Sized + Type + Ord + 'static,
   V: ?Sized + Type + 'static,
   M: MultipleVersionMemtable<Key = K, Value = V> + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
-  for<'a> M::VersionedItem<'a>: WithVersion,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
+  for<'a> M::MultipleVersionEntry<'a>: WithVersion,
   for<'a> M::Item<'a>: WithVersion,
   S: 'static,
 {

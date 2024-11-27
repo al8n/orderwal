@@ -94,7 +94,7 @@ pub mod multiple_version {
     memtable::arena::TableOptions as ArenaTableOptions,
     types::multiple_version::{Entry, Key, Value, VersionedEntry},
     wal::multiple_version::{
-      Iter, IterAll, Keys, RangeAll, RangeKeys, RangeValues, Reader, Writer,
+      Iter, IterAll, Keys, MultipleVersionRange, RangeKeys, RangeValues, Reader, Writer,
     },
   };
 

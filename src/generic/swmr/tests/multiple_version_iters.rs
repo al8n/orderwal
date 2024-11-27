@@ -2,7 +2,7 @@ use core::ops::Bound;
 
 use crate::memtable::{
   alternative::{MultipleVersionTable, TableOptions},
-  MultipleVersionMemtable, VersionedMemtableEntry,
+  MultipleVersionMemtable, MultipleVersionMemtableEntry,
 };
 use multiple_version::{Reader, Writer};
 
@@ -64,7 +64,7 @@ fn iter_all_versions_mvcc<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
 where
   M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -136,7 +136,7 @@ fn iter_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -195,7 +195,7 @@ fn iter_all_versions_next_by_entry<M>(wal: &mut multiple_version::OrderWal<Strin
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -245,8 +245,8 @@ fn iter_all_versions_next_by_versioned_entry<M>(
 ) where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
-  for<'a> M::VersionedItem<'a>: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::MultipleVersionEntry<'a>: std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -294,7 +294,7 @@ fn range_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -351,7 +351,7 @@ fn iter_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -402,7 +402,7 @@ fn iter_all_versions_prev_by_entry<M>(wal: &mut multiple_version::OrderWal<Strin
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -449,8 +449,8 @@ fn iter_all_versions_prev_by_versioned_entry<M>(
 ) where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
-  for<'a> M::VersionedItem<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::MultipleVersionEntry<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -497,7 +497,7 @@ fn range_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 

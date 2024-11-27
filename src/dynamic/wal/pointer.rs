@@ -1,7 +1,9 @@
 use core::mem;
 
 use dbutils::{
-  buffer::VacantBuffer, error::InsufficientBuffer, types::{Type, TypeRef}
+  buffer::VacantBuffer,
+  error::InsufficientBuffer,
+  types::{Type, TypeRef},
 };
 
 use crate::types::EntryFlags;
@@ -29,25 +31,31 @@ impl ValuePointer {
 
   #[inline]
   pub(crate) const fn new(offset: u32, len: u32) -> Self {
-    Self {
-      offset,
-      len,
-    }
+    Self { offset, len }
   }
 
   #[inline]
-  pub(crate) const fn offset(&self) -> usize {
+  pub const fn offset(&self) -> usize {
     self.offset as usize
   }
 
   #[inline]
-  pub(crate) const fn len(&self) -> usize {
+  pub const fn len(&self) -> usize {
     self.len as usize
+  }
+
+  #[inline]
+  pub(crate) fn as_array(&self) -> [u8; Self::SIZE] {
+    let mut array = [0; Self::SIZE];
+    {
+      let mut buf = VacantBuffer::from(array.as_mut());
+      self.encode_to_buffer(&mut buf).unwrap();
+    }
+    array
   }
 }
 
-impl Type for ValuePointer
-{
+impl Type for ValuePointer {
   type Ref<'a> = Self;
 
   type Error = InsufficientBuffer;
@@ -59,10 +67,9 @@ impl Type for ValuePointer
 
   #[inline]
   fn encode_to_buffer(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
-    buf.put_u32_le(self.offset)
-      .and_then(|_| {
-        buf.put_u32_le(self.len)
-      })
+    buf
+      .put_u32_le(self.offset)
+      .and_then(|_| buf.put_u32_le(self.len))
       .map(|_| Self::SIZE)
   }
 }
@@ -107,21 +114,27 @@ impl KeyPointer {
 
   #[inline]
   pub(crate) fn new(flag: EntryFlags, offset: u32, len: u32) -> Self {
-    Self {
-      flag,
-      offset,
-      len,
-    }
+    Self { flag, offset, len }
   }
 
   #[inline]
-  pub(crate) const fn offset(&self) -> usize {
+  pub const fn offset(&self) -> usize {
     self.offset as usize
   }
 
   #[inline]
-  pub(crate) const fn len(&self) -> usize {
+  pub const fn len(&self) -> usize {
     self.len as usize
+  }
+
+  #[inline]
+  pub(crate) fn as_array(&self) -> [u8; Self::SIZE] {
+    let mut array = [0; Self::SIZE];
+    {
+      let mut buf = VacantBuffer::from(array.as_mut());
+      self.encode_to_buffer(&mut buf).unwrap();
+    }
+    array
   }
 }
 
@@ -150,10 +163,38 @@ impl<'a> TypeRef<'a> for KeyPointer {
     let offset = u32::from_le_bytes(src[1..5].try_into().unwrap());
     let len = u32::from_le_bytes(src[5..Self::SIZE].try_into().unwrap());
 
-    Self {
-      flag,
-      offset,
-      len,
-    }
+    Self { flag, offset, len }
+  }
+}
+
+/// The ARENA used to get key and value from the WAL by the pointer.
+pub struct Arena<A>(A);
+
+impl<A> Arena<A> {
+  #[inline]
+  pub(crate) const fn new(arena: A) -> Self {
+    Self(arena)
+  }
+}
+
+impl<A> Arena<A>
+where
+  A: rarena_allocator::Allocator,
+{
+  /// Get the key from the WAL by the pointer.
+  #[inline]
+  pub fn key(&self, kp: KeyPointer) -> &[u8] {
+    unsafe { self.0.get_bytes(kp.offset as usize, kp.len as usize) }
+  }
+
+  /// Get the value from the WAL by the pointer.
+  #[inline]
+  pub fn value(&self, vp: ValuePointer) -> &[u8] {
+    unsafe { self.0.get_bytes(vp.offset as usize, vp.len as usize) }
+  }
+
+  #[inline]
+  pub(crate) fn raw_pointer(&self) -> *const u8 {
+    self.0.raw_ptr()
   }
 }

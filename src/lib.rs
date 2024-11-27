@@ -14,12 +14,10 @@ extern crate std;
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
 
-pub use {
-  among,
-  dbutils::{
-    checksum::{self, Crc32},
-    equivalent::{Comparable, ComparableRangeBounds, Equivalent},
-  },
+pub use among;
+pub use dbutils::{
+  checksum::{self, Crc32},
+  equivalent::{Comparable, ComparableRangeBounds, Equivalent},
 };
 
 #[cfg(feature = "xxhash3")]
@@ -60,11 +58,13 @@ pub mod dynamic;
 pub mod utils;
 
 /// A marker trait which indicates that such pointer has a version.
-pub trait WithVersion {}
+pub trait WithVersion {
+  /// The version.
+  fn version(&self) -> u64;
+}
 
 /// A marker trait which indicates that such pointer does not have a version.
 pub trait WithoutVersion {}
 
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
-

@@ -5,7 +5,7 @@ use crate::{
   batch::BatchEntry,
   memtable::{
     alternative::{MultipleVersionTable, TableOptions},
-    MultipleVersionMemtable, VersionedMemtableEntry,
+    MultipleVersionMemtable, MultipleVersionMemtableEntry,
   },
   types::{KeyBuilder, ValueBuilder},
   Builder,
@@ -17,7 +17,7 @@ use super::*;
 fn concurrent_basic<M>(mut w: OrderWal<u32, [u8; 4], M>)
 where
   M: MultipleVersionMemtable<Key = u32, Value = [u8; 4]> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
@@ -48,7 +48,7 @@ where
 fn concurrent_one_key<M>(mut w: OrderWal<u32, [u8; 4], M>)
 where
   M: MultipleVersionMemtable<Key = u32, Value = [u8; 4]> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
@@ -72,7 +72,7 @@ where
 fn insert_batch<M>(mut wal: OrderWal<Person, String, M>) -> (Person, Vec<(Person, String)>, Person)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -129,7 +129,7 @@ fn insert_batch_with_key_builder<M>(
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -189,7 +189,7 @@ fn insert_batch_with_value_builder<M>(
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -248,7 +248,7 @@ fn insert_batch_with_builders<M>(
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;
@@ -310,7 +310,7 @@ fn insert_batch_with_tombstone<M>(
 ) -> (Person, Vec<(Person, String)>, Person)
 where
   M: MultipleVersionMemtable<Key = Person, Value = String> + Send + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
+  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
   M::Error: std::fmt::Debug,
 {
   const N: u32 = 5;

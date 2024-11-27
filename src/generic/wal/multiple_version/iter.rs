@@ -3,7 +3,7 @@ use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 use dbutils::{equivalent::Comparable, types::Type};
 
 use crate::generic::{
-  memtable::{BaseEntry, MultipleVersionMemtable, VersionedMemtableEntry},
+  memtable::{BaseEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry},
   types::multiple_version::{Entry, Key, Value, VersionedEntry},
   wal::{KeyPointer, ValuePointer},
 };
@@ -14,8 +14,8 @@ use super::{Query, QueryRange};
 pub struct BaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: I,
   version: u64,
@@ -27,8 +27,8 @@ where
 impl<'a, I, M> BaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(version: u64, iter: I) -> Self {
@@ -51,8 +51,8 @@ where
 impl<'a, I, M> Iterator for BaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: Iterator<Item = M::Item<'a>>,
 {
   type Item = M::Item<'a>;
@@ -68,8 +68,8 @@ where
 impl<'a, I, M> DoubleEndedIterator for BaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -83,8 +83,8 @@ where
 impl<'a, I, M> FusedIterator for BaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
@@ -93,8 +93,8 @@ where
 pub struct MultipleVersionBaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: I,
   version: u64,
@@ -106,8 +106,8 @@ where
 impl<'a, I, M> MultipleVersionBaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(version: u64, iter: I) -> Self {
@@ -130,11 +130,11 @@ where
 impl<'a, I, M> Iterator for MultipleVersionBaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
-  I: Iterator<Item = M::VersionedItem<'a>>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
+  I: Iterator<Item = M::MultipleVersionEntry<'a>>,
 {
-  type Item = M::VersionedItem<'a>;
+  type Item = M::MultipleVersionEntry<'a>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -147,9 +147,9 @@ where
 impl<'a, I, M> DoubleEndedIterator for MultipleVersionBaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
-  I: DoubleEndedIterator<Item = M::VersionedItem<'a>>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
+  I: DoubleEndedIterator<Item = M::MultipleVersionEntry<'a>>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -162,9 +162,9 @@ where
 impl<'a, I, M> FusedIterator for MultipleVersionBaseIter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
-  I: FusedIterator<Item = M::VersionedItem<'a>>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
+  I: FusedIterator<Item = M::MultipleVersionEntry<'a>>,
 {
 }
 
@@ -172,8 +172,8 @@ where
 pub struct Iter<'a, I, M>
 where
   M: MultipleVersionMemtable,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: BaseIter<'a, I, M>,
   version: u64,
@@ -182,8 +182,8 @@ where
 impl<'a, I, M> Iter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(iter: BaseIter<'a, I, M>) -> Self {
@@ -203,8 +203,8 @@ where
 impl<'a, I, M> Iterator for Iter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   M::Key: Type + Ord,
   M::Value: Type,
   I: Iterator<Item = M::Item<'a>>,
@@ -223,8 +223,8 @@ where
 impl<'a, I, M> DoubleEndedIterator for Iter<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   M::Key: Type + Ord,
   M::Value: Type,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
@@ -243,8 +243,8 @@ where
   M::Key: Type + Ord,
   M::Value: Type,
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
@@ -253,8 +253,8 @@ where
 pub struct Keys<'a, I, M>
 where
   M: MultipleVersionMemtable,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: BaseIter<'a, I, M>,
   version: u64,
@@ -263,8 +263,8 @@ where
 impl<'a, I, M> Keys<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(iter: BaseIter<'a, I, M>) -> Self {
@@ -285,8 +285,8 @@ impl<'a, I, M> Iterator for Keys<'a, I, M>
 where
   M::Key: Type,
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: Iterator<Item = M::Item<'a>>,
 {
   type Item = Key<'a, M::Item<'a>>;
@@ -304,8 +304,8 @@ impl<'a, I, M> DoubleEndedIterator for Keys<'a, I, M>
 where
   M::Key: Type,
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -321,8 +321,8 @@ impl<'a, I, M> FusedIterator for Keys<'a, I, M>
 where
   M::Key: Type,
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
@@ -331,8 +331,8 @@ where
 pub struct Values<'a, I, M>
 where
   M: MultipleVersionMemtable,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: BaseIter<'a, I, M>,
   version: u64,
@@ -341,8 +341,8 @@ where
 impl<'a, I, M> Values<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(iter: BaseIter<'a, I, M>) -> Self {
@@ -363,8 +363,8 @@ impl<'a, I, M> Iterator for Values<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
   M::Value: Type,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: Iterator<Item = M::Item<'a>>,
 {
   type Item = Value<'a, M::Item<'a>>;
@@ -382,8 +382,8 @@ impl<'a, I, M> DoubleEndedIterator for Values<'a, I, M>
 where
   M: MultipleVersionMemtable + 'a,
   M::Value: Type,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: DoubleEndedIterator<Item = M::Item<'a>>,
 {
   #[inline]
@@ -399,8 +399,8 @@ impl<'a, I, M> FusedIterator for Values<'a, I, M>
 where
   M::Value: Type,
   M: MultipleVersionMemtable + 'a,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
   I: FusedIterator<Item = M::Item<'a>>,
 {
 }
@@ -412,8 +412,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
   version: u64,
@@ -425,8 +425,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(
@@ -453,8 +453,8 @@ where
   B::Key: Type + Ord,
   B::Value: Type,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   type Item = Entry<'a, B::Item<'a>>;
 
@@ -476,8 +476,8 @@ where
   B::Value: Type,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -497,8 +497,8 @@ where
   B::Value: Type,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
 }
 
@@ -509,8 +509,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
   version: u64,
@@ -522,8 +522,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(
@@ -549,8 +549,8 @@ where
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   type Item = Key<'a, B::Item<'a>>;
 
@@ -571,8 +571,8 @@ where
   B::Key: Type + Ord,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -591,8 +591,8 @@ where
   B::Key: Type + Ord,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
 }
 
@@ -603,8 +603,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: BaseIter<'a, B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>, B>,
   version: u64,
@@ -616,8 +616,8 @@ where
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(
@@ -644,8 +644,8 @@ where
   B::Key: Type + Ord,
   B::Value: Type,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>: Iterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   type Item = Value<'a, B::Item<'a>>;
 
@@ -667,8 +667,8 @@ where
   B::Value: Type,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     DoubleEndedIterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -688,8 +688,8 @@ where
   B::Value: Type,
   B::Range<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
     FusedIterator<Item = B::Item<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
 }
 
@@ -697,8 +697,8 @@ where
 pub struct IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: MultipleVersionBaseIter<'a, I, M>,
   version: u64,
@@ -707,8 +707,8 @@ where
 impl<'a, I, M> IterAll<'a, I, M>
 where
   M: MultipleVersionMemtable,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(iter: MultipleVersionBaseIter<'a, I, M>) -> Self {
@@ -730,11 +730,11 @@ where
   M: MultipleVersionMemtable + 'a,
   M::Key: Type + Ord,
   M::Value: Type,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
-  I: Iterator<Item = M::VersionedItem<'a>>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
+  I: Iterator<Item = M::MultipleVersionEntry<'a>>,
 {
-  type Item = VersionedEntry<'a, M::VersionedItem<'a>>;
+  type Item = VersionedEntry<'a, M::MultipleVersionEntry<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -750,9 +750,9 @@ where
   M: MultipleVersionMemtable + 'a,
   M::Key: Type + Ord,
   M::Value: Type,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
-  I: DoubleEndedIterator<Item = M::VersionedItem<'a>>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
+  I: DoubleEndedIterator<Item = M::MultipleVersionEntry<'a>>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -768,44 +768,44 @@ where
   M: MultipleVersionMemtable + 'a,
   M::Key: Type + Ord,
   M::Value: Type,
-  for<'b> M::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> M::VersionedItem<'b>: VersionedMemtableEntry<'b>,
-  I: FusedIterator<Item = M::VersionedItem<'a>>,
+  for<'b> M::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> M::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
+  I: FusedIterator<Item = M::MultipleVersionEntry<'a>>,
 {
 }
 
 /// An iterator over a subset of the entries in the WAL.
-pub struct RangeAll<'a, R, Q, B>
+pub struct MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   iter: MultipleVersionBaseIter<
     'a,
-    B::RangeAll<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>,
+    B::MultipleVersionRange<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>,
     B,
   >,
   version: u64,
 }
 
-impl<'a, R, Q, B> RangeAll<'a, R, Q, B>
+impl<'a, R, Q, B> MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   pub(super) fn new(
     iter: MultipleVersionBaseIter<
       'a,
-      B::RangeAll<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>,
+      B::MultipleVersionRange<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>,
       B,
     >,
   ) -> Self {
@@ -822,19 +822,19 @@ where
   }
 }
 
-impl<'a, R, Q, B> Iterator for RangeAll<'a, R, Q, B>
+impl<'a, R, Q, B> Iterator for MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::RangeAll<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
-    Iterator<Item = B::VersionedItem<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  B::MultipleVersionRange<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
+    Iterator<Item = B::MultipleVersionEntry<'a>>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
-  type Item = VersionedEntry<'a, B::VersionedItem<'a>>;
+  type Item = VersionedEntry<'a, B::MultipleVersionEntry<'a>>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -845,17 +845,17 @@ where
   }
 }
 
-impl<'a, R, Q, B> DoubleEndedIterator for RangeAll<'a, R, Q, B>
+impl<'a, R, Q, B> DoubleEndedIterator for MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::RangeAll<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
-    DoubleEndedIterator<Item = B::VersionedItem<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  B::MultipleVersionRange<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
+    DoubleEndedIterator<Item = B::MultipleVersionEntry<'a>>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -866,16 +866,16 @@ where
   }
 }
 
-impl<'a, R, Q, B> FusedIterator for RangeAll<'a, R, Q, B>
+impl<'a, R, Q, B> FusedIterator for MultipleVersionRange<'a, R, Q, B>
 where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Comparable<<B::Key as Type>::Ref<'a>>,
   B: MultipleVersionMemtable + 'a,
   B::Key: Type + Ord,
   B::Value: Type,
-  B::RangeAll<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
-    FusedIterator<Item = B::VersionedItem<'a>>,
-  for<'b> B::Item<'b>: VersionedMemtableEntry<'b>,
-  for<'b> B::VersionedItem<'b>: VersionedMemtableEntry<'b>,
+  B::MultipleVersionRange<'a, Query<'a, B::Key, Q>, QueryRange<'a, B::Key, Q, R>>:
+    FusedIterator<Item = B::MultipleVersionEntry<'a>>,
+  for<'b> B::Item<'b>: MultipleVersionMemtableEntry<'b>,
+  for<'b> B::MultipleVersionEntry<'b>: MultipleVersionMemtableEntry<'b>,
 {
 }

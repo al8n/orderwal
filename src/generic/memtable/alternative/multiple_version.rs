@@ -6,11 +6,11 @@ use {
         arena::{
           multiple_version::{
             Entry as ArenaEntry, Iter as ArenaIter, IterAll as ArenaIterAll, Range as ArenaRange,
-            RangeAll as ArenaRangeAll, VersionedEntry as ArenaVersionedEntry,
+            MultipleVersionRange as ArenaMultipleVersionRange, VersionedEntry as ArenaVersionedEntry,
           },
           MultipleVersionTable as ArenaTable,
         },
-        BaseEntry, BaseTable, MultipleVersionMemtable, VersionedMemtableEntry,
+        BaseEntry, BaseTable, MultipleVersionMemtable, MultipleVersionMemtableEntry,
       },
       wal::{KeyPointer, ValuePointer},
     },
@@ -28,7 +28,7 @@ use {
 use crate::generic::memtable::linked::{
   multiple_version::{
     Entry as LinkedEntry, Iter as LinkedIter, IterAll as LinkedIterAll, Range as LinkedRange,
-    RangeAll as LinkedRangeAll, VersionedEntry as LinkedVersionedEntry,
+    MultipleVersionRange as LinkedMultipleVersionRange, VersionedEntry as LinkedVersionedEntry,
   },
   MultipleVersionTable as LinkedTable,
 };
@@ -40,7 +40,7 @@ base_entry!(
   }
 );
 
-impl<'a, K, V> VersionedMemtableEntry<'a> for Entry<'a, K, V>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for Entry<'a, K, V>
 where
   K: ?Sized + Type + Ord,
   KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
@@ -66,7 +66,7 @@ base_entry!(
   }
 );
 
-impl<'a, K, V> VersionedMemtableEntry<'a> for VersionedEntry<'a, K, V>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, K, V>
 where
   K: ?Sized + Type + Ord,
   KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
@@ -107,9 +107,9 @@ iter!(
 );
 
 range!(
-  enum RangeAll {
-    Arena(ArenaRangeAll),
-    Linked(LinkedRangeAll),
+  enum MultipleVersionRange {
+    Arena(ArenaMultipleVersionRange),
+    Linked(LinkedMultipleVersionRange),
   } -> VersionedEntry
 );
 
@@ -198,7 +198,7 @@ where
   for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
   V: ?Sized + Type + 'static,
 {
-  type VersionedItem<'a>
+  type MultipleVersionEntry<'a>
     = VersionedEntry<'a, K, V>
   where
     KeyPointer<Self::Key>: 'a,
@@ -210,8 +210,8 @@ where
     KeyPointer<Self::Key>: 'a,
     Self: 'a;
 
-  type RangeAll<'a, Q, R>
-    = RangeAll<'a, K, V, Q, R>
+  type MultipleVersionRange<'a, Q, R>
+    = MultipleVersionRange<'a, K, V, Q, R>
   where
     KeyPointer<Self::Key>: 'a,
     Self: 'a,
@@ -245,13 +245,13 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     match_op!(self
       .upper_bound_versioned(version, bound)
-      .map(VersionedItem))
+      .map(MultipleVersionEntry))
   }
 
   #[inline]
@@ -266,13 +266,13 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
     match_op!(self
       .lower_bound_versioned(version, bound)
-      .map(VersionedItem))
+      .map(MultipleVersionEntry))
   }
 
   #[inline]
@@ -283,11 +283,11 @@ where
     match_op!(self.first(version).map(Item))
   }
 
-  fn first_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<Self::Key>: Ord,
   {
-    match_op!(self.first_versioned(version).map(VersionedItem))
+    match_op!(self.first_versioned(version).map(MultipleVersionEntry))
   }
 
   #[inline]
@@ -298,11 +298,11 @@ where
     match_op!(self.last(version).map(Item))
   }
 
-  fn last_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<Self::Key>: Ord,
   {
-    match_op!(self.last_versioned(version).map(VersionedItem))
+    match_op!(self.last_versioned(version).map(MultipleVersionEntry))
   }
 
   #[inline]
@@ -313,11 +313,11 @@ where
     match_op!(self.get(version, key).map(Item))
   }
 
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::VersionedItem<'_>>
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
-    match_op!(self.get_versioned(version, key).map(VersionedItem))
+    match_op!(self.get_versioned(version, key).map(MultipleVersionEntry))
   }
 
   #[inline]
@@ -353,11 +353,11 @@ where
     match_op!(Dispatch::Range(self.range(version, range)))
   }
 
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangeAll<'a, Q, R>
+  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
-    match_op!(Dispatch::RangeAll(self.range_all_versions(version, range)))
+    match_op!(Dispatch::MultipleVersionRange(self.range_all_versions(version, range)))
   }
 }

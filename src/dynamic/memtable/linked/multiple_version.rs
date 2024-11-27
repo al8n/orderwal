@@ -1,7 +1,7 @@
 use {
   crate::{
     dynamic::{
-      memtable::{self, BaseEntry, VersionedMemtableEntry},
+      memtable::{self, BaseEntry, MultipleVersionMemtableEntry},
       wal::{KeyPointer, ValuePointer},
     },
     types::Kind,
@@ -18,7 +18,7 @@ use {
   },
 };
 
-pub use crossbeam_skiplist_mvcc::nested::{Entry, Iter, IterAll, Range, RangeAll, VersionedEntry};
+pub use crossbeam_skiplist_mvcc::nested::{Entry, Iter, IterAll, Range, MultipleVersionRange, VersionedEntry};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipSet`].
 pub struct MultipleVersionTable<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);
@@ -59,7 +59,7 @@ where
   }
 }
 
-impl<'a, K, V> memtable::VersionedMemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> memtable::MultipleVersionMemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -108,7 +108,7 @@ where
   }
 }
 
-impl<'a, K, V> VersionedMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, KeyPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -202,7 +202,7 @@ where
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + 'static,
 {
-  type VersionedItem<'a>
+  type MultipleVersionEntry<'a>
     = VersionedEntry<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a;
@@ -212,8 +212,8 @@ where
   where
     Self: 'a;
 
-  type RangeAll<'a, Q, R>
-    = RangeAll<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
+  type MultipleVersionRange<'a, Q, R>
+    = MultipleVersionRange<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
@@ -245,7 +245,7 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
@@ -263,7 +263,7 @@ where
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
+  ) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
@@ -277,7 +277,7 @@ where
     self.0.front(version)
   }
 
-  fn first_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<Self::Key>: Ord,
   {
@@ -291,7 +291,7 @@ where
     self.0.back(version)
   }
 
-  fn last_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
+  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     KeyPointer<Self::Key>: Ord,
   {
@@ -305,7 +305,7 @@ where
     self.0.get(version, key)
   }
 
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::VersionedItem<'_>>
+  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
   {
@@ -342,7 +342,7 @@ where
     self.0.range(version, range)
   }
 
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangeAll<'a, Q, R>
+  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
