@@ -1,15 +1,12 @@
 use {
   super::{reader::OrderWalReader, wal::OrderCore},
-  crate::{
-    generic::{
+  crate::dynamic::{
       memtable::{
-        BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry,
+        BaseTable, Memtable, MultipleVersionMemtable,
       },
       sealed::Constructable,
     },
-    WithVersion,
-  },
-  dbutils::{checksum::Crc32, types::Type},
+  dbutils::checksum::Crc32,
   rarena_allocator::sync::Arena,
   std::sync::Arc,
 };
@@ -18,14 +15,12 @@ use {
 use rarena_allocator::Allocator;
 
 /// A ordered write-ahead log implementation for concurrent thread environments.
-pub struct OrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
-  pub(super) core: Arc<OrderCore<K, V, M, S>>,
+pub struct OrderWal<M, S = Crc32> {
+  pub(super) core: Arc<OrderCore<M, S>>,
 }
 
-impl<K, V, M, S> core::fmt::Debug for OrderWal<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
+impl<M, S> core::fmt::Debug for OrderWal<M, S>
+
 {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -33,28 +28,26 @@ where
   }
 }
 
-unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for OrderWal<K, V, M, S> {}
-unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync for OrderWal<K, V, M, S> {}
+unsafe impl<M: Send, S: Send> Send for OrderWal<M, S> {}
+unsafe impl<M: Send + Sync, S: Send + Sync> Sync for OrderWal<M, S> {}
 
-impl<K: ?Sized, V: ?Sized, P, S> OrderWal<K, V, P, S> {
+impl<P, S> OrderWal<P, S> {
   #[inline]
-  pub(super) const fn construct(core: Arc<OrderCore<K, V, P, S>>) -> Self {
+  pub(super) const fn construct(core: Arc<OrderCore<P, S>>) -> Self {
     Self { core }
   }
 }
 
-impl<K, V, M, S> Constructable for OrderWal<K, V, M, S>
+impl<M, S> Constructable for OrderWal<M, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static,
+  M: BaseTable + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
+  type Wal = OrderCore<Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
-  type Reader = OrderWalReader<K, V, M, S>;
+  type Reader = OrderWalReader<M, S>;
 
   #[inline]
   fn as_wal(&self) -> &Self::Wal {
@@ -69,12 +62,10 @@ where
   }
 }
 
-impl<K, V, M, S> OrderWal<K, V, M, S>
+impl<M, S> OrderWal<M, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static,
+  M: BaseTable + 'static,
 {
   /// Returns the path of the WAL if it is backed by a file.
   ///
@@ -96,12 +87,9 @@ where
   }
 }
 
-impl<K, V, M, S> crate::generic::wal::base::Writer for OrderWal<K, V, M, S>
+impl<M, S> crate::dynamic::wal::base::Writer for OrderWal<M, S>
 where
-  K: ?Sized + Type + Ord + 'static,
-  V: ?Sized + Type + 'static,
-  M: Memtable<Key = K, Value = V> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  M: Memtable + 'static,
   S: 'static,
 {
   #[inline]
@@ -110,14 +98,9 @@ where
   }
 }
 
-impl<K, V, M, S> crate::generic::wal::multiple_version::Writer for OrderWal<K, V, M, S>
+impl<M, S> crate::dynamic::wal::multiple_version::Writer for OrderWal<M, S>
 where
-  K: ?Sized + Type + Ord + 'static,
-  V: ?Sized + Type + 'static,
-  M: MultipleVersionMemtable<Key = K, Value = V> + 'static,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a>,
-  for<'a> M::MultipleVersionEntry<'a>: WithVersion,
-  for<'a> M::Item<'a>: WithVersion,
+  M: MultipleVersionMemtable + 'static,
   S: 'static,
 {
   #[inline]

@@ -216,6 +216,7 @@ where
 impl<'a, E> Value<'a, E>
 where
   E: MemtableEntry<'a>,
+  E::Value: crate::dynamic::types::Value<'a>,
 {
   #[inline]
   pub(crate) fn new((ptr, ent): (*const u8, E)) -> Self {

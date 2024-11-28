@@ -1,28 +1,19 @@
 use {
   crate::{
-    generic::{memtable::BaseTable, sealed::Wal},
+    dynamic::{memtable::BaseTable, sealed::Wal},
     Options,
   },
-  core::marker::PhantomData,
   rarena_allocator::sync::Arena,
 };
 
-pub struct OrderCore<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+pub struct OrderCore<M, S> {
   pub(super) arena: Arena,
   pub(super) map: M,
   pub(super) opts: Options,
   pub(super) cks: S,
-  pub(super) _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-impl<K, V, M, S> core::fmt::Debug for OrderCore<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
+impl<M, S> core::fmt::Debug for OrderCore<M, S>
 {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -33,11 +24,9 @@ where
   }
 }
 
-impl<K, V, M, S> Wal<S> for OrderCore<K, V, M, S>
+impl<M, S> Wal<S> for OrderCore<M, S>
 where
-  K: ?Sized,
-  V: ?Sized,
-  M: BaseTable<Key = K, Value = V>,
+  M: BaseTable,
 {
   type Allocator = Arena;
   type Memtable = M;
@@ -59,7 +48,6 @@ where
       map: set,
       opts,
       cks: checksumer,
-      _m: PhantomData,
     }
   }
 

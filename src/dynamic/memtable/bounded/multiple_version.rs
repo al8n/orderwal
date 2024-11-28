@@ -26,7 +26,7 @@ pub use range_deletion_entry::*;
 pub use range_update_entry::*;
 
 pub use skl::dynamic::multiple_version::sync::{
-  Entry, Iter, IterAll, Range, RangeAll, VersionedEntry,
+  Entry, Iter, Range,
 };
 use skl::{
   dynamic::{

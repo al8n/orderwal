@@ -151,13 +151,13 @@ macro_rules! expand_unit_tests {
   };
 }
 
-type OrderWalAlternativeTable<K, V> = OrderWal<K, V, AlternativeTable<K, V>>;
-type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<K, V, AlternativeTable<K, V>>;
+type OrderWalAlternativeTable<K, V> = OrderWal<AlternativeTable<K, V>>;
+type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<AlternativeTable<K, V>>;
 
 type MultipleVersionOrderWalAlternativeTable<K, V> =
-  multiple_version::OrderWal<K, V, multiple_version::AlternativeTable<K, V>>;
+  multiple_version::OrderWal<multiple_version::AlternativeTable<K, V>>;
 type MultipleVersionOrderWalReaderAlternativeTable<K, V> =
-  multiple_version::OrderWalReader<K, V, multiple_version::AlternativeTable<K, V>>;
+  multiple_version::OrderWalReader<multiple_version::AlternativeTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

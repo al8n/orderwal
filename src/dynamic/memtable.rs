@@ -1,4 +1,4 @@
-use super::wal::{Arena, KeyPointer, ValuePointer};
+use super::{types::Value, wal::{Arena, KeyPointer, ValuePointer}};
 use crate::types::Kind;
 use core::{
   borrow::Borrow,
@@ -16,81 +16,22 @@ use core::{
 // /// Sum type for different memtable implementations.
 // pub mod alternative;
 
-/// Memtable implementation based on ARNEA based [`SkipMap`](skl).
-pub mod bounded;
-
-/// Value that can be converted from a byte slice.
-pub trait Value<'a>: sealed::Sealed<'a> {}
-
-impl<'a, T> Value<'a> for T where T: sealed::Sealed<'a> {}
-
-mod sealed {
-  pub trait Sealed<'a> {
-    type Ref;
-
-    fn as_ref(&self) -> Self::Ref;
-
-    fn from_value_bytes(src: Option<&'a [u8]>) -> Self
-    where
-      Self: 'a;
-
-    fn is_removed(&self) -> bool;
-  }
-
-  impl<'a> Sealed<'a> for Option<&'a [u8]> {
-    type Ref = Option<&'a [u8]>;
-
-    #[inline]
-    fn as_ref(&self) -> Self::Ref {
-      self.as_ref().copied()
-    }
-
-    #[inline]
-    fn from_value_bytes(src: Option<&'a [u8]>) -> Self {
-      src
-    }
-
-    #[inline]
-    fn is_removed(&self) -> bool {
-      self.is_none()
-    }
-  }
-
-  impl<'a> Sealed<'a> for &'a [u8] {
-    type Ref = Self;
-
-    #[inline]
-    fn as_ref(&self) -> Self::Ref {
-      self
-    }
-
-    #[inline]
-    fn from_value_bytes(src: Option<&'a [u8]>) -> Self {
-      match src {
-        Some(v) => v,
-        None => panic!("cannot convert None to Value"),
-      }
-    }
-
-    #[inline]
-    fn is_removed(&self) -> bool {
-      false
-    }
-  }
-}
-
+// /// Memtable implementation based on ARNEA based [`SkipMap`](skl).
+// pub mod bounded;
 
 /// An entry which is stored in the memory table.
-pub trait MemtableEntry<'a, V>
+pub trait MemtableEntry<'a>
 where
   Self: Sized,
-  V: Value<'a>,
 {
+  /// The value type.
+  type Value;
+
   /// Returns the key in the entry.
-  fn key(&self) -> KeyPointer;
+  fn key(&self) -> &'a [u8];
 
   /// Returns the value in the entry.
-  fn value(&self) -> V::Ref;
+  fn value(&self) -> &Self::Value;
 
   /// Returns the next entry in the memory table.
   fn next(&mut self) -> Option<Self>;
@@ -118,19 +59,21 @@ pub trait RangeEntry<'a>: Sized {
 pub trait RangeDeletionEntry<'a>: RangeEntry<'a> {}
 
 /// An entry which is stored in the memory table.
-pub trait RangeUpdateEntry<'a, V>
+pub trait RangeUpdateEntry<'a>
 where
   Self: RangeEntry<'a>,
-  V: Value<'a>,
 {
+  /// The value type.
+  type Value;
+
   /// Returns the value in the entry.
-  fn value(&self) -> V::Ref;
+  fn value(&self) -> <Self::Value as Value<'a>>::Ref where Self::Value: Value<'a>;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait BaseTable {
-  /// The comparator used to compare keys.
-  type Comparator;
+  // /// The comparator used to compare keys.
+  // type Comparator;
 
   /// The configuration options for the memtable.
   type Options;
@@ -139,13 +82,13 @@ pub trait BaseTable {
   type Error;
 
   /// The item returned by the iterator or query methods.
-  type Entry<'a, V>: MemtableEntry<'a, V> + Clone
+  type Entry<'a, V>: MemtableEntry<'a, Value = V> + Clone
   where
     Self: 'a,
     V: Value<'a> + 'a;
 
   /// The item returned by the point iterators
-  type PointEntry<'a, V>: MemtableEntry<'a, V> + Clone
+  type PointEntry<'a, V>: MemtableEntry<'a, Value = V> + Clone
   where
     Self: 'a,
     V: Value<'a> + 'a;
@@ -156,7 +99,7 @@ pub trait BaseTable {
     Self: 'a;
 
   /// The item returned by the bulk updates iterators
-  type RangeUpdateEntry<'a, V>: RangeUpdateEntry<'a, V> + Clone
+  type RangeUpdateEntry<'a, V>: RangeUpdateEntry<'a, Value = V> + Clone
   where
     Self: 'a,
     V: Value<'a> + 'a;

@@ -9,12 +9,9 @@ use {
 };
 
 /// An [`OrderWal`] reader.
-pub struct OrderWalReader<K: ?Sized, V: ?Sized, P, S>(OrderWal<K, V, P, S>);
+pub struct OrderWalReader<P, S>(OrderWal<P, S>);
 
-impl<K, V, M, S> core::fmt::Debug for OrderWalReader<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
+impl<M, S> core::fmt::Debug for OrderWalReader<M, S>
 {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -22,32 +19,26 @@ where
   }
 }
 
-impl<K: ?Sized, V: ?Sized, P, S> Immutable for OrderWalReader<K, V, P, S> {}
+impl<P, S> Immutable for OrderWalReader<P, S> {}
 
-impl<K, V, P, S> OrderWalReader<K, V, P, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+impl<P, S> OrderWalReader<P, S> {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn new(wal: Arc<OrderCore<K, V, P, S>>) -> Self {
+  pub(super) fn new(wal: Arc<OrderCore<P, S>>) -> Self {
     Self(OrderWal::construct(wal))
   }
 }
 
-impl<K, V, M, S> Constructable for OrderWalReader<K, V, M, S>
+impl<M, S> Constructable for OrderWalReader<M, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static,
+  M: BaseTable + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
+  type Wal = OrderCore<Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
-  type Reader = OrderWalReader<K, V, M, S>;
+  type Reader = OrderWalReader<M, S>;
 
   #[inline]
   fn as_wal(&self) -> &Self::Wal {

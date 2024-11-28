@@ -12,20 +12,20 @@ use skl::{either::Either, KeySize};
 use crate::{
   dynamic::{
     batch::Batch,
-    memtable::{BaseTable, MultipleVersionMemtable, MultipleVersionMemtableEntry},
+    memtable::{BaseTable, MultipleVersionMemtable},
     sealed::{Constructable, MultipleVersionWalReader, Wal},
     types::{
-      multiple_version::{Entry, VersionedEntry},
+      Entry,
       BufWriter,
     },
   },
   error::Error,
   types::{KeyBuilder, ValueBuilder},
-  Options,
+  Options, WithVersion,
 };
 
-mod iter;
-pub use iter::*;
+use super::iter::{BaseIter, Iter, Range};
+
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Constructable {
@@ -64,7 +64,6 @@ pub trait Reader: Constructable {
   fn maximum_version(&self) -> u64
   where
     Self::Memtable: MultipleVersionMemtable + 'static,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     Wal::memtable(self.as_wal()).maximum_version()
   }
@@ -74,7 +73,6 @@ pub trait Reader: Constructable {
   fn minimum_version(&self) -> u64
   where
     Self::Memtable: MultipleVersionMemtable + 'static,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     Wal::memtable(self.as_wal()).minimum_version()
   }
@@ -84,7 +82,6 @@ pub trait Reader: Constructable {
   fn may_contain_version(&self, version: u64) -> bool
   where
     Self::Memtable: MultipleVersionMemtable + 'static,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
   {
     Wal::memtable(self.as_wal()).may_contain_version(version)
   }
@@ -109,43 +106,44 @@ pub trait Reader: Constructable {
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  fn iter(
-    &self,
+  fn iter<'a>(
+    &'a self,
     version: u64,
   ) -> Iter<
-    '_,
-    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'_>,
+    'a,
+    &'a [u8],
+    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a, &'a [u8]>,
     Self::Memtable,
   >
   where
     Self::Memtable: MultipleVersionMemtable + 'static,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    Iter::new(BaseIter::new(version, wal.iter(version), ptr))
+    
+    Iter::new(BaseIter::with_version(version, wal.iter(version)))
   }
 
   /// Returns an iterator over the entries (all versions) in the WAL.
   #[inline]
-  fn iter_all_versions(
-    &self,
+  fn iter_all_versions<'a>(
+    &'a self,
     version: u64,
-  ) -> IterAll<
-    '_,
-    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as MultipleVersionMemtable>::MultipleVersionIterator<'_>,
+  ) -> Iter<
+    'a,
+    Option<&'a [u8]>,
+    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a, Option<&'a [u8]>>,
     Self::Memtable,
   >
   where
     Self::Memtable: MultipleVersionMemtable + 'static,
-    for<'a> <Self::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    IterAll::new(MultipleVersionBaseIter::new(
+    
+    Iter::new(BaseIter::with_version(
       version,
       wal.iter_all_versions(version),
-      ptr,
     ))
   }
 
@@ -155,18 +153,16 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     range: R,
-  ) -> Range<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
+  ) -> Range<'a, &'a [u8], R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    Range::new(BaseIter::new(version, wal.range(version, range), ptr))
+    
+    Range::new(BaseIter::with_version(version, wal.range(version, range)))
   }
 
   /// Returns an iterator over a subset of entries (all versions) in the WAL.
@@ -175,120 +171,32 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     range: R,
-  ) -> MultipleVersionRange<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
+  ) -> Range<'a, Option<&'a [u8]>, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    MultipleVersionRange::new(MultipleVersionBaseIter::new(
+    
+    Range::new(BaseIter::with_version(
       version,
       wal.range_all_versions(version, range),
-      ptr,
     ))
-  }
-
-  /// Returns an iterator over the keys in the WAL.
-  #[inline]
-  fn keys(
-    &self,
-    version: u64,
-  ) -> Keys<
-    '_,
-    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'_>,
-    Self::Memtable,
-  >
-  where
-    Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
-  {
-    let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    Keys::new(BaseIter::new(version, wal.iter(version), ptr))
-  }
-
-  /// Returns an iterator over a subset of keys in the WAL.
-  #[inline]
-  fn range_keys<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> RangeKeys<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
-  where
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
-  {
-    let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    RangeKeys::new(BaseIter::new(version, wal.range(version, range), ptr))
-  }
-
-  /// Returns an iterator over the values in the WAL.
-  #[inline]
-  fn values(
-    &self,
-    version: u64,
-  ) -> Values<
-    '_,
-    <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'_>,
-    Self::Memtable,
-  >
-  where
-    Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
-  {
-    let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    Values::new(BaseIter::new(version, wal.iter(version), ptr))
-  }
-
-  /// Returns an iterator over a subset of values in the WAL.
-  #[inline]
-  fn range_values<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> RangeValues<'a, R, Q, <Self::Wal as Wal<Self::Checksumer>>::Memtable>
-  where
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
-  {
-    let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    RangeValues::new(BaseIter::new(version, wal.range(version, range), ptr))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<Entry<'_, <Self::Memtable as BaseTable>::Item<'_>>>
+  fn first<'a>(&'a self, version: u64) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
   where
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
     wal
       .first(version)
-      .map(|ent| Entry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -296,37 +204,31 @@ pub trait Reader: Constructable {
   /// Compared to [`first`](Reader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn first_versioned(
-    &self,
+  fn first_versioned<'a>(
+    &'a self,
     version: u64,
   ) -> Option<
-    VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>,
+    Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>,
   >
   where
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
     wal
       .first_versioned(version)
-      .map(|ent| VersionedEntry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self, version: u64) -> Option<Entry<'_, <Self::Memtable as BaseTable>::Item<'_>>>
+  fn last<'a>(&'a self, version: u64) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
   where
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
-    MultipleVersionWalReader::last(wal, version).map(|ent| Entry::with_version(ptr, ent, version))
+    MultipleVersionWalReader::last(wal, version).map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -334,35 +236,29 @@ pub trait Reader: Constructable {
   /// Compared to [`last`](Reader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn last_versioned(
-    &self,
+  fn last_versioned<'a>(
+    &'a self,
     version: u64,
   ) -> Option<
-    VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>,
+    Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>,
   >
   where
     Self::Memtable: MultipleVersionMemtable,
-
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
     wal
       .last_versioned(version)
-      .map(|ent| VersionedEntry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self.as_wal().contains_key(version, key)
   }
@@ -371,13 +267,11 @@ pub trait Reader: Constructable {
   ///
   /// Compared to [`contains_key`](Reader::contains_key), this method returns `true` even if the latest is marked as removed.
   #[inline]
-  fn contains_key_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     self.as_wal().contains_key_versioned(version, key)
   }
@@ -388,19 +282,17 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     key: &Q,
-  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
+    
     wal
       .get(version, key)
-      .map(|ent| Entry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Gets the value associated with the key.
@@ -413,20 +305,18 @@ pub trait Reader: Constructable {
     version: u64,
     key: &Q,
   ) -> Option<
-    VersionedEntry<'a, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'a>>,
+    Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>,
   >
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
+    
     wal
       .get_versioned(version, key)
-      .map(|ent| VersionedEntry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -436,19 +326,17 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
+    
     wal
       .upper_bound(version, bound)
-      .map(|ent| Entry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -461,20 +349,18 @@ pub trait Reader: Constructable {
     version: u64,
     bound: Bound<&Q>,
   ) -> Option<
-    VersionedEntry<'a, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'a>>,
+    Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>,
   >
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
+    
     wal
       .upper_bound_versioned(version, bound)
-      .map(|ent| VersionedEntry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -484,19 +370,17 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Item<'a>>>
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
+    
     wal
       .lower_bound(version, bound)
-      .map(|ent| Entry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -510,20 +394,18 @@ pub trait Reader: Constructable {
     version: u64,
     bound: Bound<&Q>,
   ) -> Option<
-    VersionedEntry<'a, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'a>>,
+    Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>,
   >
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
     let wal = self.as_wal();
-    let ptr = wal.allocator().raw_ptr();
+    
     wal
       .lower_bound_versioned(version, bound)
-      .map(|ent| VersionedEntry::with_version(ptr, ent, version))
+      .map(|ent| Entry::with_version(ent, version))
   }
 }
 
@@ -531,9 +413,6 @@ impl<T> Reader for T
 where
   T: Constructable,
   T::Memtable: MultipleVersionMemtable,
-  for<'a> <T::Memtable as BaseTable>::Item<'a>: MultipleVersionMemtableEntry<'a>,
-  for<'a> <T::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'a>:
-    MultipleVersionMemtableEntry<'a>,
 {
 }
 
@@ -585,8 +464,8 @@ where
   ///
   /// See also [`insert_with_value_builder`](Writer::insert_with_value_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
-  fn insert_with_key_builder<E>(
-    &mut self,
+  fn insert_with_key_builder<'a, E>(
+    &'a mut self,
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
     value: &[u8],
@@ -594,9 +473,7 @@ where
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -609,7 +486,7 @@ where
   ///
   /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
-  fn insert_with_value_builder<E>(
+  fn insert_with_value_builder<'a, E>(
     &mut self,
     version: u64,
     key: &[u8],
@@ -617,10 +494,8 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    Self::Memtable: MultipleVersionMemtable + 'a,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -631,8 +506,8 @@ where
   /// Inserts a key-value pair into the WAL. This method
   /// allows the caller to build the key and value in place.
   #[inline]
-  fn insert_with_builders<KE, VE>(
-    &mut self,
+  fn insert_with_builders<'a, KE, VE>(
+    &'a mut self,
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, VE>>,
@@ -640,22 +515,18 @@ where
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self.as_wal().insert(Some(version), kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
   #[inline]
-  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
+  fn insert<'a>(&'a mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -666,30 +537,26 @@ where
   /// Removes a key-value pair from the WAL. This method
   /// allows the caller to build the key in place.
   #[inline]
-  fn remove_with_builder<KE>(
-    &mut self,
+  fn remove_with_builder<'a, KE>(
+    &'a mut self,
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self.as_wal().remove(Some(version), kb)
   }
 
   /// Removes a key-value pair from the WAL.
   #[inline]
-  fn remove(&mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
+  fn remove<'a>(&'a mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -699,16 +566,14 @@ where
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error<Self::Memtable>>
+  fn insert_batch<'a, B>(&'a mut self, batch: &mut B) -> Result<(), Error<Self::Memtable>>
   where
     B: Batch<Self::Memtable>,
     B::Key: AsRef<[u8]>,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -718,8 +583,8 @@ where
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_key_builder<B>(
-    &mut self,
+  fn insert_batch_with_key_builder<'a, B>(
+    &'a mut self,
     batch: &mut B,
   ) -> Result<(), Either<<B::Key as BufWriter>::Error, Error<Self::Memtable>>>
   where
@@ -728,9 +593,7 @@ where
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -740,8 +603,8 @@ where
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_value_builder<B>(
-    &mut self,
+  fn insert_batch_with_value_builder<'a, B>(
+    &'a mut self,
     batch: &mut B,
   ) -> Result<(), Either<<B::Value as BufWriter>::Error, Error<Self::Memtable>>>
   where
@@ -750,9 +613,7 @@ where
     B::Value: BufWriter,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self
       .as_wal()
@@ -762,8 +623,8 @@ where
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_builders<KB, VB, B>(
-    &mut self,
+  fn insert_batch_with_builders<'a, KB, VB, B>(
+    &'a mut self,
     batch: &mut B,
   ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
   where
@@ -772,9 +633,7 @@ where
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: MultipleVersionMemtable,
-    for<'b> <Self::Memtable as BaseTable>::Item<'b>: MultipleVersionMemtableEntry<'b>,
-    for<'b> <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'b>:
-      MultipleVersionMemtableEntry<'b>,
+    <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithVersion,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }

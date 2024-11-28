@@ -24,7 +24,6 @@ pub struct BatchEntry<K, V, M: BaseTable> {
 impl<K, V, M> BatchEntry<K, V, M>
 where
   M: BaseTable,
-  for<'a> M::Item<'a>: WithoutVersion,
 {
   /// Creates a new entry.
   #[inline]
@@ -58,7 +57,6 @@ where
 impl<K, V, M> BatchEntry<K, V, M>
 where
   M: BaseTable,
-  for<'a> M::Item<'a>: WithVersion,
 {
   /// Creates a new entry with version.
   #[inline]
