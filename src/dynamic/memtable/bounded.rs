@@ -1,3 +1,43 @@
+macro_rules! impl_point_entry {
+  ($ent:ident$([$version:ident])? ($ty:ty)) => {
+    impl<'a, C> $crate::dynamic::memtable::MemtableEntry<'a> for $ent<'a, $ty, $crate::dynamic::memtable::bounded::MemtableComparator<C>>
+      where
+        C: dbutils::equivalentor::DynComparator<[u8], [u8]>,
+      {
+        type Value = $ty;
+
+        #[inline]
+        fn key(&self) -> &'a [u8] {
+          $ent::key(self)
+        }
+
+        #[inline]
+        fn value(&self) -> Self::Value {
+          $ent::value(self)
+        }
+
+        #[inline]
+        fn next(&mut self) -> core::option::Option<Self> {
+          $ent::next(self)
+        }
+
+        #[inline]
+        fn prev(&mut self) -> core::option::Option<Self> {
+          $ent::prev(self)
+        }
+      }
+
+      $(
+        impl<'a, C> $crate::WithVersion for $ent<'a, $ty, $crate::dynamic::memtable::bounded::MemtableComparator<C>> {
+          #[inline]
+          fn $version(&self) -> u64 {
+            $ent::version(self)
+          }
+        }
+      )?
+  };
+}
+
 macro_rules! construct_skl {
   ($builder:ident) => {{
     $builder.alloc()
@@ -51,15 +91,22 @@ macro_rules! memmap_or_not {
   }};
 }
 
-use core::slice;
+use core::{borrow::Borrow, cmp, ops::Bound};
 
+use skl::generic::Type;
+use triomphe::Arc;
+
+use crate::types::{fetch_entry, fetch_raw_key, fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry, RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer};
+
+pub use dbutils::{
+  equivalent::{Comparable, Equivalent},
+  equivalentor::*,
+};
 pub use skl::Height;
-
-pub use dbutils::equivalentor::*;
 
 /// Options to configure the [`Table`] or [`MultipleVersionTable`].
 #[derive(Debug, Copy, Clone)]
-pub struct TableOptions<C = Ascend> {
+pub struct TableOptions<C = Ascend<[u8]>> {
   capacity: u32,
   map_anon: bool,
   max_height: Height,
@@ -81,7 +128,7 @@ impl TableOptions {
       capacity: 8192,
       map_anon: false,
       max_height: Height::new(),
-      cmp: Ascend,
+      cmp: Ascend::new(),
     }
   }
 }
@@ -150,154 +197,7 @@ pub mod table;
 // pub use multiple_version::MultipleVersionTable;
 // pub use table::Table;
 
-struct MemtableComparator<C> {
-  /// The start pointer of the parent ARENA.
-  ptr: *const u8,
-  cmp: std::sync::Arc<C>,
-}
-
-impl<C> MemtableComparator<C> {
-  #[inline]
-  const fn new(ptr: *const u8, cmp: std::sync::Arc<C>) -> Self {
-    Self { ptr, cmp }
-  }
-}
-
-impl<C> Clone for MemtableComparator<C> {
-  #[inline]
-  fn clone(&self) -> Self {
-    Self {
-      ptr: self.ptr,
-      cmp: self.cmp.clone(),
-    }
-  }
-}
-
-impl<C> core::fmt::Debug for MemtableComparator<C>
-where
-  C: core::fmt::Debug,
-{
-  #[inline]
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("MemtableComparator")
-      .field("ptr", &self.ptr)
-      .field("cmp", &self.cmp)
-      .finish()
-  }
-}
-
-impl<C> dbutils::equivalentor::Equivalentor for MemtableComparator<C>
-where
-  C: dbutils::equivalentor::Equivalentor,
-{
-  #[inline]
-  fn equivalent(&self, a: &[u8], b: &[u8]) -> bool {
-    let aoffset = u32::from_le_bytes(a[0..4].try_into().unwrap()) as usize;
-    let alen = u32::from_le_bytes(a[4..8].try_into().unwrap()) as usize;
-
-    let boffset = u32::from_le_bytes(b[0..4].try_into().unwrap()) as usize;
-    let blen = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
-
-    unsafe {
-      let a = slice::from_raw_parts(self.ptr.add(aoffset), alen);
-      let b = slice::from_raw_parts(self.ptr.add(boffset), blen);
-      self.cmp.equivalent(a, b)
-    }
-  }
-}
-
-impl<C> dbutils::equivalentor::Comparator for MemtableComparator<C>
-where
-  C: dbutils::equivalentor::Comparator,
-{
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
-    let aoffset = u32::from_le_bytes(a[0..4].try_into().unwrap()) as usize;
-    let alen = u32::from_le_bytes(a[4..8].try_into().unwrap()) as usize;
-
-    let boffset = u32::from_le_bytes(b[0..4].try_into().unwrap()) as usize;
-    let blen = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
-
-    unsafe {
-      let a = slice::from_raw_parts(self.ptr.add(aoffset), alen);
-      let b = slice::from_raw_parts(self.ptr.add(boffset), blen);
-      self.cmp.compare(a, b)
-    }
-  }
-}
-
-struct MemtableRangeComparator<C> {
-  /// The start pointer of the parent ARENA.
-  ptr: *const u8,
-  cmp: std::sync::Arc<C>,
-}
-
-impl<C> MemtableRangeComparator<C> {
-  #[inline]
-  const fn new(ptr: *const u8, cmp: std::sync::Arc<C>) -> Self {
-    Self { ptr, cmp }
-  }
-}
-
-impl<C> Clone for MemtableRangeComparator<C> {
-  #[inline]
-  fn clone(&self) -> Self {
-    Self {
-      ptr: self.ptr,
-      cmp: self.cmp.clone(),
-    }
-  }
-}
-
-impl<C> core::fmt::Debug for MemtableRangeComparator<C>
-where
-  C: core::fmt::Debug,
-{
-  #[inline]
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("MemtableRangeComparator")
-      .field("ptr", &self.ptr)
-      .field("cmp", &self.cmp)
-      .finish()
-  }
-}
-
-impl<C> dbutils::equivalentor::Equivalentor for MemtableRangeComparator<C>
-where
-  C: dbutils::equivalentor::Equivalentor,
-{
-  #[inline]
-  fn equivalent(&self, a: &[u8], b: &[u8]) -> bool {
-    let aoffset = u32::from_le_bytes(a[0..4].try_into().unwrap()) as usize;
-    let alen = u32::from_le_bytes(a[4..8].try_into().unwrap()) as usize;
-
-    let boffset = u32::from_le_bytes(b[0..4].try_into().unwrap()) as usize;
-    let blen = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
-
-    unsafe {
-      let a = slice::from_raw_parts(self.ptr.add(aoffset), alen);
-      let b = slice::from_raw_parts(self.ptr.add(boffset), blen);
-      self.cmp.equivalent(a, b)
-    }
-  }
-}
-
-impl<C> dbutils::equivalentor::Comparator for MemtableRangeComparator<C>
-where
-  C: dbutils::equivalentor::Comparator,
-{
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
-    let aoffset = u32::from_le_bytes(a[0..4].try_into().unwrap()) as usize;
-    let alen = u32::from_le_bytes(a[4..8].try_into().unwrap()) as usize;
-
-    let boffset = u32::from_le_bytes(b[0..4].try_into().unwrap()) as usize;
-    let blen = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
-
-    unsafe {
-      let a = slice::from_raw_parts(self.ptr.add(aoffset), alen);
-      let b = slice::from_raw_parts(self.ptr.add(boffset), blen);
-      self.cmp.compare(a, b)
-    }
-  }
-}
+mod comparator;
+use comparator::MemtableComparator;
+mod range_comparator;
+use range_comparator::MemtableRangeComparator;

@@ -99,19 +99,19 @@ impl<'a, V: ?Sized> TypeRef<'a> for ValuePointer<V> {
 }
 
 #[doc(hidden)]
-pub struct KeyPointer<K: ?Sized> {
+pub struct RecordPointer<K: ?Sized> {
   flag: EntryFlags,
   ptr: *const u8,
   len: usize,
   _m: PhantomData<K>,
 }
 
-unsafe impl<K: ?Sized> Send for KeyPointer<K> {}
-unsafe impl<K: ?Sized> Sync for KeyPointer<K> {}
+unsafe impl<K: ?Sized> Send for RecordPointer<K> {}
+unsafe impl<K: ?Sized> Sync for RecordPointer<K> {}
 
-impl<K: ?Sized> core::fmt::Debug for KeyPointer<K> {
+impl<K: ?Sized> core::fmt::Debug for RecordPointer<K> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("KeyPointer")
+    f.debug_struct("RecordPointer")
       .field("ptr", &self.ptr)
       .field("flag", &self.flag)
       .field("key", &self.as_slice())
@@ -119,16 +119,16 @@ impl<K: ?Sized> core::fmt::Debug for KeyPointer<K> {
   }
 }
 
-impl<K: ?Sized> Clone for KeyPointer<K> {
+impl<K: ?Sized> Clone for RecordPointer<K> {
   #[inline]
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl<K: ?Sized> Copy for KeyPointer<K> {}
+impl<K: ?Sized> Copy for RecordPointer<K> {}
 
-impl<K: ?Sized> KeyPointer<K> {
+impl<K: ?Sized> RecordPointer<K> {
   #[inline]
   pub(crate) fn new(flag: EntryFlags, len: usize, ptr: *const u8) -> Self {
     Self {
@@ -150,15 +150,15 @@ impl<K: ?Sized> KeyPointer<K> {
   }
 }
 
-impl<K: Type + ?Sized> PartialEq for KeyPointer<K> {
+impl<K: Type + ?Sized> PartialEq for RecordPointer<K> {
   fn eq(&self, other: &Self) -> bool {
     self.as_slice() == other.as_slice()
   }
 }
 
-impl<K: Type + ?Sized> Eq for KeyPointer<K> {}
+impl<K: Type + ?Sized> Eq for RecordPointer<K> {}
 
-impl<'a, K> PartialOrd for KeyPointer<K>
+impl<'a, K> PartialOrd for RecordPointer<K>
 where
   K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -168,7 +168,7 @@ where
   }
 }
 
-impl<'a, K> Ord for KeyPointer<K>
+impl<'a, K> Ord for RecordPointer<K>
 where
   K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -179,7 +179,7 @@ where
   }
 }
 
-impl<K> Type for KeyPointer<K>
+impl<K> Type for RecordPointer<K>
 where
   K: ?Sized,
 {
@@ -211,7 +211,7 @@ where
   }
 }
 
-impl<'a, K: ?Sized> TypeRef<'a> for KeyPointer<K> {
+impl<'a, K: ?Sized> TypeRef<'a> for RecordPointer<K> {
   unsafe fn from_slice(src: &'a [u8]) -> Self {
     let ptr = usize_to_addr(usize::from_le_bytes((&src[..PTR_SIZE]).try_into().unwrap()));
     let mut offset = PTR_SIZE;
@@ -224,7 +224,7 @@ impl<'a, K: ?Sized> TypeRef<'a> for KeyPointer<K> {
   }
 }
 
-impl<'a, K> KeyRef<'a, Self> for KeyPointer<K>
+impl<'a, K> KeyRef<'a, Self> for RecordPointer<K>
 where
   K: Type + Ord + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,

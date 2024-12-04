@@ -1,5 +1,5 @@
-use super::{types::Value, wal::{Arena, KeyPointer, ValuePointer}};
-use crate::types::Kind;
+use super::types::Value;
+use crate::types::{Kind, RecordPointer, ValuePointer};
 use core::{
   borrow::Borrow,
   ops::{Bound, RangeBounds},
@@ -16,8 +16,8 @@ use core::{
 // /// Sum type for different memtable implementations.
 // pub mod alternative;
 
-// /// Memtable implementation based on ARNEA based [`SkipMap`](skl).
-// pub mod bounded;
+/// Memtable implementation based on ARNEA based [`SkipMap`](skl).
+pub mod bounded;
 
 /// An entry which is stored in the memory table.
 pub trait MemtableEntry<'a>
@@ -31,7 +31,7 @@ where
   fn key(&self) -> &'a [u8];
 
   /// Returns the value in the entry.
-  fn value(&self) -> &Self::Value;
+  fn value(&self) -> Self::Value;
 
   /// Returns the next entry in the memory table.
   fn next(&mut self) -> Option<Self>;
@@ -67,7 +67,7 @@ where
   type Value;
 
   /// Returns the value in the entry.
-  fn value(&self) -> <Self::Value as Value<'a>>::Ref where Self::Value: Value<'a>;
+  fn value(&self) -> Self::Value;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -158,31 +158,31 @@ pub trait BaseTable {
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
-  /// Creates a new memtable with the specified options.
-  fn new<A>(arena: Arena<A>, opts: Self::Options) -> Result<Self, Self::Error>
-  where
-    Self: Sized,
-    A: rarena_allocator::Allocator;
+  // /// Creates a new memtable with the specified options.
+  // fn new<A>(arena: Arena<A>, opts: Self::Options) -> Result<Self, Self::Error>
+  // where
+  //   Self: Sized,
+  //   A: rarena_allocator::Allocator;
 
   /// Inserts a pointer into the memtable.
   fn insert(
     &self,
     version: Option<u64>,
-    kp: KeyPointer,
+    kp: RecordPointer,
     vp: ValuePointer,
   ) -> Result<(), Self::Error>;
 
   /// Removes the pointer associated with the key.
-  fn remove(&self, version: Option<u64>, key: KeyPointer) -> Result<(), Self::Error>;
+  fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts a range deletion pointer into the memtable.
-  fn remove_range(&self, version: Option<u64>, rp: KeyPointer) -> Result<(), Self::Error>;
+  fn remove_range(&self, version: Option<u64>, rp: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts an range update pointer into the memtable.
   fn update_range(
     &self,
     version: Option<u64>,
-    rp: KeyPointer,
+    rp: RecordPointer,
     vp: ValuePointer,
   ) -> Result<(), Self::Error>;
 
@@ -336,7 +336,11 @@ pub trait MultipleVersionMemtable: BaseTable {
   fn point_iter_all_versions(&self, version: u64) -> Self::PointIterator<'_, Option<&[u8]>>;
 
   /// Returns an iterator over a subset of point entries in the memtable.
-  fn point_range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::PointRange<'a, &'a [u8], Q, R>
+  fn point_range<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> Self::PointRange<'a, &'a [u8], Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
@@ -355,10 +359,7 @@ pub trait MultipleVersionMemtable: BaseTable {
   fn bulk_deletions_iter(&self, version: u64) -> Self::BulkDeletionsIterator<'_>;
 
   /// Returns an iterator over all the range deletions entries in the memtable.
-  fn bulk_deletions_iter_all_versions(
-    &self,
-    version: u64,
-  ) -> Self::BulkDeletionsIterator<'_>;
+  fn bulk_deletions_iter_all_versions(&self, version: u64) -> Self::BulkDeletionsIterator<'_>;
 
   /// Returns an iterator over a subset of range deletions entries in the memtable.
   fn bulk_deletions_range<'a, Q, R>(

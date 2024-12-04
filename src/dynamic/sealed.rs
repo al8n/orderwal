@@ -1,10 +1,8 @@
 use super::{
   batch::Batch,
-  memtable::{
-    BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable,
-  },
+  memtable::{BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable},
   types::BufWriter,
-  wal::{Arena, KeyPointer, ValuePointer},
+  wal::{Arena, RecordPointer, ValuePointer},
 };
 use crate::{
   checksum::{BuildChecksumer, Checksumer},
@@ -104,7 +102,10 @@ pub trait WalReader<S> {
   }
 
   #[inline]
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn upper_bound<Q>(
+    &self,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,
@@ -113,7 +114,10 @@ pub trait WalReader<S> {
   }
 
   #[inline]
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn lower_bound<Q>(
+    &self,
+    bound: Bound<&Q>,
+  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,
@@ -137,7 +141,11 @@ pub trait MultipleVersionWalReader<S> {
   }
 
   #[inline]
-  fn range<Q, R>(&self, version: u64, range: R) -> <Self::Memtable as BaseTable>::Range<'_, &[u8], Q, R>
+  fn range<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as BaseTable>::Range<'_, &[u8], Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
@@ -441,7 +449,7 @@ pub trait Wal<S> {
   fn insert_pointer(
     &self,
     version: Option<u64>,
-    kp: KeyPointer,
+    kp: RecordPointer,
     vp: Option<ValuePointer>,
   ) -> Result<(), Error<Self::Memtable>>
   where
@@ -458,7 +466,7 @@ pub trait Wal<S> {
   #[inline]
   fn insert_pointers(
     &self,
-    mut ptrs: impl Iterator<Item = (Option<u64>, KeyPointer, Option<ValuePointer>)>,
+    mut ptrs: impl Iterator<Item = (Option<u64>, RecordPointer, Option<ValuePointer>)>,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
@@ -634,7 +642,7 @@ pub trait Wal<S> {
             let eoffset = buf.offset();
             let ko = eoffset + encoded_entry_meta.key_offset();
             let vo = eoffset + encoded_entry_meta.value_offset();
-            let kp = KeyPointer::new(entry_flag, ko as u32, encoded_entry_meta.klen as u32);
+            let kp = RecordPointer::new(entry_flag, ko as u32, encoded_entry_meta.klen as u32);
             let vp =
               (!remove).then(|| ValuePointer::new(vo as u32, encoded_entry_meta.vlen as u32));
             Ok((buf.buffer_offset(), kp, vp))
@@ -778,7 +786,7 @@ pub trait Wal<S> {
         }
 
         let entry_size = meta.entry_size as usize;
-        let kp = KeyPointer::new(ent.flag, ko as u32, meta.klen as u32);
+        let kp = RecordPointer::new(ent.flag, ko as u32, meta.klen as u32);
         let vp = vb
           .is_some()
           .then(|| ValuePointer::new(vo as u32, meta.vlen as u32));
@@ -1053,7 +1061,7 @@ pub trait Constructable: Sized {
             (None, eoffset + EntryFlags::SIZE)
           };
 
-          let kp = KeyPointer::new(flag, ko as u32, key_len as u32);
+          let kp = RecordPointer::new(flag, ko as u32, key_len as u32);
           if flag.contains(EntryFlags::REMOVED) {
             set.remove(version, kp).map_err(Error::memtable)?;
           } else {
@@ -1135,7 +1143,7 @@ pub trait Constructable: Sized {
               (None, ent_len, eoffset + EntryFlags::SIZE)
             };
 
-            let kp = KeyPointer::new(flag, ko as u32, klen as u32);
+            let kp = RecordPointer::new(flag, ko as u32, klen as u32);
             if flag.contains(EntryFlags::REMOVED) {
               set.remove(version, kp).map_err(Error::memtable)?;
             } else {

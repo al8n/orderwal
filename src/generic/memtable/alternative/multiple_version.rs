@@ -12,7 +12,7 @@ use {
         },
         BaseEntry, BaseTable, MultipleVersionMemtable, MultipleVersionMemtableEntry,
       },
-      wal::{KeyPointer, ValuePointer},
+      wal::{RecordPointer, ValuePointer},
     },
     types::Kind,
     WithVersion,
@@ -43,7 +43,7 @@ base_entry!(
 impl<'a, K, V> MultipleVersionMemtableEntry<'a> for Entry<'a, K, V>
 where
   K: ?Sized + Type + Ord,
-  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type,
 {
   #[inline]
@@ -69,7 +69,7 @@ base_entry!(
 impl<'a, K, V> MultipleVersionMemtableEntry<'a> for VersionedEntry<'a, K, V>
 where
   K: ?Sized + Type + Ord,
-  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type,
 {
   #[inline]
@@ -128,7 +128,7 @@ impl<K, V> BaseTable for MultipleVersionTable<K, V>
 where
   K: ?Sized + Type + Ord + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  for<'a> RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type + 'static,
 {
   type Key = K;
@@ -154,7 +154,7 @@ where
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   #[inline]
   fn new(opts: Self::Options) -> Result<Self, Self::Error>
@@ -168,19 +168,19 @@ where
   fn insert(
     &self,
     version: Option<u64>,
-    kp: KeyPointer<Self::Key>,
+    kp: RecordPointer<Self::Key>,
     vp: ValuePointer<Self::Value>,
   ) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static,
+    RecordPointer<Self::Key>: Ord + 'static,
   {
     match_op!(update(self.insert(version, kp, vp)))
   }
 
   #[inline]
-  fn remove(&self, version: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
+  fn remove(&self, version: Option<u64>, key: RecordPointer<Self::Key>) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static,
+    RecordPointer<Self::Key>: Ord + 'static,
   {
     match_op!(update(self.remove(version, key)))
   }
@@ -195,28 +195,28 @@ impl<K, V> MultipleVersionMemtable for MultipleVersionTable<K, V>
 where
   K: ?Sized + Type + Ord + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  for<'a> RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type + 'static,
 {
   type MultipleVersionEntry<'a>
     = VersionedEntry<'a, K, V>
   where
-    KeyPointer<Self::Key>: 'a,
+    RecordPointer<Self::Key>: 'a,
     Self: 'a;
 
   type IterAll<'a>
     = IterAll<'a, K, V>
   where
-    KeyPointer<Self::Key>: 'a,
+    RecordPointer<Self::Key>: 'a,
     Self: 'a;
 
   type MultipleVersionRange<'a, Q, R>
     = MultipleVersionRange<'a, K, V, Q, R>
   where
-    KeyPointer<Self::Key>: 'a,
+    RecordPointer<Self::Key>: 'a,
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   #[inline]
   fn maximum_version(&self) -> u64 {
@@ -236,7 +236,7 @@ where
   #[inline]
   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.upper_bound(version, bound).map(Item))
   }
@@ -247,7 +247,7 @@ where
     bound: Bound<&Q>,
   ) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self
       .upper_bound_versioned(version, bound)
@@ -257,7 +257,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.lower_bound(version, bound).map(Item))
   }
@@ -268,7 +268,7 @@ where
     bound: Bound<&Q>,
   ) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self
       .lower_bound_versioned(version, bound)
@@ -278,14 +278,14 @@ where
   #[inline]
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord,
+    RecordPointer<Self::Key>: Ord,
   {
     match_op!(self.first(version).map(Item))
   }
 
   fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    KeyPointer<Self::Key>: Ord,
+    RecordPointer<Self::Key>: Ord,
   {
     match_op!(self.first_versioned(version).map(MultipleVersionEntry))
   }
@@ -293,14 +293,14 @@ where
   #[inline]
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord,
+    RecordPointer<Self::Key>: Ord,
   {
     match_op!(self.last(version).map(Item))
   }
 
   fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    KeyPointer<Self::Key>: Ord,
+    RecordPointer<Self::Key>: Ord,
   {
     match_op!(self.last_versioned(version).map(MultipleVersionEntry))
   }
@@ -308,14 +308,14 @@ where
   #[inline]
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.get(version, key).map(Item))
   }
 
   fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.get_versioned(version, key).map(MultipleVersionEntry))
   }
@@ -323,14 +323,14 @@ where
   #[inline]
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.contains(version, key))
   }
 
   fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.contains_versioned(version, key))
   }
@@ -348,7 +348,7 @@ where
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(Dispatch::Range(self.range(version, range)))
   }
@@ -356,7 +356,7 @@ where
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(Dispatch::MultipleVersionRange(self.range_all_versions(version, range)))
   }

@@ -14,7 +14,7 @@ use crate::{
     batch::Batch,
     memtable::{BaseTable, Memtable},
     sealed::{Constructable, Wal, WalReader},
-    types::{Entry, BufWriter},
+    types::{BufWriter, Entry},
   },
   error::Error,
   types::{KeyBuilder, ValueBuilder},
@@ -106,7 +106,7 @@ pub trait Reader: Constructable {
     <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>: WithoutVersion,
   {
     let wal = self.as_wal();
-    
+
     Iter::new(BaseIter::new(wal.iter()))
   }
 
@@ -159,7 +159,10 @@ pub trait Reader: Constructable {
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
+  fn get<'a, Q>(
+    &'a self,
+    key: &Q,
+  ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, &'a [u8]>>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,

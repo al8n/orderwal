@@ -9,7 +9,7 @@ use {
         },
         BaseEntry, BaseTable, Memtable, MemtableEntry,
       },
-      wal::{KeyPointer, ValuePointer},
+      wal::{RecordPointer, ValuePointer},
     },
     types::Kind,
     WithoutVersion,
@@ -37,7 +37,7 @@ base_entry!(
 impl<'a, K, V> MemtableEntry<'a> for Entry<'a, K, V>
 where
   K: ?Sized + Type + Ord,
-  KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type,
 {
   #[inline]
@@ -77,7 +77,7 @@ impl<K, V> BaseTable for Table<K, V>
 where
   K: ?Sized + Type + Ord + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  for<'a> RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type + 'static,
 {
   type Key = K;
@@ -103,7 +103,7 @@ where
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   #[inline]
   fn new(opts: Self::Options) -> Result<Self, Self::Error>
@@ -117,19 +117,19 @@ where
   fn insert(
     &self,
     version: Option<u64>,
-    kp: KeyPointer<Self::Key>,
+    kp: RecordPointer<Self::Key>,
     vp: ValuePointer<Self::Value>,
   ) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static,
+    RecordPointer<Self::Key>: Ord + 'static,
   {
     match_op!(update(self.insert(version, kp, vp)))
   }
 
   #[inline]
-  fn remove(&self, version: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
+  fn remove(&self, version: Option<u64>, key: RecordPointer<Self::Key>) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static,
+    RecordPointer<Self::Key>: Ord + 'static,
   {
     match_op!(update(self.remove(version, key)))
   }
@@ -144,7 +144,7 @@ impl<K, V> Memtable for Table<K, V>
 where
   K: ?Sized + Type + Ord + 'static,
   for<'a> K::Ref<'a>: KeyRef<'a, K>,
-  for<'a> KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+  for<'a> RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
   V: ?Sized + Type + 'static,
 {
   #[inline]
@@ -155,7 +155,7 @@ where
   #[inline]
   fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.upper_bound(bound).map(Item))
   }
@@ -163,7 +163,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.lower_bound(bound).map(Item))
   }
@@ -171,7 +171,7 @@ where
   #[inline]
   fn first(&self) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord,
+    RecordPointer<Self::Key>: Ord,
   {
     match_op!(self.first().map(Item))
   }
@@ -179,7 +179,7 @@ where
   #[inline]
   fn last(&self) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord,
+    RecordPointer<Self::Key>: Ord,
   {
     match_op!(self.last().map(Item))
   }
@@ -187,7 +187,7 @@ where
   #[inline]
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.get(key).map(Item))
   }
@@ -195,7 +195,7 @@ where
   #[inline]
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(self.contains(key))
   }
@@ -209,7 +209,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     match_op!(Dispatch::Range(self.range(range)))
   }

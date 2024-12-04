@@ -130,7 +130,6 @@ where
   }
 }
 
-
 /// Value that can be converted from a byte slice.
 pub trait Value<'a>: sealed::Sealed<'a, Self::Ref> {
   /// The reference type.

@@ -1,9 +1,12 @@
 use core::{borrow::Borrow, iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 
-use crate::{dynamic::{
-  memtable::{BaseTable, MemtableEntry},
-  types::Entry,
-}, WithVersion, WithoutVersion};
+use crate::{
+  dynamic::{
+    memtable::{BaseTable, MemtableEntry},
+    types::Entry,
+  },
+  WithVersion, WithoutVersion,
+};
 
 /// Iterator over the entries in the WAL.
 pub struct BaseIter<'a, V, I, M>
@@ -21,8 +24,7 @@ where
 {
   /// Returns the query version of the iterator.
   #[inline]
-  pub(super) const fn version(&self) -> u64
-  {
+  pub(super) const fn version(&self) -> u64 {
     self.version
   }
 }
@@ -53,7 +55,7 @@ where
   pub(super) fn with_version(version: u64, iter: I) -> Self {
     Self {
       version,
-      iter, 
+      iter,
       _m: PhantomData,
     }
   }

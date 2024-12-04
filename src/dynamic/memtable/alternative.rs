@@ -44,21 +44,21 @@ macro_rules! iter {
     pub enum $name<'a, K, V>
     where
       K: ?Sized + Type + Ord,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type,
     {
       /// Arena iter
-      Arena($arena<'a, KeyPointer<K>, ValuePointer<V>>),
+      Arena($arena<'a, RecordPointer<K>, ValuePointer<V>>),
       /// Linked iter
       #[cfg(feature = "std")]
       #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-      Linked($linked<'a, KeyPointer<K>, ValuePointer<V>>),
+      Linked($linked<'a, RecordPointer<K>, ValuePointer<V>>),
     }
 
     impl<'a, K, V> Iterator for $name<'a, K, V>
     where
       K: ?Sized + Type + Ord + 'static,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type + 'static,
     {
       type Item = $ent<'a, K, V>;
@@ -72,7 +72,7 @@ macro_rules! iter {
     impl<'a, K, V> DoubleEndedIterator for $name<'a, K, V>
     where
       K: ?Sized + Type + Ord + 'static,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type + 'static,
     {
       #[inline]
@@ -93,25 +93,25 @@ macro_rules! range {
     pub enum $name<'a, K, V, Q, R>
     where
       R: RangeBounds<Q>,
-      Q: ?Sized + Comparable<KeyPointer<K>>,
+      Q: ?Sized + Comparable<RecordPointer<K>>,
       K: ?Sized + Type + Ord,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type,
     {
       /// Arena range
-      Arena($arena<'a, KeyPointer<K>, ValuePointer<V>, Q, R>),
+      Arena($arena<'a, RecordPointer<K>, ValuePointer<V>, Q, R>),
       #[cfg(feature = "std")]
       #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
       /// Linked range
-      Linked($linked<'a, Q, R, KeyPointer<K>, ValuePointer<V>>),
+      Linked($linked<'a, Q, R, RecordPointer<K>, ValuePointer<V>>),
     }
 
     impl<'a, K, V, Q, R> Iterator for $name<'a, K, V, Q, R>
     where
       R: RangeBounds<Q>,
-      Q: ?Sized + Comparable<KeyPointer<K>>,
+      Q: ?Sized + Comparable<RecordPointer<K>>,
       K: ?Sized + Type + Ord + 'a,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type + 'a,
     {
       type Item = $ent<'a, K, V>;
@@ -125,9 +125,9 @@ macro_rules! range {
     impl<'a, K, V, Q, R> DoubleEndedIterator for $name<'a, K, V, Q, R>
     where
       R: RangeBounds<Q>,
-      Q: ?Sized + Comparable<KeyPointer<K>>,
+      Q: ?Sized + Comparable<RecordPointer<K>>,
       K: ?Sized + Type + Ord + 'a,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type + 'a,
     {
       fn next_back(&mut self) -> Option<Self::Item> {
@@ -151,11 +151,11 @@ macro_rules! base_entry {
       V: ?Sized,
     {
       /// Arena entry
-      Arena($arena<'a, KeyPointer<K>, ValuePointer<V>>),
+      Arena($arena<'a, RecordPointer<K>, ValuePointer<V>>),
       /// Linked entry
       #[cfg(feature = "std")]
       #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-      Linked($linked<'a, KeyPointer<K>, ValuePointer<V>>),
+      Linked($linked<'a, RecordPointer<K>, ValuePointer<V>>),
     }
 
     impl<K: ?Sized, V: ?Sized> Clone for $name<'_, K, V> {
@@ -172,7 +172,7 @@ macro_rules! base_entry {
     impl<'a, K, V> BaseEntry<'a> for $name<'a, K, V>
     where
       K: ?Sized + Type + Ord,
-      KeyPointer<K>: Type<Ref<'a> = KeyPointer<K>> + KeyRef<'a, KeyPointer<K>>,
+      RecordPointer<K>: Type<Ref<'a> = RecordPointer<K>> + KeyRef<'a, RecordPointer<K>>,
       V: ?Sized + Type,
     {
       type Key = K;
@@ -180,7 +180,7 @@ macro_rules! base_entry {
       type Value = V;
 
       #[inline]
-      fn key(&self) -> KeyPointer<Self::Key> {
+      fn key(&self) -> RecordPointer<Self::Key> {
         *match_op!(self.key())
       }
 

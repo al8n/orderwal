@@ -3,10 +3,10 @@ macro_rules! memmap_or_not {
   ($opts:ident($arena_opts:ident)) => {{
     if $opts.map_anon() {
       $arena_opts
-        .map_anon::<KeyPointer<K>, ValuePointer<V>, _>()
+        .map_anon::<RecordPointer<K>, ValuePointer<V>, _>()
         .map_err(skl::error::Error::IO)
     } else {
-      $arena_opts.alloc::<KeyPointer<K>, ValuePointer<V>, _>()
+      $arena_opts.alloc::<RecordPointer<K>, ValuePointer<V>, _>()
     }
     .map(|map| Self { map })
   }};
@@ -16,7 +16,7 @@ macro_rules! memmap_or_not {
 macro_rules! memmap_or_not {
   ($opts:ident($arena_opts:ident)) => {{
     $arena_opts
-      .alloc::<KeyPointer<K>, ValuePointer<V>, _>()
+      .alloc::<RecordPointer<K>, ValuePointer<V>, _>()
       .map(|map| Self { map })
   }};
 }

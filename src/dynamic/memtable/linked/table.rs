@@ -2,7 +2,7 @@ use {
   crate::{
     dynamic::{
       memtable,
-      wal::{KeyPointer, ValuePointer},
+      wal::{RecordPointer, ValuePointer},
     },
     types::Kind,
     WithoutVersion,
@@ -18,7 +18,7 @@ use {
 pub use crossbeam_skiplist::map::{Entry, Iter, Range};
 
 /// An memory table implementation based on [`crossbeam_skiplist::SkipMap`].
-pub struct Table<K: ?Sized, V: ?Sized>(SkipMap<KeyPointer<K>, ValuePointer<V>>);
+pub struct Table<K: ?Sized, V: ?Sized>(SkipMap<RecordPointer<K>, ValuePointer<V>>);
 
 impl<K, V> core::fmt::Debug for Table<K, V>
 where
@@ -38,7 +38,7 @@ impl<K: ?Sized, V: ?Sized> Default for Table<K, V> {
   }
 }
 
-impl<'a, K, V> memtable::BaseEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> memtable::BaseEntry<'a> for Entry<'a, RecordPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -58,12 +58,12 @@ where
   }
 
   #[inline]
-  fn key(&self) -> KeyPointer<K> {
+  fn key(&self) -> RecordPointer<K> {
     *self.key()
   }
 }
 
-impl<'a, K, V> memtable::MemtableEntry<'a> for Entry<'a, KeyPointer<K>, ValuePointer<V>>
+impl<'a, K, V> memtable::MemtableEntry<'a> for Entry<'a, RecordPointer<K>, ValuePointer<V>>
 where
   K: ?Sized + Type + Ord,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -75,7 +75,7 @@ where
   }
 }
 
-impl<K, V> WithoutVersion for Entry<'_, KeyPointer<K>, ValuePointer<V>>
+impl<K, V> WithoutVersion for Entry<'_, RecordPointer<K>, ValuePointer<V>>
 where
   K: ?Sized,
   V: ?Sized,
@@ -91,21 +91,21 @@ where
   type Key = K;
   type Value = V;
   type Item<'a>
-    = Entry<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
+    = Entry<'a, RecordPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a;
 
   type Iterator<'a>
-    = Iter<'a, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
+    = Iter<'a, RecordPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, Q, R, KeyPointer<Self::Key>, ValuePointer<Self::Value>>
+    = Range<'a, Q, R, RecordPointer<Self::Key>, ValuePointer<Self::Value>>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   type Options = ();
   type Error = Infallible;
@@ -121,20 +121,20 @@ where
   fn insert(
     &self,
     _: Option<u64>,
-    kp: KeyPointer<Self::Key>,
+    kp: RecordPointer<Self::Key>,
     vp: ValuePointer<Self::Value>,
   ) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static,
+    RecordPointer<Self::Key>: Ord + 'static,
   {
     self.0.insert(kp, vp);
     Ok(())
   }
 
   #[inline]
-  fn remove(&self, _: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
+  fn remove(&self, _: Option<u64>, key: RecordPointer<Self::Key>) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static,
+    RecordPointer<Self::Key>: Ord + 'static,
   {
     self.0.remove(&key);
     Ok(())
@@ -160,7 +160,7 @@ where
   #[inline]
   fn upper_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     self.0.upper_bound(bound)
   }
@@ -168,7 +168,7 @@ where
   #[inline]
   fn lower_bound<Q>(&self, bound: core::ops::Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     self.0.lower_bound(bound)
   }
@@ -186,7 +186,7 @@ where
   #[inline]
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     self.0.get(key)
   }
@@ -194,7 +194,7 @@ where
   #[inline]
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     self.0.contains_key(key)
   }
@@ -208,7 +208,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>,
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
     self.0.range(range)
   }

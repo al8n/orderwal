@@ -2,7 +2,7 @@ use super::{
   super::{WithVersion, WithoutVersion, types::{EntryFlags, EncodedEntryMeta}},
   memtable::BaseTable,
   types::BufWriter,
-  wal::{KeyPointer, ValuePointer},
+  wal::{RecordPointer, ValuePointer},
 };
 
 /// An entry can be inserted into the WALs through [`Batch`].
@@ -11,7 +11,7 @@ pub struct BatchEntry<K, V, M: BaseTable> {
   pub(crate) value: Option<V>,
   pub(crate) flag: EntryFlags,
   pub(crate) meta: EncodedEntryMeta,
-  pointers: Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
+  pointers: Option<(RecordPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
   pub(crate) version: Option<u64>,
 }
 
@@ -151,12 +151,12 @@ where
   #[inline]
   pub(crate) fn take_pointer(
     &mut self,
-  ) -> Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)> {
+  ) -> Option<(RecordPointer<M::Key>, Option<ValuePointer<M::Value>>)> {
     self.pointers.take()
   }
 
   #[inline]
-  pub(crate) fn set_pointer(&mut self, kp: KeyPointer<M::Key>, vp: Option<ValuePointer<M::Value>>) {
+  pub(crate) fn set_pointer(&mut self, kp: RecordPointer<M::Key>, vp: Option<ValuePointer<M::Value>>) {
     self.pointers = Some((kp, vp));
   }
 

@@ -10,7 +10,7 @@ use dbutils::{
 };
 use ref_cast::RefCast;
 
-use super::KeyPointer;
+use super::RecordPointer;
 
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
@@ -19,22 +19,22 @@ pub struct Slice<'a, K: ?Sized> {
   data: [u8],
 }
 
-impl<'a, K> Equivalent<KeyPointer<K>> for Slice<'a, K>
+impl<'a, K> Equivalent<RecordPointer<K>> for Slice<'a, K>
 where
   K: Type + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
 {
-  fn equivalent(&self, key: &KeyPointer<K>) -> bool {
+  fn equivalent(&self, key: &RecordPointer<K>) -> bool {
     self.data.eq(key.as_slice())
   }
 }
 
-impl<'a, K> Comparable<KeyPointer<K>> for Slice<'a, K>
+impl<'a, K> Comparable<RecordPointer<K>> for Slice<'a, K>
 where
   K: Type + ?Sized,
   K::Ref<'a>: KeyRef<'a, K>,
 {
-  fn compare(&self, p: &KeyPointer<K>) -> cmp::Ordering {
+  fn compare(&self, p: &RecordPointer<K>) -> cmp::Ordering {
     unsafe { <K::Ref<'_> as KeyRef<K>>::compare_binary(&self.data, p.as_slice()) }
   }
 }
@@ -82,25 +82,25 @@ where
   key: Q,
 }
 
-impl<'a, K, Q> Equivalent<KeyPointer<K>> for Query<'a, K, Q>
+impl<'a, K, Q> Equivalent<RecordPointer<K>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   Q: ?Sized + Equivalent<K::Ref<'a>>,
 {
   #[inline]
-  fn equivalent(&self, p: &KeyPointer<K>) -> bool {
+  fn equivalent(&self, p: &RecordPointer<K>) -> bool {
     let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_slice()) };
     Equivalent::equivalent(&self.key, &kr)
   }
 }
 
-impl<'a, K, Q> Comparable<KeyPointer<K>> for Query<'a, K, Q>
+impl<'a, K, Q> Comparable<RecordPointer<K>> for Query<'a, K, Q>
 where
   K: Type + ?Sized,
   Q: ?Sized + Comparable<K::Ref<'a>>,
 {
   #[inline]
-  fn compare(&self, p: &KeyPointer<K>) -> cmp::Ordering {
+  fn compare(&self, p: &RecordPointer<K>) -> cmp::Ordering {
     let kr = unsafe { <K::Ref<'_> as TypeRef<'_>>::from_slice(p.as_slice()) };
     Comparable::compare(&self.key, &kr)
   }

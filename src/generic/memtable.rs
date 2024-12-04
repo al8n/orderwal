@@ -1,5 +1,5 @@
 use {
-  super::wal::{KeyPointer, ValuePointer},
+  super::wal::{RecordPointer, ValuePointer},
   crate::{types::Kind, WithVersion, WithoutVersion},
   core::ops::{Bound, RangeBounds},
   dbutils::equivalent::Comparable,
@@ -24,7 +24,7 @@ pub trait BaseEntry<'a>: Sized {
   type Value: ?Sized;
 
   /// Returns the key in the entry.
-  fn key(&self) -> KeyPointer<Self::Key>;
+  fn key(&self) -> RecordPointer<Self::Key>;
 
   /// Returns the next entry in the memory table.
   fn next(&mut self) -> Option<Self>;
@@ -77,7 +77,7 @@ pub trait BaseTable {
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Creates a new memtable with the specified options.
   fn new(opts: Self::Options) -> Result<Self, Self::Error>
@@ -88,16 +88,16 @@ pub trait BaseTable {
   fn insert(
     &self,
     version: Option<u64>,
-    kp: KeyPointer<Self::Key>,
+    kp: RecordPointer<Self::Key>,
     vp: ValuePointer<Self::Value>,
   ) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static;
+    RecordPointer<Self::Key>: Ord + 'static;
 
   /// Removes the pointer associated with the key.
-  fn remove(&self, version: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
+  fn remove(&self, version: Option<u64>, key: RecordPointer<Self::Key>) -> Result<(), Self::Error>
   where
-    KeyPointer<Self::Key>: Ord + 'static;
+    RecordPointer<Self::Key>: Ord + 'static;
 
   /// Returns the kind of the memtable.
   fn kind() -> Kind;
@@ -119,32 +119,32 @@ where
   /// Returns the upper bound of the memtable.
   fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the lower bound of the memtable.
   fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the first pointer in the memtable.
   fn first(&self) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord;
+    RecordPointer<Self::Key>: Ord;
 
   /// Returns the last pointer in the memtable.
   fn last(&self) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord;
+    RecordPointer<Self::Key>: Ord;
 
   /// Returns the pointer associated with the key.
   fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns an iterator over the memtable.
   fn iter(&self) -> Self::Iterator<'_>;
@@ -153,7 +153,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -164,22 +164,22 @@ where
   /// The item returned by the iterator or query methods.
   type MultipleVersionEntry<'a>: MultipleVersionMemtableEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
   where
-    KeyPointer<Self::Key>: 'a,
+    RecordPointer<Self::Key>: 'a,
     Self: 'a;
 
   /// The iterator type which can yields all the entries in the memtable.
   type IterAll<'a>: DoubleEndedIterator<Item = Self::MultipleVersionEntry<'a>>
   where
-    KeyPointer<Self::Key>: 'a,
+    RecordPointer<Self::Key>: 'a,
     Self: 'a;
 
   /// The range iterator type which can yields all the entries in the memtable.
   type MultipleVersionRange<'a, Q, R>: DoubleEndedIterator<Item = Self::MultipleVersionEntry<'a>>
   where
-    KeyPointer<Self::Key>: 'a,
+    RecordPointer<Self::Key>: 'a,
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the maximum version of the memtable.
   fn maximum_version(&self) -> u64;
@@ -193,7 +193,7 @@ where
   /// Returns the upper bound of the memtable.
   fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the upper bound of the memtable.
   fn upper_bound_versioned<Q>(
@@ -202,12 +202,12 @@ where
     bound: Bound<&Q>,
   ) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the lower bound of the memtable.
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the lower bound of the memtable.
   fn lower_bound_versioned<Q>(
@@ -216,47 +216,47 @@ where
     bound: Bound<&Q>,
   ) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the first pointer in the memtable.
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord;
+    RecordPointer<Self::Key>: Ord;
 
   /// Returns the first pointer in the memtable.
   fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    KeyPointer<Self::Key>: Ord;
+    RecordPointer<Self::Key>: Ord;
 
   /// Returns the last pointer in the memtable.
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
   where
-    KeyPointer<Self::Key>: Ord;
+    RecordPointer<Self::Key>: Ord;
 
   /// Returns the last pointer in the memtable.
   fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    KeyPointer<Self::Key>: Ord;
+    RecordPointer<Self::Key>: Ord;
 
   /// Returns the pointer associated with the key.
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the pointer associated with the key.
   fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns an iterator over the memtable.
   fn iter(&self, version: u64) -> Self::Iterator<'_>;
@@ -268,11 +268,11 @@ where
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns an iterator over all the entries in a subset of the memtable.
   fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 }

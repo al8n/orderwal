@@ -72,8 +72,7 @@ pub mod unique {
   pub type OrderWal<M /* = DefaultTable<K, V> */, S = Crc32> = writer::OrderWal<M, S>;
 
   /// Immutable reader for the dynamic ordered write-ahead log [`OrderWal`].
-  pub type OrderWalReader<M /* = DefaultTable<K, V> */, S = Crc32> =
-    reader::OrderWalReader<M, S>;
+  pub type OrderWalReader<M /* = DefaultTable<K, V> */, S = Crc32> = reader::OrderWalReader<M, S>;
 }
 
 /// A multiple version ordered write-ahead log implementation for multiple threads environments.
@@ -135,6 +134,5 @@ pub mod multiple_version {
   pub type OrderWal<M /* = DefaultTable<K, V> */, S = Crc32> = writer::OrderWal<M, S>;
 
   /// Immutable reader for the multiple versioned dynamic ordered write-ahead log [`OrderWal`].
-  pub type OrderWalReader<M /* = DefaultTable<K, V> */, S = Crc32> =
-    reader::OrderWalReader<M, S>;
+  pub type OrderWalReader<M /* = DefaultTable<K, V> */, S = Crc32> = reader::OrderWalReader<M, S>;
 }

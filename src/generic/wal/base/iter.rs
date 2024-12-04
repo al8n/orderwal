@@ -3,7 +3,7 @@ use core::{iter::FusedIterator, marker::PhantomData, ops::RangeBounds};
 use crate::{
   generic::memtable::{BaseEntry, Memtable, MemtableEntry},
   generic::types::base::{Entry, Key, Value},
-  generic::wal::{KeyPointer, ValuePointer},
+  generic::wal::{RecordPointer, ValuePointer},
 };
 
 use dbutils::{equivalent::Comparable, types::Type};
@@ -17,8 +17,8 @@ where
   for<'b> M::Item<'b>: MemtableEntry<'b>,
 {
   iter: I,
-  head: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
-  tail: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
+  head: Option<(RecordPointer<M::Key>, ValuePointer<M::Value>)>,
+  tail: Option<(RecordPointer<M::Key>, ValuePointer<M::Value>)>,
   _m: PhantomData<&'a ()>,
 }
 

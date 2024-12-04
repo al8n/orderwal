@@ -1,15 +1,11 @@
-use {
-  super::{reader::OrderWalReader, wal::OrderCore},
-  crate::dynamic::{
-      memtable::{
-        BaseTable, Memtable, MultipleVersionMemtable,
-      },
-      sealed::Constructable,
-    },
-  dbutils::checksum::Crc32,
-  rarena_allocator::sync::Arena,
-  std::sync::Arc,
+use super::{reader::OrderWalReader, wal::OrderCore};
+use crate::dynamic::{
+  memtable::{BaseTable, Memtable, MultipleVersionMemtable},
+  sealed::Constructable,
 };
+use dbutils::checksum::Crc32;
+use rarena_allocator::sync::Arena;
+use std::sync::Arc;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
@@ -19,9 +15,7 @@ pub struct OrderWal<M, S = Crc32> {
   pub(super) core: Arc<OrderCore<M, S>>,
 }
 
-impl<M, S> core::fmt::Debug for OrderWal<M, S>
-
-{
+impl<M, S> core::fmt::Debug for OrderWal<M, S> {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_tuple("OrderWal").field(&self.core).finish()

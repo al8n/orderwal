@@ -5,7 +5,7 @@ use dbutils::{equivalent::Comparable, types::Type};
 use crate::generic::{
   memtable::{BaseEntry, MultipleVersionMemtable, MultipleVersionMemtableEntry},
   types::multiple_version::{Entry, Key, Value, VersionedEntry},
-  wal::{KeyPointer, ValuePointer},
+  wal::{RecordPointer, ValuePointer},
 };
 
 use super::{Query, QueryRange};
@@ -19,8 +19,8 @@ where
 {
   iter: I,
   version: u64,
-  head: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
-  tail: Option<(KeyPointer<M::Key>, ValuePointer<M::Value>)>,
+  head: Option<(RecordPointer<M::Key>, ValuePointer<M::Value>)>,
+  tail: Option<(RecordPointer<M::Key>, ValuePointer<M::Value>)>,
   _m: PhantomData<&'a ()>,
 }
 
@@ -98,8 +98,8 @@ where
 {
   iter: I,
   version: u64,
-  head: Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
-  tail: Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
+  head: Option<(RecordPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
+  tail: Option<(RecordPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
   _m: PhantomData<&'a ()>,
 }
 

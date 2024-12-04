@@ -1,57 +1,95 @@
-use core::ops::Bound;
+use core::{cell::OnceCell, ops::Bound};
 
-use skl::dynamic::{
-  multiple_version::sync::{Entry, VersionedEntry},
-  Comparator,
-};
+use skl::{dynamic::BytesComparator, generic::{multiple_version::sync::Entry, GenericValue, LazyRef}};
 
-use crate::dynamic::memtable::{bounded::MemtableRangeComparator, RangeBaseEntry};
+use crate::{dynamic::memtable::{bounded::MemtableRangeComparator, RangeEntry}, types::{RawRangeUpdateRef, RecordPointer}};
 
 /// Range update entry.
-pub struct RangeUpdateEntry<'a, C>(Entry<'a, MemtableRangeComparator<C>>);
+pub struct RangeUpdateEntry<'a, L, C>
+where
+  L: GenericValue<'a>,
+{
+  ent: Entry<'a, RecordPointer, L, MemtableRangeComparator<C>>,
+  data: OnceCell<RawRangeUpdateRef<'a>>,
+}
 
-impl<C> Clone for RangeUpdateEntry<'_, C> {
+impl<'a, L, C> Clone for RangeUpdateEntry<'a, L, C>
+where
+  L: GenericValue<'a> + Clone
+{
   #[inline]
   fn clone(&self) -> Self {
-    *self
+    Self {
+      ent: self.ent.clone(),
+      data: self.data.clone(),
+    }
   }
 }
 
-impl<C> Copy for RangeUpdateEntry<'_, C> {}
-
-impl<'a, C> RangeBaseEntry<'a> for RangeUpdateEntry<'a, C>
+impl<'a, L, C> RangeEntry<'a> for RangeUpdateEntry<'a, L, C>
 where
-  C: Comparator,
+  C: BytesComparator,
+  L: GenericValue<'a> + 'a,
 {
   #[inline]
   fn start_bound(&self) -> Bound<&'a [u8]> {
-    todo!()
+    let ent = self.data.get_or_init(|| {
+      self.ent.comparator().fetch_range_update(self.ent.key())
+    });
+    ent.start_bound()
   }
 
   #[inline]
   fn end_bound(&self) -> Bound<&'a [u8]> {
-    todo!()
+    let ent = self.data.get_or_init(|| {
+      self.ent.comparator().fetch_range_update(self.ent.key())
+    });
+    ent.end_bound()
   }
 
   #[inline]
   fn next(&mut self) -> Option<Self> {
-    self.0.next().map(Self)
+    self.ent.next().map(|ent| Self {
+      ent,
+      data: OnceCell::new(),
+    })
   }
 
   #[inline]
   fn prev(&mut self) -> Option<Self> {
-    self.0.prev().map(Self)
+    self.ent.prev().map(|ent| Self {
+      ent,
+      data: OnceCell::new(),
+    })
   }
 }
 
-/// Range update entry which may have
-pub struct MultipleVersionRangeUpdateEntry<'a, C>(VersionedEntry<'a, MemtableRangeComparator<C>>);
+impl<'a, C> crate::dynamic::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, Option<LazyRef<'a, ()>>, C>
+where
+  C: BytesComparator,
+{
+  type Value = Option<&'a [u8]>;
 
-impl<C> Clone for MultipleVersionRangeUpdateEntry<'_, C> {
   #[inline]
-  fn clone(&self) -> Self {
-    *self
+  fn value(&self) -> Self::Value {
+    let ent = self.data.get_or_init(|| {
+      self.ent.comparator().fetch_range_update(self.ent.key())
+    });
+    ent.value()    
   }
 }
 
-impl<C> Copy for MultipleVersionRangeUpdateEntry<'_, C> {}
+impl<'a, C> crate::dynamic::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, LazyRef<'a, ()>, C>
+where
+  C: BytesComparator,
+{
+  type Value = &'a [u8];
+
+  #[inline]
+  fn value(&self) -> Self::Value {
+    let ent = self.data.get_or_init(|| {
+      self.ent.comparator().fetch_range_update(self.ent.key())
+    });
+    ent.value().expect("value should not be none")   
+  }
+}

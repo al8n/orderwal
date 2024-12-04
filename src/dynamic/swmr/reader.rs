@@ -1,18 +1,15 @@
-use {
-  super::{
-    super::{memtable::BaseTable, sealed::Constructable, swmr::wal::OrderCore},
-    writer::OrderWal,
-  },
-  crate::Immutable,
-  rarena_allocator::sync::Arena,
-  std::sync::Arc,
+use super::{
+  super::{memtable::BaseTable, sealed::Constructable, swmr::wal::OrderCore},
+  writer::OrderWal,
 };
+use crate::Immutable;
+use rarena_allocator::sync::Arena;
+use std::sync::Arc;
 
 /// An [`OrderWal`] reader.
 pub struct OrderWalReader<P, S>(OrderWal<P, S>);
 
-impl<M, S> core::fmt::Debug for OrderWalReader<M, S>
-{
+impl<M, S> core::fmt::Debug for OrderWalReader<M, S> {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_tuple("OrderWalReader").field(&self.0.core).finish()

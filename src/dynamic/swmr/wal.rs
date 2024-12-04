@@ -1,10 +1,8 @@
-use {
-  crate::{
-    dynamic::{memtable::BaseTable, sealed::Wal},
-    Options,
-  },
-  rarena_allocator::sync::Arena,
+use crate::{
+  dynamic::{memtable::BaseTable, sealed::Wal},
+  Options,
 };
+use rarena_allocator::sync::Arena;
 
 pub struct OrderCore<M, S> {
   pub(super) arena: Arena,
@@ -13,8 +11,7 @@ pub struct OrderCore<M, S> {
   pub(super) cks: S,
 }
 
-impl<M, S> core::fmt::Debug for OrderCore<M, S>
-{
+impl<M, S> core::fmt::Debug for OrderCore<M, S> {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("OrderCore")
