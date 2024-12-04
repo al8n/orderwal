@@ -16,16 +16,15 @@ use dbutils::{
 };
 
 pub use entry::*;
-pub use point_entry::*;
-pub use range_deletion_entry::*;
-pub use range_update_entry::*;
-use range_key::*;
+pub use point::*;
+pub use range_deletion::*;
+pub use range_update::*;
 
 pub use skl::dynamic::multiple_version::sync::{Entry, Iter, Range};
 use skl::{
   dynamic::{
     multiple_version::{sync::SkipMap, Map as _},
-    Ascend, Builder,
+    Ascend, Builder, BytesComparator,
   },
   generic::{
     multiple_version::{sync::SkipMap as GenericSkipMap, Map as GenericMap},
@@ -35,10 +34,9 @@ use skl::{
 };
 
 mod entry;
-mod point_entry;
-mod range_deletion_entry;
-mod range_key;
-mod range_update_entry;
+mod point;
+mod range_deletion;
+mod range_update;
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
 pub struct MultipleVersionTable<C = Ascend> {
@@ -46,6 +44,8 @@ pub struct MultipleVersionTable<C = Ascend> {
   range_deletions_skl: GenericSkipMap<RecordPointer, (), MemtableRangeComparator<C>>,
   range_updates_skl: GenericSkipMap<RecordPointer, (), MemtableRangeComparator<C>>,
 }
+
+
 
 // impl<C> BaseTable for MultipleVersionTable<C>
 // where

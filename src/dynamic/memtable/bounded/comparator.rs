@@ -181,3 +181,22 @@ where
     self.compare_key(a, b.borrow())
   }
 }
+
+impl<'a, C> TypeRefQueryEquivalentor<'a, RecordPointer> for MemtableComparator<C>
+where
+  C: BytesComparator + ?Sized,
+{
+  fn query_equivalent_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &RecordPointer) -> bool {
+    self.equivalent_in(a, b)
+  }
+}
+
+impl<'a, C> TypeRefQueryComparator<'a, RecordPointer> for MemtableComparator<C>
+where
+  C: BytesComparator + ?Sized,
+{
+  #[inline]
+  fn query_compare_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &RecordPointer) -> cmp::Ordering {
+    self.compare_in(a, b)
+  }
+}

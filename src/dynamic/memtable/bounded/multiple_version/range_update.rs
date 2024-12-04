@@ -2,7 +2,7 @@ use core::{cell::OnceCell, ops::Bound};
 
 use skl::{dynamic::BytesComparator, generic::{multiple_version::sync::Entry, GenericValue, LazyRef}};
 
-use crate::{dynamic::memtable::{bounded::MemtableRangeComparator, RangeEntry}, types::{RawRangeUpdateRef, RecordPointer}};
+use crate::{dynamic::memtable::{bounded::MemtableRangeComparator, RangeEntry}, types::{RawRangeUpdateRef, RecordPointer}, WithVersion};
 
 /// Range update entry.
 pub struct RangeUpdateEntry<'a, L, C>
@@ -91,5 +91,16 @@ where
       self.ent.comparator().fetch_range_update(self.ent.key())
     });
     ent.value().expect("value should not be none")   
+  }
+}
+
+impl<'a, L, C> WithVersion for RangeUpdateEntry<'a, L, C>
+where
+  C: BytesComparator,
+  L: GenericValue<'a> + 'a,
+{
+  #[inline]
+  fn version(&self) -> u64 {
+    self.ent.version()
   }
 }

@@ -168,22 +168,20 @@ pub trait BaseTable {
   fn insert(
     &self,
     version: Option<u64>,
-    kp: RecordPointer,
-    vp: ValuePointer,
+    pointer: RecordPointer,
   ) -> Result<(), Self::Error>;
 
   /// Removes the pointer associated with the key.
   fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts a range deletion pointer into the memtable.
-  fn remove_range(&self, version: Option<u64>, rp: RecordPointer) -> Result<(), Self::Error>;
+  fn remove_range(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts an range update pointer into the memtable.
   fn update_range(
     &self,
     version: Option<u64>,
-    rp: RecordPointer,
-    vp: ValuePointer,
+    pointer: RecordPointer,
   ) -> Result<(), Self::Error>;
 
   /// Returns the kind of the memtable.

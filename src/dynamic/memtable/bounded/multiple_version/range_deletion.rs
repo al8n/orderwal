@@ -2,7 +2,7 @@ use core::{cell::OnceCell, ops::Bound};
 
 use skl::{dynamic::BytesComparator, generic::{multiple_version::sync::Entry, GenericValue, LazyRef}};
 
-use crate::{dynamic::memtable::{bounded::MemtableRangeComparator, RangeEntry}, types::{RawRangeDeletionRef, RecordPointer}};
+use crate::{dynamic::memtable::{bounded::MemtableRangeComparator, RangeEntry}, types::{RawRangeDeletionRef, RecordPointer}, WithVersion};
 
 /// Range update entry.
 pub struct RangeDeletionEntry<'a, L, C>
@@ -68,4 +68,16 @@ impl<'a, C> crate::dynamic::memtable::RangeDeletionEntry<'a> for RangeDeletionEn
 where
   C: BytesComparator,
 {
+}
+
+
+impl<'a, L, C> WithVersion for RangeDeletionEntry<'a, L, C>
+where
+  C: BytesComparator,
+  L: GenericValue<'a> + 'a,
+{
+  #[inline]
+  fn version(&self) -> u64 {
+    self.ent.version()
+  }
 }
