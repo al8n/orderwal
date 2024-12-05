@@ -165,11 +165,7 @@ pub trait BaseTable {
   //   A: rarena_allocator::Allocator;
 
   /// Inserts a pointer into the memtable.
-  fn insert(
-    &self,
-    version: Option<u64>,
-    pointer: RecordPointer,
-  ) -> Result<(), Self::Error>;
+  fn insert(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Removes the pointer associated with the key.
   fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error>;
@@ -178,11 +174,7 @@ pub trait BaseTable {
   fn remove_range(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts an range update pointer into the memtable.
-  fn update_range(
-    &self,
-    version: Option<u64>,
-    pointer: RecordPointer,
-  ) -> Result<(), Self::Error>;
+  fn update_range(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Returns the kind of the memtable.
   fn kind() -> Kind;

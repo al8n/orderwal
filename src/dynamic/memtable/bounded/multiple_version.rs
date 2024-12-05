@@ -45,8 +45,6 @@ pub struct MultipleVersionTable<C = Ascend> {
   range_updates_skl: GenericSkipMap<RecordPointer, (), MemtableRangeComparator<C>>,
 }
 
-
-
 // impl<C> BaseTable for MultipleVersionTable<C>
 // where
 //   C: Comparator,

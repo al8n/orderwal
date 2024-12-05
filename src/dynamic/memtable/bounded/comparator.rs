@@ -1,12 +1,17 @@
 use core::{borrow::Borrow, cmp};
 
-use skl::{dynamic::{BytesComparator, BytesEquivalentor}, generic::{Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor}};
+use skl::{
+  dynamic::{BytesComparator, BytesEquivalentor},
+  generic::{
+    Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
+    TypeRefQueryEquivalentor,
+  },
+};
 use triomphe::Arc;
 
 use crate::types::{RawEntryRef, RecordPointer};
 
 use super::{fetch_entry, fetch_raw_key};
-
 
 pub(super) struct MemtableComparator<C: ?Sized> {
   /// The start pointer of the parent ARENA.
@@ -22,9 +27,7 @@ impl<C: ?Sized> MemtableComparator<C> {
 
   #[inline]
   pub fn fetch_entry<'a>(&self, kp: &RecordPointer) -> RawEntryRef<'a> {
-    unsafe {
-      fetch_entry(self.ptr, kp)
-    }
+    unsafe { fetch_entry(self.ptr, kp) }
   }
 
   #[inline]
@@ -46,7 +49,7 @@ impl<C: ?Sized> MemtableComparator<C> {
     unsafe {
       let ak = fetch_raw_key(self.ptr, a);
       let bk = fetch_raw_key(self.ptr, b);
-      
+
       self.cmp.equivalent(ak, bk)
     }
   }
@@ -70,7 +73,7 @@ impl<C: ?Sized> MemtableComparator<C> {
     unsafe {
       let ak = fetch_raw_key(self.ptr, a);
       let bk = fetch_raw_key(self.ptr, b);
-      
+
       self.cmp.compare(ak, bk)
     }
   }
@@ -141,7 +144,6 @@ where
   }
 }
 
-
 impl<C> Comparator for MemtableComparator<C>
 where
   C: BytesComparator + ?Sized,
@@ -196,7 +198,11 @@ where
   C: BytesComparator + ?Sized,
 {
   #[inline]
-  fn query_compare_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &RecordPointer) -> cmp::Ordering {
+  fn query_compare_ref(
+    &self,
+    a: &<Self::Type as Type>::Ref<'a>,
+    b: &RecordPointer,
+  ) -> cmp::Ordering {
     self.compare_in(a, b)
   }
 }

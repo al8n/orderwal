@@ -1,12 +1,19 @@
 use core::{borrow::Borrow, cmp, ops::Bound};
 
-use skl::{dynamic::{BytesComparator, BytesEquivalentor}, generic::{Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor}};
+use skl::{
+  dynamic::{BytesComparator, BytesEquivalentor},
+  generic::{
+    Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
+    TypeRefQueryEquivalentor,
+  },
+};
 use triomphe::Arc;
 
 use crate::types::{RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer};
 
-use super::{fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry};
-
+use super::{
+  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
+};
 
 pub(super) struct MemtableRangeComparator<C: ?Sized> {
   /// The start pointer of the parent ARENA.
@@ -22,16 +29,12 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
 
   #[inline]
   pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a> {
-    unsafe {
-      fetch_raw_range_update_entry(self.ptr, kp)
-    }
+    unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
   }
 
   #[inline]
   pub fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a> {
-    unsafe {
-      fetch_raw_range_deletion_entry(self.ptr, kp)
-    }
+    unsafe { fetch_raw_range_deletion_entry(self.ptr, kp) }
   }
 
   #[inline]
@@ -57,14 +60,14 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     unsafe {
       let ak = fetch_raw_range_key_start_bound(self.ptr, a);
       let bk = fetch_raw_range_key_start_bound(self.ptr, b);
-      
+
       match (ak, bk) {
         (Bound::Unbounded, Bound::Unbounded) => true,
         (Bound::Included(_), Bound::Unbounded) => false,
         (Bound::Excluded(_), Bound::Unbounded) => false,
         (Bound::Unbounded, Bound::Included(_)) => false,
         (Bound::Unbounded, Bound::Excluded(_)) => false,
-  
+
         (Bound::Included(a), Bound::Included(b)) => self.cmp.equivalent(a, b),
         (Bound::Included(a), Bound::Excluded(b)) => self.cmp.equivalent(a, b),
         (Bound::Excluded(a), Bound::Included(b)) => self.cmp.equivalent(a, b),
@@ -96,14 +99,14 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     unsafe {
       let ak = fetch_raw_range_key_start_bound(self.ptr, a);
       let bk = fetch_raw_range_key_start_bound(self.ptr, b);
-      
+
       match (ak, bk) {
         (Bound::Included(_), Bound::Unbounded) => cmp::Ordering::Greater,
         (Bound::Excluded(_), Bound::Unbounded) => cmp::Ordering::Greater,
         (Bound::Unbounded, Bound::Included(_)) => cmp::Ordering::Less,
         (Bound::Unbounded, Bound::Excluded(_)) => cmp::Ordering::Less,
         (Bound::Unbounded, Bound::Unbounded) => cmp::Ordering::Equal,
-  
+
         (Bound::Included(a), Bound::Included(b)) => self.cmp.compare(a, b),
         (Bound::Included(a), Bound::Excluded(b)) => self.cmp.compare(a, b),
         (Bound::Excluded(a), Bound::Included(b)) => self.cmp.compare(a, b),
@@ -178,7 +181,6 @@ where
   }
 }
 
-
 impl<C> Comparator for MemtableRangeComparator<C>
 where
   C: BytesComparator + ?Sized,
@@ -232,7 +234,11 @@ where
   C: BytesComparator + ?Sized,
 {
   #[inline]
-  fn query_compare_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &RecordPointer) -> cmp::Ordering {
+  fn query_compare_ref(
+    &self,
+    a: &<Self::Type as Type>::Ref<'a>,
+    b: &RecordPointer,
+  ) -> cmp::Ordering {
     self.compare_in(a, b)
   }
 }

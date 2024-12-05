@@ -508,7 +508,6 @@ impl<'a> RawRangeDeletionRef<'a> {
   }
 }
 
-
 /// Read the actual key from either the data pointer (if nested) or the key pointer.
 /// And return how many bytes were read from the `key_ptr`.
 #[inline]
@@ -582,7 +581,10 @@ pub(crate) const unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPoi
 }
 
 #[inline]
-pub(crate) const unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointer) -> RawEntryRef<'a> {
+pub(crate) const unsafe fn fetch_entry<'a>(
+  data_ptr: *const u8,
+  p: &RecordPointer,
+) -> RawEntryRef<'a> {
   let record_ptr = data_ptr.add(p.offset());
   let flag = EntryFlags::from_bits_retain(*record_ptr);
   let mut cursor = 1;
@@ -597,7 +599,10 @@ pub(crate) const unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointe
   let (ko, version) = if flag.contains(EntryFlags::VERSIONED) {
     cursor += VERSION_SIZE;
     let version = u64::from_le_bytes(*record_ptr.add(1).cast::<[u8; VERSION_SIZE]>());
-    (record_ptr.add(EntryFlags::SIZE + VERSION_SIZE), Some(version))
+    (
+      record_ptr.add(EntryFlags::SIZE + VERSION_SIZE),
+      Some(version),
+    )
   } else {
     (record_ptr.add(EntryFlags::SIZE), None)
   };
@@ -682,7 +687,10 @@ unsafe fn fetch_raw_range_key_helper<'a>(
   let (ko, version) = if flag.contains(EntryFlags::VERSIONED) {
     cursor += VERSION_SIZE;
     let version = u64::from_le_bytes(*record_ptr.add(1).cast::<[u8; VERSION_SIZE]>());
-    (record_ptr.add(EntryFlags::SIZE + VERSION_SIZE), Some(version))
+    (
+      record_ptr.add(EntryFlags::SIZE + VERSION_SIZE),
+      Some(version),
+    )
   } else {
     (record_ptr.add(EntryFlags::SIZE), None)
   };
@@ -733,16 +741,24 @@ unsafe fn fetch_raw_range_key_helper<'a>(
 /// # Safety
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `p` must be pointing to value which is stored in the `data_ptr`.
-pub(crate) unsafe fn fetch_raw_range_key<'a>(data_ptr: *const u8, p: &RecordPointer) -> (Bound<&'a [u8]>, Bound<&'a [u8]>) {
-  let FetchRangeKey { start_bound, end_bound, .. } = fetch_raw_range_key_helper(data_ptr, p, |flag| {
-    debug_assert!(flag.contains(EntryFlags::RANGE_SET)
-    | flag.contains(EntryFlags::RANGE_DELETION)
-    | flag.contains(EntryFlags::RANGE_UNSET),
-    "unexpected point key")
+pub(crate) unsafe fn fetch_raw_range_key<'a>(
+  data_ptr: *const u8,
+  p: &RecordPointer,
+) -> (Bound<&'a [u8]>, Bound<&'a [u8]>) {
+  let FetchRangeKey {
+    start_bound,
+    end_bound,
+    ..
+  } = fetch_raw_range_key_helper(data_ptr, p, |flag| {
+    debug_assert!(
+      flag.contains(EntryFlags::RANGE_SET)
+        | flag.contains(EntryFlags::RANGE_DELETION)
+        | flag.contains(EntryFlags::RANGE_UNSET),
+      "unexpected point key"
+    )
   });
   (start_bound, end_bound)
 }
-
 
 /// # Safety
 /// - `data_ptr` must be a valid pointer to the data.
@@ -752,7 +768,13 @@ pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
 ) -> RawRangeDeletionRef<'a> {
-  let FetchRangeKey { flag, version, start_bound, end_bound, .. } = fetch_raw_range_key_helper(data_ptr, kp, |flag| {
+  let FetchRangeKey {
+    flag,
+    version,
+    start_bound,
+    end_bound,
+    ..
+  } = fetch_raw_range_key_helper(data_ptr, kp, |flag| {
     debug_assert!(
       flag.contains(EntryFlags::RANGE_DELETION),
       "expected range deletion entry"
@@ -775,7 +797,14 @@ pub(crate) unsafe fn fetch_raw_range_update_entry<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
 ) -> RawRangeUpdateRef<'a> {
-  let FetchRangeKey { flag, version, start_bound, end_bound, ptr, .. } = fetch_raw_range_key_helper(data_ptr, kp, |flag| {
+  let FetchRangeKey {
+    flag,
+    version,
+    start_bound,
+    end_bound,
+    ptr,
+    ..
+  } = fetch_raw_range_key_helper(data_ptr, kp, |flag| {
     debug_assert!(
       flag.contains(EntryFlags::RANGE_DELETION),
       "expected range deletion entry"
