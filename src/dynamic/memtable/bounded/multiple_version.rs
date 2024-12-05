@@ -4,7 +4,10 @@ use std::sync::Arc;
 use super::{MemtableComparator, MemtableRangeComparator, TableOptions};
 
 use crate::{
-  dynamic::memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable},
+  dynamic::{
+    memtable::{BaseTable, MemtableEntry, MultipleVersionMemtable},
+    types::State,
+  },
   types::{Kind, RecordPointer},
   WithVersion,
 };
@@ -20,17 +23,14 @@ pub use point::*;
 pub use range_deletion::*;
 pub use range_update::*;
 
-pub use skl::dynamic::multiple_version::sync::{Entry, Iter, Range};
 use skl::{
   dynamic::{
     multiple_version::{sync::SkipMap, Map as _},
     Ascend, Builder, BytesComparator,
-  },
-  generic::{
+  }, generic::{
     multiple_version::{sync::SkipMap as GenericSkipMap, Map as GenericMap},
     Builder as GenericBuilder,
-  },
-  Arena as _, Options,
+  }, Active, Arena as _, Options
 };
 
 mod entry;
@@ -45,138 +45,102 @@ pub struct MultipleVersionTable<C = Ascend> {
   range_updates_skl: GenericSkipMap<RecordPointer, (), MemtableRangeComparator<C>>,
 }
 
-// impl<C> BaseTable for MultipleVersionTable<C>
-// where
-//   C: Comparator,
-// {
-//   type Comparator = C;
+impl<C> BaseTable for MultipleVersionTable<C>
+where
+  C: BytesComparator,
+{
+  type Options = TableOptions;
 
-//   type Options = TableOptions<Self::Comparator>;
+  type Error = skl::error::Error;
 
-//   type Error = skl::error::Error;
+  type Entry<'a, S>
+    = Entry<'a, S, C>
+  where
+    Self: 'a,
+    S: State<'a>;
 
-//   type Item<'a>
-//     = Entry<'a, MemtableComparator<C>>
-//   where
-//     Self: 'a;
+  type PointEntry<'a, S>
+    = PointEntry<'a, S, C>
+  where
+    Self: 'a,
+    S: State<'a>;
 
-//   type PointEntry<'a>
-//   where
-//     Self: 'a;
+  type RangeDeletionEntry<'a> = RangeDeletionEntry<'a, Active, C>
+  where
+    Self: 'a;
 
-//   type RangeDeletionEntry<'a>
-//   where
-//     Self: 'a;
+  type RangeUpdateEntry<'a, S> = RangeUpdateEntry<'a, S, C>
+  where
+    Self: 'a,
+    S: State<'a>;
 
-//   type RangeUpdateEntry<'a>
-//   where
-//     Self: 'a;
+  type Iterator<'a, S>
+  where
+    Self: 'a,
+    S: State<'a>;
 
-//   type Iterator<'a>
-//     = Iter<'a, MemtableComparator<C>>
-//   where
-//     Self: 'a;
+  type Range<'a, S, Q, R>
+  where
+    Self: 'a,
+    S: State<'a>,
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 
-//   type Range<'a, Q, R>
-//     = Range<'a, MemtableComparator<C>, Q, R>
-//   where
-//     Self: 'a,
-//     R: RangeBounds<Q> + 'a,
-//     Q: ?Sized + Borrow<[u8]>;
+  type PointsIterator<'a, S> = IterPoints<'a, S, C>
+  where
+    Self: 'a,
+    S: State<'a>;
 
-//   type PointIterator<'a>
-//   where
-//     Self: 'a;
+  type RangePoints<'a, S, Q, R> = RangePoints<'a, S, Q, R, C>
+  where
+    Self: 'a,
+    S: State<'a>,
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 
-//   type PointRange<'a, Q, R>
-//   where
-//     Self: 'a,
-//     R: RangeBounds<Q> + 'a,
-//     Q: ?Sized + Borrow<[u8]>;
+  type BulkDeletionsIterator<'a> = IterBulkDeletions<'a, Active, C>
+  where
+    Self: 'a;
 
-//   type BulkDeletionsIterator<'a>
-//   where
-//     Self: 'a;
+  type BulkDeletionsRange<'a, Q, R> = RangeBulkDeletions<'a, Active, Q, R, C>
+  where
+    Self: 'a,
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 
-//   type BulkDeletionsRange<'a, Q, R>
-//   where
-//     Self: 'a,
-//     R: RangeBounds<Q> + 'a,
-//     Q: ?Sized + Borrow<[u8]>;
+  type BulkUpdatesIterator<'a, S> = IterBulkUpdates<'a, S, C>
+  where
+    Self: 'a,
+    S: State<'a>;
 
-//   type BulkUpdatesIterator<'a>
-//   where
-//     Self: 'a;
+  type BulkUpdatesRange<'a, S, Q, R> = RangeBulkUpdates<'a, S, Q, R, C>
+  where
+    Self: 'a,
+    S: State<'a>,
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 
-//   type BulkUpdatesRange<'a, Q, R>
-//   where
-//     Self: 'a,
-//     R: RangeBounds<Q> + 'a,
-//     Q: ?Sized + Borrow<[u8]>;
+  fn insert(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    todo!()
+  }
 
-//   #[inline]
-//   fn new<A>(arena: Arena<A>, opts: Self::Options) -> Result<Self, Self::Error>
-//   where
-//     A: rarena_allocator::Allocator,
-//   {
-//     memmap_or_not!(opts(arena))
-//   }
+  fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+    todo!()
+  }
 
-//   #[inline]
-//   fn insert(
-//     &self,
-//     version: Option<u64>,
-//     kp: RecordPointer,
-//     vp: ValuePointer,
-//   ) -> Result<(), Self::Error> {
-//     self
-//       .skl
-//       .insert(
-//         version.unwrap_or(0),
-//         kp.as_array().as_ref(),
-//         vp.as_array().as_ref(),
-//       )
-//       .map(|_| ())
-//   }
+  fn remove_range(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    todo!()
+  }
 
-//   #[inline]
-//   fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
-//     self
-//       .skl
-//       .get_or_remove(version.unwrap_or(0), key.as_array().as_ref())
-//       .map(|_| ())
-//   }
+  fn update_range(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    todo!()
+  }
 
-//   #[inline]
-//   fn remove_range(&self, version: Option<u64>, rp: RecordPointer) -> Result<(), Self::Error> {
-//     self
-//       .range_deletions_skl
-//       .insert(version.unwrap_or(0), rp.as_array().as_ref(), &[])
-//       .map(|_| ())
-//   }
-
-//   #[inline]
-//   fn update_range(
-//     &self,
-//     version: Option<u64>,
-//     rp: RecordPointer,
-//     vp: ValuePointer,
-//   ) -> Result<(), Self::Error> {
-//     self
-//       .range_updates_skl
-//       .insert(
-//         version.unwrap_or(0),
-//         rp.as_array().as_ref(),
-//         vp.as_array().as_ref(),
-//       )
-//       .map(|_| ())
-//   }
-
-//   #[inline]
-//   fn kind() -> Kind {
-//     Kind::MultipleVersion
-//   }
-// }
+  #[inline]
+  fn kind() -> Kind {
+    Kind::MultipleVersion
+  }
+}
 
 // impl<C> MultipleVersionMemtable for MultipleVersionTable<C>
 // where
@@ -211,11 +175,11 @@ pub struct MultipleVersionTable<C = Ascend> {
 //     R: RangeBounds<Q> + 'a,
 //     Q: ?Sized + Borrow<[u8]>;
 
-//   type MultipleVersionPointIterator<'a>
+//   type MultipleVersionPointsIterator<'a>
 //   where
 //     Self: 'a;
 
-//   type MultipleVersionPointRange<'a, Q, R>
+//   type MultipleVersionRangePoints<'a, Q, R>
 //   where
 //     Self: 'a,
 //     R: RangeBounds<Q> + 'a,
@@ -374,15 +338,15 @@ pub struct MultipleVersionTable<C = Ascend> {
 //     self.skl.range_all_versions(version, range)
 //   }
 
-//   fn point_iter(&self, version: u64) -> Self::PointIterator<'_> {
+//   fn point_iter(&self, version: u64) -> Self::PointsIterator<'_> {
 //     todo!()
 //   }
 
-//   fn point_iter_all_versions(&self, version: u64) -> Self::MultipleVersionPointIterator<'_> {
+//   fn point_iter_all_versions(&self, version: u64) -> Self::MultipleVersionPointsIterator<'_> {
 //     todo!()
 //   }
 
-//   fn point_range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::PointRange<'a, Q, R>
+//   fn point_range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangePoints<'a, Q, R>
 //   where
 //     R: RangeBounds<Q> + 'a,
 //     Q: ?Sized + Borrow<[u8]>,
@@ -394,7 +358,7 @@ pub struct MultipleVersionTable<C = Ascend> {
 //     &'a self,
 //     version: u64,
 //     range: R,
-//   ) -> Self::MultipleVersionPointRange<'a, Q, R>
+//   ) -> Self::MultipleVersionRangePoints<'a, Q, R>
 //   where
 //     R: RangeBounds<Q> + 'a,
 //     Q: ?Sized + Borrow<[u8]>,
