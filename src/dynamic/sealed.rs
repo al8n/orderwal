@@ -2,13 +2,12 @@ use super::{
   batch::Batch,
   memtable::{BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable},
   types::BufWriter,
-  wal::{Arena, RecordPointer, ValuePointer},
 };
 use crate::{
   checksum::{BuildChecksumer, Checksumer},
   error::Error,
   options::Options,
-  types::{EncodedEntryMeta, EntryFlags, Flags},
+  types::{EncodedEntryMeta, EntryFlags, Flags, RecordPointer},
   utils::merge_lengths,
   CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
   WAL_KIND_SIZE,
@@ -47,7 +46,7 @@ pub trait WalReader<S> {
   }
 
   #[inline]
-  fn iter(&self) -> <Self::Memtable as BaseTable>::Iterator<'_, &[u8]>
+  fn iter(&self) -> <Self::Memtable as BaseTable>::Iterator<'_>
   where
     Self::Memtable: Memtable,
   {
@@ -55,7 +54,7 @@ pub trait WalReader<S> {
   }
 
   #[inline]
-  fn range<'a, Q, R>(&'a self, range: R) -> <Self::Memtable as BaseTable>::Range<'a, &'a [u8], Q, R>
+  fn range<'a, Q, R>(&'a self, range: R) -> <Self::Memtable as BaseTable>::Range<'a, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
@@ -66,7 +65,7 @@ pub trait WalReader<S> {
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn first(&self) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Self::Memtable: Memtable,
   {
@@ -75,7 +74,7 @@ pub trait WalReader<S> {
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn last(&self) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Self::Memtable: Memtable,
   {
@@ -93,7 +92,7 @@ pub trait WalReader<S> {
 
   /// Returns the value associated with the key.
   #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn get<Q>(&self, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,
@@ -102,10 +101,7 @@ pub trait WalReader<S> {
   }
 
   #[inline]
-  fn upper_bound<Q>(
-    &self,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,
@@ -114,10 +110,7 @@ pub trait WalReader<S> {
   }
 
   #[inline]
-  fn lower_bound<Q>(
-    &self,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,
@@ -133,7 +126,7 @@ pub trait MultipleVersionWalReader<S> {
   fn memtable(&self) -> &Self::Memtable;
 
   #[inline]
-  fn iter(&self, version: u64) -> <Self::Memtable as BaseTable>::Iterator<'_, &[u8]>
+  fn iter(&self, version: u64) -> <Self::Memtable as BaseTable>::Iterator<'_>
   where
     Self::Memtable: MultipleVersionMemtable,
   {
@@ -141,11 +134,7 @@ pub trait MultipleVersionWalReader<S> {
   }
 
   #[inline]
-  fn range<Q, R>(
-    &self,
-    version: u64,
-    range: R,
-  ) -> <Self::Memtable as BaseTable>::Range<'_, &[u8], Q, R>
+  fn range<Q, R>(&self, version: u64, range: R) -> <Self::Memtable as BaseTable>::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
@@ -154,75 +143,21 @@ pub trait MultipleVersionWalReader<S> {
     MultipleVersionMemtable::range(self.memtable(), version, range)
   }
 
-  #[inline]
-  fn iter_with_tombstone(
-    &self,
-    version: u64,
-  ) -> <Self::Memtable as BaseTable>::Iterator<'_, Option<&[u8]>>
-  where
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    MultipleVersionMemtable::iter_with_tombstone(self.memtable(), version)
-  }
-
-  #[inline]
-  fn range_with_tombstone<Q, R>(
-    &self,
-    version: u64,
-    range: R,
-  ) -> <Self::Memtable as BaseTable>::Range<'_, Option<&[u8]>, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().range_with_tombstone(version, range)
-  }
-
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn first(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Self::Memtable: MultipleVersionMemtable,
   {
     self.memtable().first(version)
   }
 
-  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
-  ///
-  /// Compared to [`first`](MultipleVersionWalReader::first), this method returns a versioned item, which means that the returned item
-  /// may already be marked as removed.
-  #[inline]
-  fn first_with_tombstone(
-    &self,
-    version: u64,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
-  where
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().first_with_tombstone(version)
-  }
-
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn last(&self, version: u64) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Self::Memtable: MultipleVersionMemtable,
   {
     self.memtable().last(version)
-  }
-
-  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  ///
-  /// Compared to [`last`](MultipleVersionWalReader::last), this method returns a versioned item, which means that the returned item
-  /// may already be marked as removed.
-  fn last_with_tombstone(
-    &self,
-    version: u64,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
-  where
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().last_with_tombstone(version)
   }
 
   /// Returns `true` if the WAL contains the specified key.
@@ -234,21 +169,9 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().contains(version, key)
   }
 
-  /// Returns `true` if the WAL contains the specified key.
-  ///
-  /// Compared to [`contains_key`](MultipleVersionWalReader::contains_key), this method returns a versioned item, which means that the returned item
-  /// may already be marked as removed.
-  fn contains_key_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().contains_with_tombstone(version, key)
-  }
-
   /// Returns the entry associated with the key. The returned entry is the latest version of the key.
   #[inline]
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  fn get<Q>(&self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
@@ -256,27 +179,11 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().get(version, key)
   }
 
-  /// Returns the value associated with the key.
-  ///
-  /// Compared to [`get`](MultipleVersionWalReader::get), this method returns a versioned item, which means that the returned item
-  /// may already be marked as removed.
-  fn get_with_tombstone<Q>(
-    &self,
-    version: u64,
-    key: &Q,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().get_with_tombstone(version, key)
-  }
-
   fn upper_bound<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
@@ -284,40 +191,16 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().upper_bound(version, bound)
   }
 
-  fn upper_bound_with_tombstone<Q>(
-    &self,
-    version: u64,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().upper_bound_with_tombstone(version, bound)
-  }
-
   fn lower_bound<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, &[u8]>>
+  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
   {
     self.memtable().lower_bound(version, bound)
-  }
-
-  fn lower_bound_with_tombstone<Q>(
-    &self,
-    version: u64,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-  {
-    self.memtable().lower_bound_with_tombstone(version, bound)
   }
 }
 
@@ -449,29 +332,37 @@ pub trait Wal<S> {
   fn insert_pointer(
     &self,
     version: Option<u64>,
+    flag: EntryFlags,
     kp: RecordPointer,
-    vp: Option<ValuePointer>,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
   {
     let t = self.memtable();
-    if let Some(vp) = vp {
-      t.insert(version, kp, vp).map_err(Error::memtable)
-    } else {
-      t.remove(version, kp).map_err(Error::memtable)
+    match () {
+      _ if flag.contains(EntryFlags::REMOVED) => t.remove(version, kp).map_err(Error::memtable),
+      _ if flag.contains(EntryFlags::RANGE_DELETION) => {
+        t.range_remove(version, kp).map_err(Error::memtable)
+      }
+      _ if flag.contains(EntryFlags::RANGE_SET) => {
+        t.range_set(version, kp).map_err(Error::memtable)
+      }
+      _ if flag.contains(EntryFlags::RANGE_UNSET) => {
+        t.range_unset(version, kp).map_err(Error::memtable)
+      }
+      _ => t.insert(version, kp).map_err(Error::memtable),
     }
   }
 
   #[inline]
   fn insert_pointers(
     &self,
-    mut ptrs: impl Iterator<Item = (Option<u64>, RecordPointer, Option<ValuePointer>)>,
+    mut ptrs: impl Iterator<Item = (Option<u64>, EntryFlags, RecordPointer)>,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: BaseTable,
   {
-    ptrs.try_for_each(|(version, kp, vp)| self.insert_pointer(version, kp, vp))
+    ptrs.try_for_each(|(version, flag, p)| self.insert_pointer(version, flag, p))
   }
 
   fn insert<KE, VE>(
@@ -642,17 +533,15 @@ pub trait Wal<S> {
             let eoffset = buf.offset();
             let ko = eoffset + encoded_entry_meta.key_offset();
             let vo = eoffset + encoded_entry_meta.value_offset();
-            let kp = RecordPointer::new(entry_flag, ko as u32, encoded_entry_meta.klen as u32);
-            let vp =
-              (!remove).then(|| ValuePointer::new(vo as u32, encoded_entry_meta.vlen as u32));
-            Ok((buf.buffer_offset(), kp, vp))
+            let p = RecordPointer::new(ko as u32, encoded_entry_meta.klen as u32);
+            Ok((buf.buffer_offset(), p, entry_flag))
           }
         }
       }
     };
 
-    res.and_then(|(offset, kp, vp)| {
-      self.insert_pointer(version, kp, vp).map_err(|e| {
+    res.and_then(|(offset, p, flag)| {
+      self.insert_pointer(version, flag, p).map_err(|e| {
         unsafe {
           self.allocator().rewind(ArenaPosition::Start(offset as u32));
         };
@@ -786,11 +675,9 @@ pub trait Wal<S> {
         }
 
         let entry_size = meta.entry_size as usize;
-        let kp = RecordPointer::new(ent.flag, ko as u32, meta.klen as u32);
-        let vp = vb
-          .is_some()
-          .then(|| ValuePointer::new(vo as u32, meta.vlen as u32));
-        ent.set_pointer(kp, vp);
+        // TODO:
+        let p = RecordPointer::new(ko as u32, meta.klen as u32);
+        ent.set_pointer(p);
         cursor += entry_size;
       }
 
@@ -824,8 +711,8 @@ pub trait Wal<S> {
 
     self
       .insert_pointers(batch.iter_mut().map(|e| {
-        let (kp, vp) = e.take_pointer().unwrap();
-        (e.internal_version(), kp, vp)
+        let p = e.take_pointer().unwrap();
+        (e.internal_version(), e.flag, p)
       }))
       .map_err(|e| {
         // Safety: the writer is single threaded, the memory chunk in buf cannot be accessed by other threads,
@@ -909,7 +796,7 @@ pub trait Constructable: Sized {
       .flush_range(0, HEADER_SIZE)
       .map_err(Into::into)
       .and_then(|_| {
-        Self::Memtable::new(Arena::new(arena.clone()), memtable_opts)
+        Self::Memtable::new(arena.clone(), memtable_opts)
           .map(|memtable| {
             <Self::Wal as Wal<Self::Checksumer>>::construct(arena, memtable, opts, cks)
           })
@@ -936,7 +823,7 @@ pub trait Constructable: Sized {
   where
     Self::Checksumer: BuildChecksumer,
   {
-    use crate::{dynamic::wal::Arena, types::Kind, utils::split_lengths};
+    use crate::{types::Kind, utils::split_lengths};
     use dbutils::leb128::decode_u64_varint;
 
     let slice = arena.reserved_slice();

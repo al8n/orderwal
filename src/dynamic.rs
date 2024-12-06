@@ -1,8 +1,8 @@
-// pub use builder::Builder;
-// pub use swmr::*;
+pub use builder::Builder;
+pub use swmr::*;
 
 /// Batch insertions related traits and structs.
-// pub mod batch;
+pub mod batch;
 
 /// The memory table implementation.
 pub mod memtable;
@@ -10,7 +10,7 @@ pub mod memtable;
 /// Types
 pub mod types;
 
-// mod builder;
-// mod sealed;
-// mod swmr;
-// mod wal;
+mod builder;
+mod sealed;
+mod swmr;
+mod wal;

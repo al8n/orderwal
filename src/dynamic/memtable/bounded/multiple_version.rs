@@ -1,5 +1,7 @@
-use core::{borrow::Borrow, ops::{ControlFlow, RangeBounds}};
-
+use core::{
+  borrow::Borrow,
+  ops::{ControlFlow, RangeBounds},
+};
 
 use super::{MemtableComparator, MemtableRangeComparator, TableOptions};
 
@@ -138,6 +140,51 @@ where
     A: rarena_allocator::Allocator,
   {
     memmap_or_not!(opts(arena))
+  }
+
+  #[inline]
+  fn insert(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .skl
+      .insert(version.unwrap(), &pointer, &())
+      .map(|_| ())
+      .map_err(Among::unwrap_right)
+  }
+
+  #[inline]
+  fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .skl
+      .get_or_remove(version.unwrap(), &key)
+      .map(|_| ())
+      .map_err(Either::unwrap_right)
+  }
+
+  #[inline]
+  fn range_remove(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_deletions_skl
+      .insert(version.unwrap(), &pointer, &())
+      .map(|_| ())
+      .map_err(Among::unwrap_right)
+  }
+
+  #[inline]
+  fn range_set(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_updates_skl
+      .insert(version.unwrap(), &pointer, &())
+      .map(|_| ())
+      .map_err(Among::unwrap_right)
+  }
+
+  #[inline]
+  fn range_unset(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_updates_skl
+      .get_or_remove(version.unwrap(), &key)
+      .map(|_| ())
+      .map_err(Either::unwrap_right)
   }
 
   #[inline]
@@ -312,51 +359,6 @@ where
     Q: ?Sized + Borrow<[u8]>,
   {
     RangeBulkUpdates::new(self.range_updates_skl.range_with_tombstone(version, range))
-  }
-
-  #[inline]
-  fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
-    self
-      .skl
-      .insert(version, &pointer, &())
-      .map(|_| ())
-      .map_err(Among::unwrap_right)
-  }
-
-  #[inline]
-  fn remove(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
-    self
-      .skl
-      .get_or_remove(version, &key)
-      .map(|_| ())
-      .map_err(Either::unwrap_right)
-  }
-
-  #[inline]
-  fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
-    self
-      .range_deletions_skl
-      .insert(version, &pointer, &())
-      .map(|_| ())
-      .map_err(Among::unwrap_right)
-  }
-
-  #[inline]
-  fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
-    self
-      .range_updates_skl
-      .insert(version, &pointer, &())
-      .map(|_| ())
-      .map_err(Among::unwrap_right)
-  }
-
-  #[inline]
-  fn range_unset(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
-    self
-      .range_updates_skl
-      .get_or_remove(version, &key)
-      .map(|_| ())
-      .map_err(Either::unwrap_right)
   }
 }
 
