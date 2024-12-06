@@ -196,7 +196,7 @@ where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the upper bound of the memtable.
-  fn upper_bound_versioned<Q>(
+  fn upper_bound_with_tombstone<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
@@ -210,7 +210,7 @@ where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the lower bound of the memtable.
-  fn lower_bound_versioned<Q>(
+  fn lower_bound_with_tombstone<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
@@ -224,7 +224,7 @@ where
     RecordPointer<Self::Key>: Ord;
 
   /// Returns the first pointer in the memtable.
-  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
+  fn first_with_tombstone(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     RecordPointer<Self::Key>: Ord;
 
@@ -234,7 +234,7 @@ where
     RecordPointer<Self::Key>: Ord;
 
   /// Returns the last pointer in the memtable.
-  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
+  fn last_with_tombstone(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     RecordPointer<Self::Key>: Ord;
 
@@ -244,7 +244,7 @@ where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns the pointer associated with the key.
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
+  fn get_with_tombstone<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
@@ -254,7 +254,7 @@ where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns `true` if the memtable contains the specified pointer.
-  fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
@@ -262,17 +262,17 @@ where
   fn iter(&self, version: u64) -> Self::Iterator<'_>;
 
   /// Returns an iterator over all the entries in the memtable.
-  fn iter_all_versions(&self, version: u64) -> Self::IterAll<'_>;
+  fn iter_with_tombstone(&self, version: u64) -> Self::IterAll<'_>;
 
   /// Returns an iterator over a subset of the memtable.
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 
   /// Returns an iterator over all the entries in a subset of the memtable.
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
+  fn range_with_tombstone<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>;
 }

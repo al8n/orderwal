@@ -15,7 +15,7 @@ macro_rules! point_entry_wrapper {
     impl<'a, S, C> Clone for $ent<'a, S, C>
     where
       S: $crate::dynamic::types::State<'a>,
-      
+
     {
       #[inline]
       fn clone(&self) -> Self {
@@ -31,7 +31,7 @@ macro_rules! point_entry_wrapper {
       S: $crate::dynamic::types::State<'a>,
     {
       #[inline]
-      fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::dynamic::memtable::bounded::MemtableComparator<C>>) -> Self {
+      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::dynamic::memtable::bounded::MemtableComparator<C>>) -> Self {
         Self {
           ent,
           data: core::cell::OnceCell::new(),
@@ -137,7 +137,6 @@ macro_rules! range_entry_wrapper {
     impl<'a, S, C> Clone for $ent<'a, S, C>
     where
       S: $crate::dynamic::types::State<'a>,
-      
     {
       #[inline]
       fn clone(&self) -> Self {
@@ -298,7 +297,7 @@ macro_rules! iter_wrapper {
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::dynamic::types::State<'a>,
-      
+
     {
       type Item = $ent<'a, S, C>;
 
@@ -312,7 +311,7 @@ macro_rules! iter_wrapper {
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::dynamic::types::State<'a>,
-      
+
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {
@@ -351,7 +350,7 @@ macro_rules! range_wrapper {
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::dynamic::types::State<'a>,
-      
+
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized + core::borrow::Borrow<[u8]>,
     {
@@ -367,7 +366,7 @@ macro_rules! range_wrapper {
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::dynamic::types::State<'a>,
-      
+
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized + core::borrow::Borrow<[u8]>,
     {
@@ -403,47 +402,38 @@ macro_rules! memmap_or_not {
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     let mmap = $opts.map_anon();
     let cmp = Arc::new($opts.cmp);
-    let ptr = $arena.raw_pointer();
+    let ptr = $arena.raw_ptr();
     let points_cmp = MemtableComparator::new(ptr, cmp.clone());
     let rng_cmp = MemtableRangeComparator::new(ptr, cmp.clone());
 
-    let b = Builder::new()
-      .with_options(arena_opts)
-      .with_comparator(points_cmp);
+    let b = Builder::with(points_cmp).with_options(arena_opts);
 
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    let points: SkipMap<MemtableComparator<C>> = construct_skl!(b(mmap))?;
+    let points: GenericSkipMap<_, _, MemtableComparator<C>> = construct_skl!(b(mmap))?;
     #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
-    let points: SkipMap<MemtableComparator<C>> = construct_skl!(b)?;
+    let points: GenericSkipMap<_, _, MemtableComparator<C>> = construct_skl!(b)?;
 
     let allocator = points.allocator().clone();
-    let range_del_skl = SkipMap::<MemtableRangeComparator<C>>::create_from_allocator(
+    let range_del_skl = GenericSkipMap::<_, _, MemtableRangeComparator<C>>::create_from_allocator(
       allocator.clone(),
       rng_cmp.clone(),
     )?;
-    let range_key_skl =
-      SkipMap::<MemtableRangeComparator<C>>::create_from_allocator(allocator, rng_cmp)?;
+    let range_key_skl = GenericSkipMap::<_, _, MemtableRangeComparator<C>>::create_from_allocator(
+      allocator, rng_cmp,
+    )?;
 
     Ok(Self {
       skl: points,
       range_updates_skl: range_key_skl,
       range_deletions_skl: range_del_skl,
+      cmp,
     })
   }};
 }
 
-use core::{borrow::Borrow, cmp, ops::Bound};
-
-
-use triomphe::Arc;
-
-use crate::{
-  dynamic::types::{Active, MaybeTombstone, State},
-  types::{
-    fetch_entry, fetch_raw_key, fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound,
-    fetch_raw_range_update_entry, RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef,
-    RecordPointer,
-  },
+use crate::types::{
+  fetch_entry, fetch_raw_key, fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound,
+  fetch_raw_range_update_entry,
 };
 
 pub use dbutils::{
@@ -549,52 +539,3 @@ mod comparator;
 use comparator::MemtableComparator;
 mod range_comparator;
 use range_comparator::MemtableRangeComparator;
-
-// #[doc(hidden)]
-// pub trait ValueState<'a>: sealed::Sealed<'a> {}
-
-// impl<'a, V: State<'a>> ValueState<'a> for V {}
-
-mod sealed {
-
-  use crate::dynamic::types::{Active, State};
-
-  // use super::ValueState;
-
-  // pub trait Sealed<'a> {
-  //   type Source: GenericValue<'a>;
-  //   type Value;
-
-  //   fn fetch(src: Option<&'a [u8]>) -> Self::Value;
-  // }
-
-  // impl<'a> Sealed<'a> for Active {
-  //   type Source = SazyRef<'a, ()>;
-  //   type Value = &'a [u8];
-
-  //   #[inline]
-  //   fn fetch(src: Option<&'a [u8]>) -> Self::Value {
-  //     src.expect("entry in Active state must have a value")
-  //   }
-  // }
-
-  // impl<'a, V: State<'a>> Sealed<'a> for V {
-  //   type Source;
-
-  //   type Value;
-  // }
-
-  // impl ValueState<'_> for Active {}
-
-  // impl ValueState<'_> for MaybeActive {}
-
-  // impl<'a> Sealed<'a> for MaybeActive {
-  //   type Source = Option<SazyRef<'a, ()>>;
-  //   type Value = Option<&'a [u8]>;
-
-  //   #[inline]
-  //   fn fetch(src: Option<&'a [u8]>) -> Self::Value {
-  //     src
-  //   }
-  // }
-}

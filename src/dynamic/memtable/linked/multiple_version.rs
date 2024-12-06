@@ -241,7 +241,7 @@ where
     self.0.upper_bound(version, bound)
   }
 
-  fn upper_bound_versioned<Q>(
+  fn upper_bound_with_tombstone<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
@@ -249,7 +249,7 @@ where
   where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
-    self.0.upper_bound_versioned(version, bound)
+    self.0.upper_bound_with_tombstone(version, bound)
   }
 
   fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
@@ -259,7 +259,7 @@ where
     self.0.lower_bound(version, bound)
   }
 
-  fn lower_bound_versioned<Q>(
+  fn lower_bound_with_tombstone<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
@@ -267,7 +267,7 @@ where
   where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
-    self.0.lower_bound_versioned(version, bound)
+    self.0.lower_bound_with_tombstone(version, bound)
   }
 
   fn first(&self, version: u64) -> Option<Self::Item<'_>>
@@ -277,11 +277,11 @@ where
     self.0.front(version)
   }
 
-  fn first_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
+  fn first_with_tombstone(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     RecordPointer<Self::Key>: Ord,
   {
-    self.0.front_versioned(version)
+    self.0.front_with_tombstone(version)
   }
 
   fn last(&self, version: u64) -> Option<Self::Item<'_>>
@@ -291,11 +291,11 @@ where
     self.0.back(version)
   }
 
-  fn last_versioned(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
+  fn last_with_tombstone(&self, version: u64) -> Option<Self::MultipleVersionEntry<'_>>
   where
     RecordPointer<Self::Key>: Ord,
   {
-    self.0.back_versioned(version)
+    self.0.back_with_tombstone(version)
   }
 
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
@@ -305,11 +305,11 @@ where
     self.0.get(version, key)
   }
 
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
+  fn get_with_tombstone<Q>(&self, version: u64, key: &Q) -> Option<Self::MultipleVersionEntry<'_>>
   where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
-    self.0.get_versioned(version, key)
+    self.0.get_with_tombstone(version, key)
   }
 
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
@@ -319,19 +319,19 @@ where
     self.0.contains_key(version, key)
   }
 
-  fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
-    self.0.contains_key_versioned(version, key)
+    self.0.contains_key_with_tombstone(version, key)
   }
 
   fn iter(&self, version: u64) -> Self::Iterator<'_> {
     self.0.iter(version)
   }
 
-  fn iter_all_versions(&self, version: u64) -> Self::IterAll<'_> {
-    self.0.iter_all_versions(version)
+  fn iter_with_tombstone(&self, version: u64) -> Self::IterAll<'_> {
+    self.0.iter_with_tombstone(version)
   }
 
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
@@ -342,11 +342,11 @@ where
     self.0.range(version, range)
   }
 
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
+  fn range_with_tombstone<'a, Q, R>(&'a self, version: u64, range: R) -> Self::MultipleVersionRange<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Comparable<RecordPointer<Self::Key>>,
   {
-    self.0.range_all_versions(version, range)
+    self.0.range_with_tombstone(version, range)
   }
 }

@@ -703,17 +703,17 @@ where
 
   for (p, pvec, pv) in &people {
     assert!(wal.contains_key(0, p));
-    assert!(wal.contains_key_versioned(0, p));
+    assert!(wal.contains_key_with_tombstone(0, p));
     assert_eq!(wal.get(0, p).unwrap().value(), pv);
-    assert_eq!(wal.get_versioned(0, p).unwrap().value().unwrap(), pv);
+    assert_eq!(wal.get_with_tombstone(0, p).unwrap().value().unwrap(), pv);
 
     unsafe {
       assert!(wal.contains_key_by_bytes(0, pvec));
-      assert!(wal.contains_key_versioned_by_bytes(0, pvec));
+      assert!(wal.contains_key_with_tombstone_by_bytes(0, pvec));
       assert_eq!(wal.get_by_bytes(0, pvec.as_ref()).unwrap().value(), pv);
       assert_eq!(
         wal
-          .get_versioned_by_bytes(0, pvec)
+          .get_with_tombstone_by_bytes(0, pvec)
           .unwrap()
           .value()
           .unwrap(),

@@ -155,18 +155,18 @@ pub trait MultipleVersionWalReader<S> {
   }
 
   #[inline]
-  fn iter_all_versions(
+  fn iter_with_tombstone(
     &self,
     version: u64,
   ) -> <Self::Memtable as BaseTable>::Iterator<'_, Option<&[u8]>>
   where
     Self::Memtable: MultipleVersionMemtable,
   {
-    MultipleVersionMemtable::iter_all_versions(self.memtable(), version)
+    MultipleVersionMemtable::iter_with_tombstone(self.memtable(), version)
   }
 
   #[inline]
-  fn range_all_versions<Q, R>(
+  fn range_with_tombstone<Q, R>(
     &self,
     version: u64,
     range: R,
@@ -176,7 +176,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().range_all_versions(version, range)
+    self.memtable().range_with_tombstone(version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -193,14 +193,14 @@ pub trait MultipleVersionWalReader<S> {
   /// Compared to [`first`](MultipleVersionWalReader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn first_versioned(
+  fn first_with_tombstone(
     &self,
     version: u64,
   ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
   where
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().first_versioned(version)
+    self.memtable().first_with_tombstone(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
@@ -215,14 +215,14 @@ pub trait MultipleVersionWalReader<S> {
   ///
   /// Compared to [`last`](MultipleVersionWalReader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
-  fn last_versioned(
+  fn last_with_tombstone(
     &self,
     version: u64,
   ) -> Option<<Self::Memtable as BaseTable>::Entry<'_, Option<&[u8]>>>
   where
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().last_versioned(version)
+    self.memtable().last_with_tombstone(version)
   }
 
   /// Returns `true` if the WAL contains the specified key.
@@ -238,12 +238,12 @@ pub trait MultipleVersionWalReader<S> {
   ///
   /// Compared to [`contains_key`](MultipleVersionWalReader::contains_key), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
-  fn contains_key_versioned<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().contains_versioned(version, key)
+    self.memtable().contains_with_tombstone(version, key)
   }
 
   /// Returns the entry associated with the key. The returned entry is the latest version of the key.
@@ -260,7 +260,7 @@ pub trait MultipleVersionWalReader<S> {
   ///
   /// Compared to [`get`](MultipleVersionWalReader::get), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
-  fn get_versioned<Q>(
+  fn get_with_tombstone<Q>(
     &self,
     version: u64,
     key: &Q,
@@ -269,7 +269,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().get_versioned(version, key)
+    self.memtable().get_with_tombstone(version, key)
   }
 
   fn upper_bound<Q>(
@@ -284,7 +284,7 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().upper_bound(version, bound)
   }
 
-  fn upper_bound_versioned<Q>(
+  fn upper_bound_with_tombstone<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
@@ -293,7 +293,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().upper_bound_versioned(version, bound)
+    self.memtable().upper_bound_with_tombstone(version, bound)
   }
 
   fn lower_bound<Q>(
@@ -308,7 +308,7 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().lower_bound(version, bound)
   }
 
-  fn lower_bound_versioned<Q>(
+  fn lower_bound_with_tombstone<Q>(
     &self,
     version: u64,
     bound: Bound<&Q>,
@@ -317,7 +317,7 @@ pub trait MultipleVersionWalReader<S> {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
   {
-    self.memtable().lower_bound_versioned(version, bound)
+    self.memtable().lower_bound_with_tombstone(version, bound)
   }
 }
 

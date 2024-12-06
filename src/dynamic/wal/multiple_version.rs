@@ -122,7 +122,7 @@ pub trait Reader: Constructable {
 
   /// Returns an iterator over the entries (all versions) in the WAL.
   #[inline]
-  fn iter_all_versions<'a>(
+  fn iter_with_tombstone<'a>(
     &'a self,
     version: u64,
   ) -> Iter<
@@ -139,7 +139,7 @@ pub trait Reader: Constructable {
 
     Iter::new(BaseIter::with_version(
       version,
-      wal.iter_all_versions(version),
+      wal.iter_with_tombstone(version),
     ))
   }
 
@@ -163,7 +163,7 @@ pub trait Reader: Constructable {
 
   /// Returns an iterator over a subset of entries (all versions) in the WAL.
   #[inline]
-  fn range_all_versions<'a, Q, R>(
+  fn range_with_tombstone<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -178,7 +178,7 @@ pub trait Reader: Constructable {
 
     Range::new(BaseIter::with_version(
       version,
-      wal.range_all_versions(version, range),
+      wal.range_with_tombstone(version, range),
     ))
   }
 
@@ -203,7 +203,7 @@ pub trait Reader: Constructable {
   /// Compared to [`first`](Reader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn first_versioned<'a>(
+  fn first_with_tombstone<'a>(
     &'a self,
     version: u64,
   ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>>
@@ -213,7 +213,7 @@ pub trait Reader: Constructable {
   {
     let wal = self.as_wal();
     wal
-      .first_versioned(version)
+      .first_with_tombstone(version)
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -236,7 +236,7 @@ pub trait Reader: Constructable {
   /// Compared to [`last`](Reader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn last_versioned<'a>(
+  fn last_with_tombstone<'a>(
     &'a self,
     version: u64,
   ) -> Option<Entry<'a, <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>>>
@@ -246,7 +246,7 @@ pub trait Reader: Constructable {
   {
     let wal = self.as_wal();
     wal
-      .last_versioned(version)
+      .last_with_tombstone(version)
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -265,13 +265,13 @@ pub trait Reader: Constructable {
   ///
   /// Compared to [`contains_key`](Reader::contains_key), this method returns `true` even if the latest is marked as removed.
   #[inline]
-  fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
+  fn contains_key_with_tombstone<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Entry<'a, Option<&'a [u8]>>: WithVersion,
   {
-    self.as_wal().contains_key_versioned(version, key)
+    self.as_wal().contains_key_with_tombstone(version, key)
   }
 
   /// Gets the value associated with the key.
@@ -298,7 +298,7 @@ pub trait Reader: Constructable {
   /// Compared to [`get`](Reader::get), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn get_versioned<'a, Q>(
+  fn get_with_tombstone<'a, Q>(
     &'a self,
     version: u64,
     key: &Q,
@@ -311,7 +311,7 @@ pub trait Reader: Constructable {
     let wal = self.as_wal();
 
     wal
-      .get_versioned(version, key)
+      .get_with_tombstone(version, key)
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -340,7 +340,7 @@ pub trait Reader: Constructable {
   /// Compared to [`upper_bound`](Reader::upper_bound), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn upper_bound_versioned<'a, Q>(
+  fn upper_bound_with_tombstone<'a, Q>(
     &'a self,
     version: u64,
     bound: Bound<&Q>,
@@ -353,7 +353,7 @@ pub trait Reader: Constructable {
     let wal = self.as_wal();
 
     wal
-      .upper_bound_versioned(version, bound)
+      .upper_bound_with_tombstone(version, bound)
       .map(|ent| Entry::with_version(ent, version))
   }
 
@@ -383,7 +383,7 @@ pub trait Reader: Constructable {
   /// Compared to [`lower_bound`](Reader::lower_bound), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn lower_bound_versioned<'a, Q>(
+  fn lower_bound_with_tombstone<'a, Q>(
     &'a self,
     version: u64,
     bound: Bound<&Q>,
@@ -396,7 +396,7 @@ pub trait Reader: Constructable {
     let wal = self.as_wal();
 
     wal
-      .lower_bound_versioned(version, bound)
+      .lower_bound_with_tombstone(version, bound)
       .map(|ent| Entry::with_version(ent, version))
   }
 }

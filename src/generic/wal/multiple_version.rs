@@ -130,7 +130,7 @@ pub trait Reader: Constructable {
 
   /// Returns an iterator over the entries (all versions) in the WAL.
   #[inline]
-  fn iter_all_versions(
+  fn iter_with_tombstone(
     &self,
     version: u64,
   ) -> IterAll<
@@ -148,7 +148,7 @@ pub trait Reader: Constructable {
   {
     IterAll::new(MultipleVersionBaseIter::new(
       version,
-      self.as_wal().iter_all_versions(version),
+      self.as_wal().iter_with_tombstone(version),
     ))
   }
 
@@ -179,7 +179,7 @@ pub trait Reader: Constructable {
 
   /// Returns an iterator over a subset of entries (all versions) in the WAL.
   #[inline]
-  fn range_all_versions<'a, Q, R>(
+  fn range_with_tombstone<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -200,7 +200,7 @@ pub trait Reader: Constructable {
       version,
       self
         .as_wal()
-        .range_all_versions(version, QueryRange::new(range)),
+        .range_with_tombstone(version, QueryRange::new(range)),
     ))
   }
 
@@ -324,7 +324,7 @@ pub trait Reader: Constructable {
   /// Compared to [`first`](Reader::first), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn first_versioned(
+  fn first_with_tombstone(
     &self,
     version: u64,
   ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>>
@@ -340,7 +340,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .first_versioned(version)
+      .first_with_tombstone(version)
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -366,7 +366,7 @@ pub trait Reader: Constructable {
   /// Compared to [`last`](Reader::last), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn last_versioned(
+  fn last_with_tombstone(
     &self,
     version: u64,
   ) -> Option<VersionedEntry<'_, <Self::Memtable as MultipleVersionMemtable>::MultipleVersionEntry<'_>>>
@@ -382,7 +382,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .last_versioned(version)
+      .last_with_tombstone(version)
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -409,7 +409,7 @@ pub trait Reader: Constructable {
   ///
   /// Compared to [`contains_key`](Reader::contains_key), this method returns `true` even if the latest is marked as removed.
   #[inline]
-  fn contains_key_versioned<'a, Q>(&'a self, version: u64, key: &Q) -> bool
+  fn contains_key_with_tombstone<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Comparable<<<Self::Memtable as BaseTable>::Key as Type>::Ref<'a>>,
     Self::Memtable: MultipleVersionMemtable,
@@ -423,7 +423,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .contains_key_versioned(version, Query::<_, Q>::ref_cast(key))
+      .contains_key_with_tombstone(version, Query::<_, Q>::ref_cast(key))
   }
 
   /// Returns `true` if the key exists in the WAL.
@@ -452,7 +452,7 @@ pub trait Reader: Constructable {
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn contains_key_versioned_by_bytes(&self, version: u64, key: &[u8]) -> bool
+  unsafe fn contains_key_with_tombstone_by_bytes(&self, version: u64, key: &[u8]) -> bool
   where
     Self::Memtable: MultipleVersionMemtable,
     <Self::Memtable as BaseTable>::Key: Type + Ord,
@@ -465,7 +465,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .contains_key_versioned(version, Slice::ref_cast(key))
+      .contains_key_with_tombstone(version, Slice::ref_cast(key))
   }
 
   /// Gets the value associated with the key.
@@ -497,7 +497,7 @@ pub trait Reader: Constructable {
   /// Compared to [`get`](Reader::get), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn get_versioned<'a, Q>(
+  fn get_with_tombstone<'a, Q>(
     &'a self,
     version: u64,
     key: &Q,
@@ -515,7 +515,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .get_versioned(version, Query::<_, Q>::ref_cast(key))
+      .get_with_tombstone(version, Query::<_, Q>::ref_cast(key))
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -553,7 +553,7 @@ pub trait Reader: Constructable {
   /// ## Safety
   /// - The given `key` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn get_versioned_by_bytes(
+  unsafe fn get_with_tombstone_by_bytes(
     &self,
     version: u64,
     key: &[u8],
@@ -570,7 +570,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .get_versioned(version, Slice::ref_cast(key))
+      .get_with_tombstone(version, Slice::ref_cast(key))
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -604,7 +604,7 @@ pub trait Reader: Constructable {
   /// Compared to [`upper_bound`](Reader::upper_bound), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn upper_bound_versioned<'a, Q>(
+  fn upper_bound_with_tombstone<'a, Q>(
     &'a self,
     version: u64,
     bound: Bound<&Q>,
@@ -622,7 +622,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .upper_bound_versioned(version, bound.map(Query::ref_cast))
+      .upper_bound_with_tombstone(version, bound.map(Query::ref_cast))
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -661,7 +661,7 @@ pub trait Reader: Constructable {
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn upper_bound_versioned_by_bytes(
+  unsafe fn upper_bound_with_tombstone_by_bytes(
     &self,
     version: u64,
     bound: Bound<&[u8]>,
@@ -678,7 +678,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .upper_bound_versioned(version, bound.map(Slice::ref_cast))
+      .upper_bound_with_tombstone(version, bound.map(Slice::ref_cast))
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -713,7 +713,7 @@ pub trait Reader: Constructable {
   /// Compared to [`lower_bound`](Reader::lower_bound), this method returns a versioned item, which means that the returned item
   /// may already be marked as removed.
   #[inline]
-  fn lower_bound_versioned<'a, Q>(
+  fn lower_bound_with_tombstone<'a, Q>(
     &'a self,
     version: u64,
     bound: Bound<&Q>,
@@ -731,7 +731,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .lower_bound_versioned(version, bound.map(Query::ref_cast))
+      .lower_bound_with_tombstone(version, bound.map(Query::ref_cast))
       .map(|ent| VersionedEntry::with_version(ent, version))
   }
 
@@ -771,7 +771,7 @@ pub trait Reader: Constructable {
   /// ## Safety
   /// - The given `key` in `Bound` must be valid to construct to `K::Ref` without remaining.
   #[inline]
-  unsafe fn lower_bound_versioned_by_bytes(
+  unsafe fn lower_bound_with_tombstone_by_bytes(
     &self,
     version: u64,
     bound: Bound<&[u8]>,
@@ -788,7 +788,7 @@ pub trait Reader: Constructable {
   {
     self
       .as_wal()
-      .lower_bound_versioned(
+      .lower_bound_with_tombstone(
         version,
         bound.map(Slice::<<Self::Memtable as BaseTable>::Key>::ref_cast),
       )
