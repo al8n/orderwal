@@ -74,9 +74,9 @@ impl EncodedEntryMeta {
     let len_size = encoded_u64_varint_len(len);
     let version_size = if versioned { VERSION_SIZE } else { 0 };
     let elen = RECORD_FLAG_SIZE as u32
-      + len_size as u32
       + EntryFlags::SIZE as u32
       + version_size as u32
+      + len_size as u32
       + key_len as u32
       + value_len as u32
       + CHECKSUM_SIZE as u32;
@@ -99,9 +99,10 @@ impl EncodedEntryMeta {
     let len = merge_lengths(key_len as u32, value_len as u32);
     let len_size = encoded_u64_varint_len(len);
     let version_size = if versioned { VERSION_SIZE } else { 0 };
-    let elen = len_size as u32
-      + EntryFlags::SIZE as u32
+    let elen = 
+      EntryFlags::SIZE as u32
       + version_size as u32
+      + len_size as u32
       + key_len as u32
       + value_len as u32;
 
@@ -132,10 +133,10 @@ impl EncodedEntryMeta {
   #[inline]
   pub(crate) const fn entry_flag_offset(&self) -> usize {
     if self.batch {
-      return self.packed_kvlen_size;
+      return 0;
     }
 
-    RECORD_FLAG_SIZE + self.packed_kvlen_size
+    RECORD_FLAG_SIZE
   }
 
   #[inline]
@@ -145,11 +146,11 @@ impl EncodedEntryMeta {
 
   #[inline]
   pub(crate) const fn key_offset(&self) -> usize {
-    if self.versioned {
+    (if self.versioned {
       self.version_offset() + VERSION_SIZE
     } else {
       self.version_offset()
-    }
+    }) + self.packed_kvlen_size as usize
   }
 
   #[inline]
@@ -321,15 +322,13 @@ impl<'a> TypeRef<'a> for ValuePointer {
 /// The pointer to a record in the WAL.
 #[derive(Clone, Copy)]
 pub struct RecordPointer {
-  offset: u32,
-  len: u32,
+  offset: u32, 
 }
 
 impl core::fmt::Debug for RecordPointer {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("RecordPointer")
       .field("offset", &self.offset)
-      .field("len", &self.len)
       .finish()
   }
 }
@@ -338,8 +337,8 @@ impl RecordPointer {
   const SIZE: usize = mem::size_of::<Self>();
 
   #[inline]
-  pub(crate) fn new(offset: u32, len: u32) -> Self {
-    Self { offset, len }
+  pub(crate) fn new(offset: u32) -> Self {
+    Self { offset }
   }
 
   #[inline]
@@ -348,15 +347,9 @@ impl RecordPointer {
   }
 
   #[inline]
-  pub const fn len(&self) -> usize {
-    self.len as usize
-  }
-
-  #[inline]
   pub(crate) fn as_array(&self) -> [u8; Self::SIZE] {
     let mut array = [0; Self::SIZE];
     array[..4].copy_from_slice(&self.offset.to_le_bytes());
-    array[4..].copy_from_slice(&self.len.to_le_bytes());
     array
   }
 }
@@ -381,8 +374,7 @@ impl<'a> TypeRef<'a> for RecordPointer {
   #[inline]
   unsafe fn from_slice(src: &'a [u8]) -> Self {
     let offset = u32::from_le_bytes([src[0], src[1], src[2], src[3]]);
-    let len = u32::from_le_bytes([src[4], src[5], src[6], src[7]]);
-    Self { offset, len }
+    Self { offset }
   }
 }
 

@@ -20,7 +20,6 @@ use core::{
 };
 use dbutils::{buffer::VacantBuffer, leb128::encoded_u64_varint_len};
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
-use skl::KeySize;
 
 pub trait WalReader<S> {
   type Allocator: Allocator;
@@ -179,11 +178,11 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().get(version, key)
   }
 
-  fn upper_bound<Q>(
-    &self,
+  fn upper_bound<'a, Q>(
+    &'a self,
     version: u64,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
@@ -191,11 +190,11 @@ pub trait MultipleVersionWalReader<S> {
     self.memtable().upper_bound(version, bound)
   }
 
-  fn lower_bound<Q>(
-    &self,
+  fn lower_bound<'a, Q>(
+    &'a self,
     version: u64,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'_>>
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: MultipleVersionMemtable,
@@ -239,7 +238,7 @@ pub trait Wal<S> {
 
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
-  fn maximum_key_size(&self) -> KeySize {
+  fn maximum_key_size(&self) -> u32 {
     self.options().maximum_key_size()
   }
 
@@ -377,7 +376,12 @@ pub trait Wal<S> {
     S: BuildChecksumer,
     Self::Memtable: BaseTable,
   {
-    self.update(version, kb, Some(vb))
+    let flag = if version.is_none() {
+      EntryFlags::empty()
+    } else {
+      EntryFlags::VERSIONED
+    };
+    self.update(version, flag,  kb, Some(vb))
   }
 
   fn remove<KE>(
@@ -408,14 +412,21 @@ pub trait Wal<S> {
       }
     }
 
+    let flag = if version.is_none() {
+      EntryFlags::REMOVED
+    } else {
+      EntryFlags::VERSIONED | EntryFlags::REMOVED
+    };
+
     self
-      .update::<KE, Noop>(version, kb, None)
+      .update::<KE, Noop>(version, flag, kb, None)
       .map_err(Among::into_left_right)
   }
 
   fn update<KE, VE>(
     &self,
     version: Option<u64>,
+    entry_flag: EntryFlags,
     kb: KE,
     vb: Option<VE>,
   ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
@@ -431,15 +442,15 @@ pub trait Wal<S> {
 
     let res = {
       let klen = kb.encoded_len();
-      let (vlen, remove) = vb
+      let vlen = vb
         .as_ref()
-        .map(|vb| (vb.encoded_len(), false))
-        .unwrap_or((0, true));
+        .map(|vb| vb.encoded_len())
+        .unwrap_or(0);
       let encoded_entry_meta = check(
         klen,
         vlen,
         version.is_some(),
-        self.maximum_key_size().to_u32(),
+        self.maximum_key_size(),
         self.maximum_value_size(),
         self.read_only(),
       )
@@ -463,29 +474,21 @@ pub trait Wal<S> {
             cks.update(&[flag]);
 
             buf.put_u8_unchecked(Flags::empty().bits());
+            buf.put_slice_unchecked(&[Flags::empty().bits(), entry_flag.bits()]);
+
+            if entry_flag.contains(EntryFlags::VERSIONED) {
+              buf.put_u64_le_unchecked(version.expect("EntryFlags::VERSIONED must have a version"));
+            }
+
             let written = buf.put_u64_varint_unchecked(encoded_entry_meta.packed_kvlen);
             debug_assert_eq!(
               written, encoded_entry_meta.packed_kvlen_size,
               "the precalculated size should be equal to the written size"
             );
 
-            let mut entry_flag = if !remove {
-              EntryFlags::empty()
-            } else {
-              EntryFlags::REMOVED
-            };
-
-            if let Some(version) = version {
-              entry_flag |= EntryFlags::VERSIONED;
-              buf.put_u8_unchecked(entry_flag.bits());
-              buf.put_u64_le_unchecked(version);
-            } else {
-              buf.put_u8_unchecked(entry_flag.bits());
-            }
-
             let ko = encoded_entry_meta.key_offset();
             let ptr = buf.as_mut_ptr().add(ko);
-            buf.set_len(encoded_entry_meta.entry_size as usize - VERSION_SIZE);
+            buf.set_len(encoded_entry_meta.entry_size as usize - CHECKSUM_SIZE);
 
             let mut key_buf = VacantBuffer::new(
               encoded_entry_meta.klen as usize,
@@ -531,9 +534,8 @@ pub trait Wal<S> {
 
             buf.detach();
             let eoffset = buf.offset();
-            let ko = eoffset + encoded_entry_meta.key_offset();
-            let vo = eoffset + encoded_entry_meta.value_offset();
-            let p = RecordPointer::new(ko as u32, encoded_entry_meta.klen as u32);
+            let offset = eoffset + encoded_entry_meta.entry_flag_offset();
+            let p = RecordPointer::new(offset as u32);
             Ok((buf.buffer_offset(), p, entry_flag))
           }
         }
@@ -570,7 +572,7 @@ pub trait Wal<S> {
     }
 
     let opts = self.options();
-    let maximum_key_size = opts.maximum_key_size().to_u32();
+    let maximum_key_size = opts.maximum_key_size();
     let minimum_value_size = opts.maximum_value_size();
     let start_offset = unsafe {
       let (mut cursor, _allocator, mut buf) = batch
@@ -633,6 +635,15 @@ pub trait Wal<S> {
           ));
         }
 
+        let entry_offset = cursor;
+        buf.put_u8_unchecked(ent.flag.bits());
+        let (ko, vo) = if let Some(version) = ent.internal_version() {
+          buf.put_u64_le_unchecked(version);
+          (cursor + meta.key_offset(), cursor + meta.value_offset())
+        } else {
+          (cursor + meta.key_offset(), cursor + meta.value_offset())
+        };
+
         let ent_len_size = buf.put_u64_varint_unchecked(meta.packed_kvlen);
         debug_assert_eq!(
           ent_len_size, meta.packed_kvlen_size,
@@ -640,15 +651,7 @@ pub trait Wal<S> {
           ent_len_size, meta.packed_kvlen_size,
         );
 
-        buf.put_u8_unchecked(ent.flag.bits());
-        let ptr = buf.as_mut_ptr();
-        let (ko, vo) = if let Some(version) = ent.internal_version() {
-          buf.put_u64_le_unchecked(version);
-
-          (cursor + meta.key_offset(), cursor + meta.value_offset())
-        } else {
-          (cursor + meta.key_offset(), cursor + meta.value_offset())
-        };
+        let ptr = buf.as_mut_ptr();        
         let kp = ptr.add(ko);
         let vp = ptr.add(vo);
         buf.set_len(cursor + meta.value_offset());
@@ -675,9 +678,7 @@ pub trait Wal<S> {
         }
 
         let entry_size = meta.entry_size as usize;
-        // TODO:
-        let p = RecordPointer::new(ko as u32, meta.klen as u32);
-        ent.set_pointer(p);
+        ent.set_pointer(RecordPointer::new(entry_offset as u32));
         cursor += entry_size;
       }
 
@@ -813,7 +814,7 @@ pub trait Constructable: Sized {
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  fn replay<'a>(
+  fn replay(
     arena: Self::Allocator,
     opts: Options,
     memtable_opts: <Self::Memtable as BaseTable>::Options,
@@ -825,6 +826,7 @@ pub trait Constructable: Sized {
   {
     use crate::{types::Kind, utils::split_lengths};
     use dbutils::leb128::decode_u64_varint;
+    use rarena_allocator::IncompleteBuffer;
 
     let slice = arena.reserved_slice();
     let mut cursor = 0;
@@ -846,7 +848,7 @@ pub trait Constructable: Sized {
     }
 
     let set =
-      <Self::Wal as Wal<Self::Checksumer>>::Memtable::new(Arena::new(arena.clone()), memtable_opts)
+      <Self::Wal as Wal<Self::Checksumer>>::Memtable::new(arena.clone(), memtable_opts)
         .map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
@@ -867,13 +869,42 @@ pub trait Constructable: Sized {
           break;
         }
 
-        let header = arena.get_u8(cursor).unwrap();
+        let header = arena.get_u8_unchecked(cursor);
         let flag = Flags::from_bits_retain(header);
 
         if !flag.contains(Flags::BATCHING) {
+          let mut sub_cursor = cursor + RECORD_FLAG_SIZE;
+          let entry_offset = sub_cursor;
+          let entry_flag = arena
+            .get_u8(sub_cursor)
+            .map_err(|e| {
+              #[cfg(feature = "tracing")]
+              tracing::error!(err=%e);
+
+              Error::corrupted(e)
+            })?;
+          sub_cursor += RECORD_FLAG_SIZE;
+          
+          let entry_flag = EntryFlags::from_bits_retain(entry_flag);
+          let version = if entry_flag.contains(EntryFlags::VERSIONED) {
+            let version = arena.get_u64_le(sub_cursor)
+              .map_err(|e| {
+                #[cfg(feature = "tracing")]
+                tracing::error!(err=%e);
+
+                Error::corrupted(e)
+              })?;
+            sub_cursor += VERSION_SIZE;
+            minimum_version = minimum_version.min(version);
+            maximum_version = maximum_version.max(version);
+            Some(version)
+          } else {
+            None
+          };
+
           let (readed, encoded_len) =
             arena
-              .get_u64_varint(cursor + RECORD_FLAG_SIZE)
+              .get_u64_varint(sub_cursor)
               .map_err(|e| {
                 #[cfg(feature = "tracing")]
                 tracing::error!(err=%e);
@@ -883,24 +914,10 @@ pub trait Constructable: Sized {
           let (key_len, value_len) = split_lengths(encoded_len);
           let key_len = key_len as usize;
           let value_len = value_len as usize;
-          let entry_flag = arena
-            .get_u8(cursor + RECORD_FLAG_SIZE + readed)
-            .map_err(|e| {
-              #[cfg(feature = "tracing")]
-              tracing::error!(err=%e);
+          sub_cursor += readed + key_len + value_len;
 
-              Error::corrupted(e)
-            })?;
-
-          let entry_flag = EntryFlags::from_bits_retain(entry_flag);
-          let version_size = if entry_flag.contains(EntryFlags::VERSIONED) {
-            VERSION_SIZE
-          } else {
-            0
-          };
           // Same as above, if we reached the end of the arena, we should discard the remaining.
-          let cks_offset =
-            RECORD_FLAG_SIZE + readed + EntryFlags::SIZE + version_size + key_len + value_len;
+          let cks_offset = sub_cursor - cursor;
           if cks_offset + CHECKSUM_SIZE > allocated {
             // If the entry is committed, then it means our file is truncated, so we should report corrupted.
             if flag.contains(Flags::COMMITTED) {
@@ -915,12 +932,12 @@ pub trait Constructable: Sized {
             break;
           }
 
-          let cks = arena.get_u64_le(cursor + cks_offset).unwrap();
+          let cks = arena.get_u64_le_unchecked(cursor + cks_offset);
           if cks != checksumer.checksum_one(arena.get_bytes(cursor, cks_offset)) {
             return Err(Error::corrupted("checksum mismatch"));
           }
 
-          // If the entry is not committed, we should not rewind
+          // If the entry is not committed, we should rewind
           if !flag.contains(Flags::COMMITTED) {
             if !ro {
               arena.rewind(ArenaPosition::Start(cursor as u32));
@@ -930,33 +947,17 @@ pub trait Constructable: Sized {
             break;
           }
 
-          let eoffset = cursor + RECORD_FLAG_SIZE + readed;
-          let ptr = arena.get_pointer(eoffset);
-          let flag = EntryFlags::from_bits_retain(*ptr);
-
-          let (version, ko) = if flag.contains(EntryFlags::VERSIONED) {
-            let version_ptr = ptr.add(EntryFlags::SIZE);
-            let version = u64::from_le_bytes(
-              core::slice::from_raw_parts(version_ptr, VERSION_SIZE)
-                .try_into()
-                .unwrap(),
-            );
-            minimum_version = minimum_version.min(version);
-            maximum_version = maximum_version.max(version);
-            (Some(version), eoffset + EntryFlags::SIZE + VERSION_SIZE)
-          } else {
-            (None, eoffset + EntryFlags::SIZE)
-          };
-
-          let kp = RecordPointer::new(flag, ko as u32, key_len as u32);
-          if flag.contains(EntryFlags::REMOVED) {
-            set.remove(version, kp).map_err(Error::memtable)?;
-          } else {
-            let vp = ValuePointer::new((ko + key_len) as u32, value_len as u32);
-            set.insert(version, kp, vp).map_err(Error::memtable)?;
+          let pointer = RecordPointer::new(entry_offset as u32);
+          
+          match () {
+            _ if entry_flag.contains(EntryFlags::REMOVED) => set.remove(version, pointer).map_err(Error::memtable)?,
+            _ if entry_flag.contains(EntryFlags::RANGE_DELETION) => set.range_remove(version, pointer).map_err(Error::memtable)?,
+            _ if entry_flag.contains(EntryFlags::RANGE_SET) => set.range_set(version, pointer).map_err(Error::memtable)?,
+            _ if entry_flag.contains(EntryFlags::RANGE_UNSET) => set.range_unset(version, pointer).map_err(Error::memtable)?,
+            _ => set.insert(version, pointer).map_err(Error::memtable)?,
           }
 
-          cursor += cks_offset + CHECKSUM_SIZE;
+          cursor = sub_cursor + CHECKSUM_SIZE;
         } else {
           let (readed, encoded_len) =
             arena
@@ -995,7 +996,29 @@ pub trait Constructable: Sized {
           let mut sub_cursor = 0;
           batch_data_buf = &batch_data_buf[RECORD_FLAG_SIZE + readed..];
           for _ in 0..num_entries {
-            let (kvlen, ent_len) = decode_u64_varint(batch_data_buf).map_err(|e| {
+            if batch_data_buf.len() < EntryFlags::SIZE {
+              return Err(Error::corrupted(IncompleteBuffer::new()));
+            }
+
+            let mut entry_cursor = 0;
+            let entry_flag = EntryFlags::from_bits_retain(batch_data_buf[0]);
+            entry_cursor += EntryFlags::SIZE;
+
+            let version = if entry_flag.contains(EntryFlags::VERSIONED) {
+              if batch_data_buf.len() < entry_cursor + VERSION_SIZE {
+                return Err(Error::corrupted(IncompleteBuffer::new()));
+              }
+
+              let version = u64::from_le_bytes(batch_data_buf[entry_cursor..entry_cursor + VERSION_SIZE].try_into().unwrap());
+              entry_cursor += VERSION_SIZE;
+              minimum_version = minimum_version.min(version);
+              maximum_version = maximum_version.max(version);
+              Some(version)
+            } else {
+              None
+            };
+
+            let (kvlen, ent_len) = decode_u64_varint(&batch_data_buf[entry_cursor..]).map_err(|e| {
               #[cfg(feature = "tracing")]
               tracing::error!(err=%e);
 
@@ -1006,40 +1029,21 @@ pub trait Constructable: Sized {
             let klen = klen as usize;
             let vlen = vlen as usize;
 
-            let eoffset = cursor + RECORD_FLAG_SIZE + readed + sub_cursor + kvlen;
-            let ptr = arena.get_pointer(eoffset);
-            let flag = EntryFlags::from_bits_retain(*ptr);
+            let entry_offset = cursor + RECORD_FLAG_SIZE + readed + sub_cursor;
 
-            let (version, ent_len, ko) = if flag.contains(EntryFlags::VERSIONED) {
-              let version_ptr = ptr.add(EntryFlags::SIZE);
-              let version = u64::from_le_bytes(
-                core::slice::from_raw_parts(version_ptr, VERSION_SIZE)
-                  .try_into()
-                  .unwrap(),
-              );
-              minimum_version = minimum_version.min(version);
-              maximum_version = maximum_version.max(version);
-              let ent_len = kvlen + EntryFlags::SIZE + VERSION_SIZE + klen + vlen;
-              (
-                Some(version),
-                ent_len,
-                eoffset + EntryFlags::SIZE + VERSION_SIZE,
-              )
-            } else {
-              let ent_len = kvlen + EntryFlags::SIZE + klen + vlen;
-              (None, ent_len, eoffset + EntryFlags::SIZE)
-            };
+            let pointer = RecordPointer::new(entry_offset as u32);
 
-            let kp = RecordPointer::new(flag, ko as u32, klen as u32);
-            if flag.contains(EntryFlags::REMOVED) {
-              set.remove(version, kp).map_err(Error::memtable)?;
-            } else {
-              let vp = ValuePointer::new((ko + klen) as u32, vlen as u32);
-              set.insert(version, kp, vp).map_err(Error::memtable)?;
+            match () {
+              _ if entry_flag.contains(EntryFlags::REMOVED) => set.remove(version, pointer).map_err(Error::memtable)?,
+              _ if entry_flag.contains(EntryFlags::RANGE_DELETION) => set.range_remove(version, pointer).map_err(Error::memtable)?,
+              _ if entry_flag.contains(EntryFlags::RANGE_SET) => set.range_set(version, pointer).map_err(Error::memtable)?,
+              _ if entry_flag.contains(EntryFlags::RANGE_UNSET) => set.range_unset(version, pointer).map_err(Error::memtable)?,
+              _ => set.insert(version, pointer).map_err(Error::memtable)?,
             }
 
-            sub_cursor += ent_len;
-            batch_data_buf = &batch_data_buf[ent_len..];
+            entry_cursor += kvlen + klen + vlen;
+            sub_cursor += entry_cursor;
+            batch_data_buf = &batch_data_buf[entry_cursor..];
           }
 
           debug_assert_eq!(

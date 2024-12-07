@@ -4,7 +4,6 @@ use crate::{
   options::{arena_options, Options},
 };
 use dbutils::checksum::Crc32;
-use skl::KeySize;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -230,13 +229,13 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, KeySize, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, multiple_version::DefaultTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_key_size(KeySize::with(1024));
-  /// assert_eq!(options.maximum_key_size(), KeySize::with(1024));
+  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
+  /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
-  pub const fn maximum_key_size(&self) -> KeySize {
+  pub const fn maximum_key_size(&self) -> u32 {
     self.opts.maximum_key_size()
   }
 
@@ -301,11 +300,11 @@ where
   /// ```rust
   /// use orderwal::{Builder, KeySize, multiple_version::DefaultTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_key_size(KeySize::with(1024));
-  /// assert_eq!(options.maximum_key_size(), KeySize::with(1024));
+  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
+  /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
-  pub const fn with_maximum_key_size(mut self, size: KeySize) -> Self {
+  pub const fn with_maximum_key_size(mut self, size: u32) -> Self {
     self.opts = self.opts.with_maximum_key_size(size);
     self
   }

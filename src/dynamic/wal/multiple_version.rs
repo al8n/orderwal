@@ -7,7 +7,7 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, checksum::BuildChecksumer};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::{either::Either, KeySize};
+use skl::either::Either;
 
 use crate::{
   dynamic::{
@@ -43,7 +43,7 @@ pub trait Reader: Constructable {
 
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
-  fn maximum_key_size(&self) -> KeySize {
+  fn maximum_key_size(&self) -> u32 {
     self.as_wal().maximum_key_size()
   }
 
@@ -175,7 +175,7 @@ pub trait Reader: Constructable {
   fn upper_bound<'a, Q>(
     &'a self,
     version: u64,
-    bound: Bound<&Q>,
+    bound: Bound<&'a Q>,
   ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
@@ -191,7 +191,7 @@ pub trait Reader: Constructable {
   fn lower_bound<'a, Q>(
     &'a self,
     version: u64,
-    bound: Bound<&Q>,
+    bound: Bound<&'a Q>,
   ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
