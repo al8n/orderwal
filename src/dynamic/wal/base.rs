@@ -149,10 +149,7 @@ pub trait Reader: Constructable {
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(
-    &'a self,
-    key: &Q,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: Memtable,
@@ -258,8 +255,7 @@ where
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
   {
-    Wal::insert(self.as_wal(), None, kb, value)
-      .map_err(Among::into_left_right)
+    Wal::insert(self.as_wal(), None, kb, value).map_err(Among::into_left_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -277,8 +273,7 @@ where
     Self::Memtable: BaseTable,
     <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
   {
-    Wal::insert(self.as_wal(), None, key, vb)
-      .map_err(Among::into_middle_right)
+    Wal::insert(self.as_wal(), None, key, vb).map_err(Among::into_middle_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method

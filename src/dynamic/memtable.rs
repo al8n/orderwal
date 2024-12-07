@@ -200,20 +200,34 @@ pub trait Memtable: BaseTable {
   }
 
   /// Returns the upper bound of the memtable.
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Entry<'_>>
+  fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    self
+      .range::<Q, _>((Bound::Unbounded, bound))
+      .next_back()
+  }
 
   /// Returns the lower bound of the memtable.
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Entry<'_>>
+  fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    self
+      .range::<Q, _>((bound, Bound::Unbounded))
+      .next()
+  }
 
   /// Returns the first pointer in the memtable.
-  fn first(&self) -> Option<Self::Entry<'_>>;
+  fn first(&self) -> Option<Self::Entry<'_>> {
+    self.iter().next()
+  }
 
   /// Returns the last pointer in the memtable.
-  fn last(&self) -> Option<Self::Entry<'_>>;
+  fn last(&self) -> Option<Self::Entry<'_>> {
+    self.iter().next_back()
+  }
 
   /// Returns the pointer associated with the key.
   fn get<Q>(&self, key: &Q) -> Option<Self::Entry<'_>>
@@ -223,7 +237,10 @@ pub trait Memtable: BaseTable {
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains<Q>(&self, key: &Q) -> bool
   where
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized + Borrow<[u8]>
+  {
+    self.get(key).is_some()
+  }
 
   /// Returns an iterator over the memtable.
   fn iter(&self) -> Self::Iterator<'_>;
@@ -233,18 +250,39 @@ pub trait Memtable: BaseTable {
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
+  
+  /// Returns an iterator over point entries in the memtable.
+  fn point_iter(&self) -> Self::PointsIterator<'_, Active>;
 
-  /// Inserts a pointer into the memtable.
-  fn insert(&self, pointer: RecordPointer) -> Result<(), Self::Error>;
+  /// Returns an iterator over a subset of point entries in the memtable.
+  fn point_range<'a, Q, R>(&'a self, range: R) -> Self::RangePoints<'a, Active, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 
-  /// Removes the pointer associated with the key.
-  fn remove(&self, key: RecordPointer) -> Result<(), Self::Error>;
+  /// Returns an iterator over range deletions entries in the memtable.
+  fn bulk_deletions_iter(&self) -> Self::BulkDeletionsIterator<'_, Active>;
 
-  /// Inserts a range deletion pointer into the memtable.
-  fn remove_range(&self, pointer: RecordPointer) -> Result<(), Self::Error>;
+  /// Returns an iterator over a subset of range deletions entries in the memtable.
+  fn bulk_deletions_range<'a, Q, R>(
+    &'a self,
+    range: R,
+  ) -> Self::BulkDeletionsRange<'a, Active, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 
-  /// Inserts an range update pointer into the memtable.
-  fn update_range(&self, pointer: RecordPointer) -> Result<(), Self::Error>;
+  /// Returns an iterator over range updates entries in the memtable.
+  fn bulk_updates_iter(&self) -> Self::BulkUpdatesIterator<'_, Active>;
+
+  /// Returns an iterator over a subset of range updates entries in the memtable.
+  fn bulk_updates_range<'a, Q, R>(
+    &'a self,
+    range: R,
+  ) -> Self::BulkUpdatesRange<'a, Active, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.

@@ -34,11 +34,263 @@ use skl::{
   Active, Arena as _, MaybeTombstone, Options,
 };
 
-mod entry;
-mod iter;
-mod point;
-mod range_deletion;
-mod range_update;
+macro_rules! range_entry_wrapper {
+  (
+    $(#[$meta:meta])*
+    $ent:ident($inner:ident => $raw:ident.$fetch:ident) $(::$version:ident)?
+  ) => {
+    $(#[$meta])*
+    pub struct $ent<'a, S, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+    {
+      ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::dynamic::memtable::bounded::MemtableRangeComparator<C>>,
+      data: core::cell::OnceCell<$crate::types::$raw<'a>>,
+    }
+
+    impl<'a, S, C> Clone for $ent<'a, S, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+    {
+      #[inline]
+      fn clone(&self) -> Self {
+        Self {
+          ent: self.ent.clone(),
+          data: self.data.clone(),
+        }
+      }
+    }
+
+    impl<'a, S, C> $ent<'a, S, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+    {
+      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::dynamic::memtable::bounded::MemtableRangeComparator<C>>) -> Self {
+        Self {
+          ent,
+          data: core::cell::OnceCell::new(),
+        }
+      }
+    }
+
+    impl<'a, S, C> $crate::dynamic::memtable::RangeEntry<'a> for $ent<'a, S, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+      S: $crate::dynamic::types::State<'a>,
+    {
+      #[inline]
+      fn start_bound(&self) -> core::ops::Bound<&'a [u8]> {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
+        ent.start_bound()
+      }
+
+      #[inline]
+      fn end_bound(&self) -> core::ops::Bound<&'a [u8]> {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
+        ent.end_bound()
+      }
+
+      #[inline]
+      fn next(&mut self) -> Option<Self> {
+        self.ent.next().map(Self::new)
+      }
+
+      #[inline]
+      fn prev(&mut self) -> Option<Self> {
+        self.ent.prev().map(Self::new)
+      }
+    }
+
+    $(
+      impl<'a, S, C> $crate::WithVersion for $ent<'a, S, C>
+      where
+        C: dbutils::equivalentor::BytesComparator,
+        S: $crate::dynamic::types::State<'a>,
+      {
+        #[inline]
+        fn $version(&self) -> u64 {
+          self.ent.$version()
+        }
+      }
+    )?
+  };
+}
+
+macro_rules! range_deletion_wrapper {
+  (
+    $(#[$meta:meta])*
+    $ent:ident($inner:ident) $(::$version:ident)?
+  ) => {
+    range_entry_wrapper! {
+      $(#[$meta])*
+      $ent($inner => RawRangeDeletionRef.fetch_range_deletion) $(::$version)?
+    }
+
+    impl<'a, S, C> crate::dynamic::memtable::RangeDeletionEntry<'a>
+      for $ent<'a, S, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+      S: $crate::dynamic::types::State<'a>,
+    {
+    }
+  };
+}
+
+macro_rules! range_update_wrapper {
+  (
+    $(#[$meta:meta])*
+    $ent:ident($inner:ident) $(::$version:ident)?
+  ) => {
+    range_entry_wrapper! {
+      $(#[$meta])*
+      $ent($inner => RawRangeUpdateRef.fetch_range_update) $(::$version)?
+    }
+
+    impl<'a, C> crate::dynamic::memtable::RangeUpdateEntry<'a>
+      for $ent<'a, $crate::dynamic::types::MaybeTombstone, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+    {
+      type Value = Option<&'a [u8]>;
+
+      #[inline]
+      fn value(&self) -> Self::Value {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
+        ent.value()
+      }
+    }
+
+    impl<'a, C> crate::dynamic::memtable::RangeUpdateEntry<'a>
+      for $ent<'a, $crate::dynamic::types::Active, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+    {
+      type Value = &'a [u8];
+
+      #[inline]
+      fn value(&self) -> Self::Value {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
+        ent.value().expect("entry in Active state must have a value")
+      }
+    }
+  };
+}
+
+macro_rules! iter_wrapper {
+  (
+    $(#[$meta:meta])*
+    $iter:ident($inner:ident) yield $ent:ident by $cmp:ident
+  ) => {
+    $(#[$meta])*
+    pub struct $iter<'a, S, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+    {
+      iter: $inner<'a, $crate::types::RecordPointer, (), S, $crate::dynamic::memtable::bounded::$cmp<C>>,
+    }
+
+    impl<'a, S, C> $iter<'a, S, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+    {
+      #[inline]
+      pub(super) const fn new(iter: $inner<'a, $crate::types::RecordPointer, (), S, $crate::dynamic::memtable::bounded::$cmp<C>>) -> Self {
+        Self { iter }
+      }
+    }
+
+    impl<'a, S, C> Iterator for $iter<'a, S, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+      S: $crate::dynamic::types::State<'a>,
+
+    {
+      type Item = $ent<'a, S, C>;
+
+      #[inline]
+      fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map($ent::new)
+      }
+    }
+
+    impl<'a, S, C> DoubleEndedIterator for $iter<'a, S, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+      S: $crate::dynamic::types::State<'a>,
+
+    {
+      #[inline]
+      fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back().map($ent::new)
+      }
+    }
+  };
+}
+
+macro_rules! range_wrapper {
+  (
+    $(#[$meta:meta])*
+    $iter:ident($inner:ident) yield $ent:ident by $cmp:ident
+  ) => {
+    $(#[$meta])*
+    pub struct $iter<'a, S, Q, R, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+      Q: ?Sized,
+    {
+      range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, $crate::dynamic::memtable::bounded::$cmp<C>>,
+    }
+
+    impl<'a, S, Q, R, C> $iter<'a, S, Q, R, C>
+    where
+      S: $crate::dynamic::types::State<'a>,
+      Q: ?Sized,
+    {
+      #[inline]
+      pub(super) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, $crate::dynamic::memtable::bounded::$cmp<C>>) -> Self {
+        Self { range }
+      }
+    }
+
+    impl<'a, S, Q, R, C> Iterator for $iter<'a, S, Q, R, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+      S: $crate::dynamic::types::State<'a>,
+      R: core::ops::RangeBounds<Q>,
+      Q: ?Sized + core::borrow::Borrow<[u8]>,
+    {
+      type Item = $ent<'a, S, C>;
+
+      #[inline]
+      fn next(&mut self) -> Option<Self::Item> {
+        self.range.next().map($ent::new)
+      }
+    }
+
+    impl<'a, S, Q, R, C> DoubleEndedIterator for $iter<'a, S, Q, R, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+      S: $crate::dynamic::types::State<'a>,
+
+      R: core::ops::RangeBounds<Q>,
+      Q: ?Sized + core::borrow::Borrow<[u8]>,
+    {
+      #[inline]
+      fn next_back(&mut self) -> Option<Self::Item> {
+        self.range.next_back().map($ent::new)
+      }
+    }
+  };
+}
+
 
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
 pub struct MultipleVersionTable<C = Ascend> {
@@ -442,3 +694,9 @@ where
     )))
   }
 }
+
+mod entry;
+mod iter;
+mod point;
+mod range_deletion;
+mod range_update;

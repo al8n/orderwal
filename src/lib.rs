@@ -68,3 +68,16 @@ pub trait WithoutVersion {}
 
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
+
+/// A marker trait which indicates that the mode of the WAL.
+pub trait Mode: sealed::Sealed {}
+
+/// The unique version mode, which allows only one version of the same key.
+pub struct Unique;
+
+/// The multiple version mode, which allows multiple versions of the same key.
+pub struct MultipleVersion;
+
+mod sealed {
+  pub trait Sealed {}
+}

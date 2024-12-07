@@ -99,8 +99,7 @@ impl EncodedEntryMeta {
     let len = merge_lengths(key_len as u32, value_len as u32);
     let len_size = encoded_u64_varint_len(len);
     let version_size = if versioned { VERSION_SIZE } else { 0 };
-    let elen = 
-      EntryFlags::SIZE as u32
+    let elen = EntryFlags::SIZE as u32
       + version_size as u32
       + len_size as u32
       + key_len as u32
@@ -206,7 +205,7 @@ builder_ext!(ValueBuilder, KeyBuilder,);
 #[non_exhaustive]
 pub enum Kind {
   /// The Write-Ahead Log is plain, which means it does not support multiple versions.
-  Plain = 0,
+  Unique = 0,
   /// The Write-Ahead Log supports multiple versions.
   MultipleVersion = 1,
 }
@@ -218,7 +217,7 @@ impl TryFrom<u8> for Kind {
   #[inline]
   fn try_from(value: u8) -> Result<Self, Self::Error> {
     Ok(match value {
-      0 => Self::Plain,
+      0 => Self::Unique,
       1 => Self::MultipleVersion,
       _ => return Err(crate::error::UnknownKind(value)),
     })
@@ -230,7 +229,7 @@ impl Kind {
   #[inline]
   pub(crate) const fn display_created_err_msg(&self) -> &'static str {
     match self {
-      Self::Plain => "created without multiple versions support",
+      Self::Unique => "created without multiple versions support",
       Self::MultipleVersion => "created with multiple versions support",
     }
   }
@@ -238,91 +237,18 @@ impl Kind {
   #[inline]
   pub(crate) const fn display_open_err_msg(&self) -> &'static str {
     match self {
-      Self::Plain => "opened without multiple versions support",
+      Self::Unique => "opened without multiple versions support",
       Self::MultipleVersion => "opened with multiple versions support",
     }
   }
 }
 
-const PTR_SIZE: usize = mem::size_of::<usize>();
 const U32_SIZE: usize = mem::size_of::<u32>();
-
-#[derive(Clone, Copy)]
-pub struct ValuePointer {
-  offset: u32,
-  len: u32,
-}
-
-impl core::fmt::Debug for ValuePointer {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("ValuePointer")
-      .field("offset", &self.offset)
-      .field("len", &self.len)
-      .finish()
-  }
-}
-
-impl ValuePointer {
-  const SIZE: usize = mem::size_of::<Self>();
-
-  #[inline]
-  pub(crate) const fn new(offset: u32, len: u32) -> Self {
-    Self { offset, len }
-  }
-
-  #[inline]
-  pub const fn offset(&self) -> usize {
-    self.offset as usize
-  }
-
-  #[inline]
-  pub const fn len(&self) -> usize {
-    self.len as usize
-  }
-
-  #[inline]
-  pub(crate) fn as_array(&self) -> [u8; Self::SIZE] {
-    let mut array = [0; Self::SIZE];
-    {
-      let mut buf = VacantBuffer::from(array.as_mut());
-      self.encode_to_buffer(&mut buf).unwrap();
-    }
-    array
-  }
-}
-
-impl Type for ValuePointer {
-  type Ref<'a> = Self;
-
-  type Error = InsufficientBuffer;
-
-  #[inline]
-  fn encoded_len(&self) -> usize {
-    Self::SIZE
-  }
-
-  #[inline]
-  fn encode_to_buffer(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
-    buf
-      .put_u32_le(self.offset)
-      .and_then(|_| buf.put_u32_le(self.len))
-      .map(|_| Self::SIZE)
-  }
-}
-
-impl<'a> TypeRef<'a> for ValuePointer {
-  #[inline]
-  unsafe fn from_slice(src: &'a [u8]) -> Self {
-    let offset = u32::from_le_bytes(src[..4].try_into().unwrap());
-    let len = u32::from_le_bytes(src[4..Self::SIZE].try_into().unwrap());
-    Self { offset, len }
-  }
-}
 
 /// The pointer to a record in the WAL.
 #[derive(Clone, Copy)]
 pub struct RecordPointer {
-  offset: u32, 
+  offset: u32,
 }
 
 impl core::fmt::Debug for RecordPointer {
