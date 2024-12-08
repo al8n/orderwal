@@ -1,21 +1,16 @@
 use skl::generic::unique::sync::{Entry, Iter, Range};
 
-use crate::{dynamic::memtable::{bounded::comparator::MemtableComparator, MemtableEntry}, types::{RawEntryRef, RecordPointer}};
+use crate::{
+  dynamic::memtable::{bounded::comparator::MemtableComparator, MemtableEntry},
+  types::{RawEntryRef, RecordPointer},
+};
 
 /// Point entry.
 pub struct PointEntry<'a, C> {
-  ent: Entry<
-    'a,
-    RecordPointer,
-    (),
-    MemtableComparator<C>,
-  >,
+  ent: Entry<'a, RecordPointer, (), MemtableComparator<C>>,
   data: core::cell::OnceCell<RawEntryRef<'a>>,
 }
-impl<C> Clone for PointEntry<'_, C>
-where
-  C: Clone,
-{
+impl<C> Clone for PointEntry<'_, C> {
   #[inline]
   fn clone(&self) -> Self {
     Self {
@@ -26,14 +21,7 @@ where
 }
 impl<'a, C> PointEntry<'a, C> {
   #[inline]
-  pub(super) fn new(
-    ent: Entry<
-      'a,
-      RecordPointer,
-      (),
-      MemtableComparator<C>,
-    >,
-  ) -> Self {
+  pub(super) fn new(ent: Entry<'a, RecordPointer, (), MemtableComparator<C>>) -> Self {
     Self {
       ent,
       data: core::cell::OnceCell::new(),
@@ -41,8 +29,7 @@ impl<'a, C> PointEntry<'a, C> {
   }
 }
 
-impl<'a, C> MemtableEntry<'a>
-  for PointEntry<'a, C>
+impl<'a, C> MemtableEntry<'a> for PointEntry<'a, C>
 where
   C: dbutils::equivalentor::BytesComparator,
 {
@@ -72,7 +59,6 @@ where
     self.ent.prev().map(Self::new)
   }
 }
-
 
 iter_wrapper!(
   /// The iterator for point entries.

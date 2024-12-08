@@ -2,10 +2,10 @@ use among::Among;
 use dbutils::error::InsufficientBuffer;
 use derive_where::derive_where;
 
-use crate::dynamic::memtable::BaseTable;
+use crate::memtable::Memtable;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-use crate::types::Kind;
+use crate::types::Mode;
 
 /// The batch error type.
 #[derive(Debug)]
@@ -46,7 +46,7 @@ impl core::error::Error for BatchError {}
 
 /// The error type.
 #[derive_where(Debug; T::Error)]
-pub enum Error<T: BaseTable> {
+pub enum Error<T: Memtable> {
   /// Insufficient space in the WAL
   InsufficientSpace(InsufficientBuffer),
   /// Memtable does not have enough space.
@@ -82,16 +82,16 @@ pub enum Error<T: BaseTable> {
   /// Unknown WAL kind.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  UnknownKind(UnknownKind),
+  UnknownMode(UnknownMode),
 
   /// WAL kind mismatch.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  KindMismatch {
+  ModeMismatch {
     /// The WAL was created with this kind.
-    create: Kind,
+    create: Mode,
     /// Trying to open the WAL with this kind.
-    open: Kind,
+    open: Mode,
   },
 
   /// I/O error.
@@ -100,7 +100,7 @@ pub enum Error<T: BaseTable> {
   IO(std::io::Error),
 }
 
-impl<T: BaseTable> From<BatchError> for Error<T> {
+impl<T: Memtable> From<BatchError> for Error<T> {
   #[inline]
   fn from(e: BatchError) -> Self {
     Self::Batch(e)
@@ -108,15 +108,15 @@ impl<T: BaseTable> From<BatchError> for Error<T> {
 }
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl<T: BaseTable> From<UnknownKind> for Error<T> {
+impl<T: Memtable> From<UnknownMode> for Error<T> {
   #[inline]
-  fn from(e: UnknownKind) -> Self {
-    Self::UnknownKind(e)
+  fn from(e: UnknownMode) -> Self {
+    Self::UnknownMode(e)
   }
 }
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl<T: BaseTable> From<std::io::Error> for Error<T> {
+impl<T: Memtable> From<std::io::Error> for Error<T> {
   #[inline]
   fn from(e: std::io::Error) -> Self {
     Self::IO(e)
@@ -125,7 +125,7 @@ impl<T: BaseTable> From<std::io::Error> for Error<T> {
 
 impl<T> core::fmt::Display for Error<T>
 where
-  T: BaseTable,
+  T: Memtable,
   T::Error: core::fmt::Display,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -160,9 +160,9 @@ where
       Self::ReadOnly => write!(f, "The WAL is read-only"),
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::UnknownKind(e) => write!(f, "{e}"),
+      Self::UnknownMode(e) => write!(f, "{e}"),
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::KindMismatch { create, open } => write!(
+      Self::ModeMismatch { create, open } => write!(
         f,
         "the wal was {}, cannot be {}",
         create.display_created_err_msg(),
@@ -176,7 +176,7 @@ where
 
 impl<T> core::error::Error for Error<T>
 where
-  T: BaseTable,
+  T: Memtable,
   T::Error: core::error::Error + 'static,
 {
   fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
@@ -190,16 +190,16 @@ where
       Self::ReadOnly => None,
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::UnknownKind(e) => Some(e),
+      Self::UnknownMode(e) => Some(e),
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::KindMismatch { .. } => None,
+      Self::ModeMismatch { .. } => None,
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       Self::IO(e) => Some(e),
     }
   }
 }
 
-impl<T: BaseTable> From<Among<InsufficientBuffer, InsufficientBuffer, Error<T>>> for Error<T> {
+impl<T: Memtable> From<Among<InsufficientBuffer, InsufficientBuffer, Error<T>>> for Error<T> {
   #[inline]
   fn from(value: Among<InsufficientBuffer, InsufficientBuffer, Error<T>>) -> Self {
     match value {
@@ -210,7 +210,7 @@ impl<T: BaseTable> From<Among<InsufficientBuffer, InsufficientBuffer, Error<T>>>
   }
 }
 
-impl<T: BaseTable> Error<T> {
+impl<T: Memtable> Error<T> {
   /// Create a new `Error::InsufficientSpace` instance.
   #[inline]
   pub(crate) const fn insufficient_space(requested: u64, available: u32) -> Self {
@@ -266,8 +266,8 @@ impl<T: BaseTable> Error<T> {
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(crate) const fn wal_kind_mismatch(create: Kind, open: Kind) -> Self {
-    Self::KindMismatch { create, open }
+  pub(crate) const fn wal_kind_mismatch(create: Mode, open: Mode) -> Self {
+    Self::ModeMismatch { create, open }
   }
 
   /// Create a new corrupted error.
@@ -335,14 +335,14 @@ impl<T: BaseTable> Error<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-pub struct UnknownKind(pub(super) u8);
+pub struct UnknownMode(pub(super) u8);
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl core::fmt::Display for UnknownKind {
+impl core::fmt::Display for UnknownMode {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     write!(f, "unknown WAL kind: {}", self.0)
   }
 }
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl core::error::Error for UnknownKind {}
+impl core::error::Error for UnknownMode {}

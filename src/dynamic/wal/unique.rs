@@ -12,11 +12,11 @@ use skl::either::Either;
 use crate::{
   dynamic::{
     batch::Batch,
-    memtable::{BaseTable, Memtable},
     sealed::{Constructable, Wal, WalReader},
     types::BufWriter,
   },
   error::Error,
+  memtable::{dynamic::unique::DynamicMemtable, Memtable},
   types::{KeyBuilder, ValueBuilder},
   Options, WithoutVersion,
 };
@@ -93,10 +93,10 @@ pub trait Reader: Constructable {
   #[inline]
   fn iter<'a>(
     &'a self,
-  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a>
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::Iterator<'a>
   where
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().iter()
   }
@@ -106,32 +106,32 @@ pub trait Reader: Constructable {
   fn range<'a, Q, R>(
     &'a self,
     range: R,
-  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Range<'a, Q, R>
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::Range<'a, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().range(range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first<'a>(&'a self) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn first<'a>(&'a self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().first()
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last<'a>(&'a self) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn last<'a>(&'a self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     let wal = self.as_wal();
     WalReader::last(wal)
@@ -142,18 +142,18 @@ pub trait Reader: Constructable {
   fn contains_key<Q>(&self, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: Memtable,
+    Self::Memtable: DynamicMemtable,
   {
     self.as_wal().contains_key(key)
   }
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().get(key)
   }
@@ -163,12 +163,12 @@ pub trait Reader: Constructable {
   #[inline]
   fn upper_bound<'a, Q>(
     &'a self,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().upper_bound(bound)
   }
@@ -178,12 +178,12 @@ pub trait Reader: Constructable {
   #[inline]
   fn lower_bound<'a, Q>(
     &'a self,
-    bound: Bound<&Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: Memtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().lower_bound(bound)
   }
@@ -252,8 +252,8 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     Wal::insert(self.as_wal(), None, kb, value).map_err(Among::into_left_right)
   }
@@ -270,8 +270,8 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     Wal::insert(self.as_wal(), None, key, vb).map_err(Among::into_middle_right)
   }
@@ -286,8 +286,8 @@ where
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     Wal::insert(self.as_wal(), None, kb, vb)
   }
@@ -297,8 +297,8 @@ where
   fn insert<'a>(&'a mut self, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     Wal::insert(self.as_wal(), None, key, value).map_err(Among::unwrap_right)
   }
@@ -312,8 +312,8 @@ where
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().remove(None, kb)
   }
@@ -323,12 +323,12 @@ where
   fn remove<'a>(&'a mut self, key: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self
       .as_wal()
-      .remove::<&[u8]>(None, key.into())
+      .remove::<&[u8]>(None, key)
       .map_err(Either::unwrap_right)
   }
 
@@ -340,8 +340,8 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -360,8 +360,8 @@ where
     B::Key: BufWriter,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -380,8 +380,8 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self
       .as_wal()
@@ -400,8 +400,8 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: BaseTable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithoutVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }

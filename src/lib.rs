@@ -6,7 +6,7 @@
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity)]
 
-use core::{mem, slice};
+use core::mem;
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -36,7 +36,7 @@ const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;
 const MAGIC_TEXT: [u8; 5] = *b"order";
 const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
-const WAL_KIND_SIZE: usize = mem::size_of::<types::Kind>();
+const WAL_KIND_SIZE: usize = mem::size_of::<types::Mode>();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
 const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + WAL_KIND_SIZE + MAGIC_VERSION_SIZE;
 /// The mvcc version size.
@@ -50,6 +50,9 @@ mod types;
 
 /// Dynamic ordered write-ahead log implementation.
 pub mod dynamic;
+
+/// a
+pub mod memtable;
 
 // /// Generic ordered write-ahead log implementation.
 // pub mod generic;
@@ -69,15 +72,19 @@ pub trait WithoutVersion {}
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
 
-/// A marker trait which indicates that the mode of the WAL.
-pub trait Mode: sealed::Sealed {}
+/// State of the entry.
+pub trait State<'a>: sealed::Sealed<'a> {}
 
-/// The unique version mode, which allows only one version of the same key.
-pub struct Unique;
+impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
 
-/// The multiple version mode, which allows multiple versions of the same key.
-pub struct MultipleVersion;
+pub use skl::{Active, MaybeTombstone};
 
 mod sealed {
-  pub trait Sealed {}
+  pub trait Sealed<'a>: skl::State<'a>
+  where
+    Self: 'a,
+  {
+  }
+
+  impl<'a, T: skl::State<'a> + 'a> Sealed<'a> for T {}
 }

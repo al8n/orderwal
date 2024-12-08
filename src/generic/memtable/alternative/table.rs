@@ -11,7 +11,7 @@ use {
       },
       wal::{RecordPointer, ValuePointer},
     },
-    types::Kind,
+    types::Mode,
     WithoutVersion,
   },
   core::ops::{Bound, RangeBounds},
@@ -135,7 +135,7 @@ where
   }
 
   #[inline]
-  fn kind() -> Kind {
+  fn mode() -> Kind {
     Kind::Plain
   }
 }

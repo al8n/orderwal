@@ -1,15 +1,14 @@
 use core::marker::PhantomData;
 
-use crate::types::RecordPointer;
+use crate::{memtable::Memtable, types::RecordPointer};
 
 use super::{
   super::types::{EncodedEntryMeta, EntryFlags},
-  memtable::BaseTable,
   types::BufWriter,
 };
 
 /// An entry can be inserted into the WALs through [`Batch`].
-pub struct BatchEntry<K, V, M: BaseTable> {
+pub struct BatchEntry<K, V, M: Memtable> {
   pub(crate) key: K,
   pub(crate) value: Option<V>,
   pub(crate) flag: EntryFlags,
@@ -21,7 +20,7 @@ pub struct BatchEntry<K, V, M: BaseTable> {
 
 impl<K, V, M> BatchEntry<K, V, M>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Creates a new entry.
   #[inline]
@@ -54,7 +53,7 @@ where
 
 impl<K, V, M> BatchEntry<K, V, M>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Creates a new entry with version.
   #[inline]
@@ -102,7 +101,7 @@ where
 
 impl<K, V, M> BatchEntry<K, V, M>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Returns the length of the key.
   #[inline]
@@ -176,7 +175,7 @@ where
 }
 
 /// A trait for batch insertions.
-pub trait Batch<M: BaseTable> {
+pub trait Batch<M: Memtable> {
   /// Any type that can be converted into a key.
   type Key;
   /// Any type that can be converted into a value.
@@ -201,7 +200,7 @@ pub trait Batch<M: BaseTable> {
 
 impl<K, V, M, T> Batch<M> for T
 where
-  M: BaseTable,
+  M: Memtable,
   for<'a> &'a mut T: IntoIterator<Item = &'a mut BatchEntry<K, V, M>>,
 {
   type Key = K;

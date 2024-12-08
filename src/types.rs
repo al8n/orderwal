@@ -149,7 +149,7 @@ impl EncodedEntryMeta {
       self.version_offset() + VERSION_SIZE
     } else {
       self.version_offset()
-    }) + self.packed_kvlen_size as usize
+    }) + self.packed_kvlen_size
   }
 
   #[inline]
@@ -203,7 +203,7 @@ builder_ext!(ValueBuilder, KeyBuilder,);
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 #[non_exhaustive]
-pub enum Kind {
+pub enum Mode {
   /// The Write-Ahead Log is plain, which means it does not support multiple versions.
   Unique = 0,
   /// The Write-Ahead Log supports multiple versions.
@@ -211,21 +211,21 @@ pub enum Kind {
 }
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl TryFrom<u8> for Kind {
-  type Error = crate::error::UnknownKind;
+impl TryFrom<u8> for Mode {
+  type Error = crate::error::UnknownMode;
 
   #[inline]
   fn try_from(value: u8) -> Result<Self, Self::Error> {
     Ok(match value {
       0 => Self::Unique,
       1 => Self::MultipleVersion,
-      _ => return Err(crate::error::UnknownKind(value)),
+      _ => return Err(crate::error::UnknownMode(value)),
     })
   }
 }
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl Kind {
+impl Mode {
   #[inline]
   pub(crate) const fn display_created_err_msg(&self) -> &'static str {
     match self {

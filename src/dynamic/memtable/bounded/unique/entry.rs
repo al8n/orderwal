@@ -3,8 +3,7 @@ use skl::dynamic::BytesComparator;
 use super::PointEntry;
 
 /// a
-pub struct Entry<'a, C>
-{
+pub struct Entry<'a, C> {
   table: &'a super::Table<C>,
   point_ent: PointEntry<'a, C>,
   key: &'a [u8],
@@ -23,10 +22,7 @@ where
   }
 }
 
-impl<C> Clone for Entry<'_, C>
-where
-  C: Clone,
-{
+impl<C> Clone for Entry<'_, C> {
   #[inline]
   fn clone(&self) -> Self {
     Self {
@@ -38,8 +34,7 @@ where
   }
 }
 
-impl<'a, C> Entry<'a, C>
-{
+impl<'a, C> Entry<'a, C> {
   #[inline]
   pub(crate) fn new(
     table: &'a super::Table<C>,

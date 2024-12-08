@@ -11,7 +11,6 @@ use crate::{
     types::State,
   },
   types::{Kind, RecordPointer},
-  WithVersion,
 };
 use among::Among;
 use triomphe::Arc;
@@ -31,6 +30,130 @@ use skl::{
   },
   Active, Arena as _, Options,
 };
+
+macro_rules! range_entry_wrapper {
+  (
+    $(#[$meta:meta])*
+    $ent:ident($inner:ident => $raw:ident.$fetch:ident) $(::$version:ident)?
+  ) => {
+    $(#[$meta])*
+    pub struct $ent<'a, C> {
+      ent: $inner<'a, $crate::types::RecordPointer, (), $crate::dynamic::memtable::bounded::MemtableRangeComparator<C>>,
+      data: core::cell::OnceCell<$crate::types::$raw<'a>>,
+    }
+
+    impl<C> Clone for $ent<'_, C>
+    {
+      #[inline]
+      fn clone(&self) -> Self {
+        Self {
+          ent: self.ent.clone(),
+          data: self.data.clone(),
+        }
+      }
+    }
+
+    impl<'a, C> $ent<'a, C>
+    {
+      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), $crate::dynamic::memtable::bounded::MemtableRangeComparator<C>>) -> Self {
+        Self {
+          ent,
+          data: core::cell::OnceCell::new(),
+        }
+      }
+    }
+
+    impl<'a, C> $crate::dynamic::memtable::RangeEntry<'a> for $ent<'a, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+    {
+      #[inline]
+      fn start_bound(&self) -> core::ops::Bound<&'a [u8]> {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
+        ent.start_bound()
+      }
+
+      #[inline]
+      fn end_bound(&self) -> core::ops::Bound<&'a [u8]> {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
+        ent.end_bound()
+      }
+
+      #[inline]
+      fn next(&mut self) -> Option<Self> {
+        self.ent.next().map(Self::new)
+      }
+
+      #[inline]
+      fn prev(&mut self) -> Option<Self> {
+        self.ent.prev().map(Self::new)
+      }
+    }
+
+    $(
+      impl<'a, C> $crate::WithVersion for $ent<'a, C>
+      where
+        C: dbutils::equivalentor::BytesComparator,
+      {
+        #[inline]
+        fn $version(&self) -> u64 {
+          self.ent.$version()
+        }
+      }
+    )?
+  };
+}
+
+macro_rules! range_deletion_wrapper {
+  (
+    $(#[$meta:meta])*
+    $ent:ident($inner:ident) $(::$version:ident)?
+  ) => {
+    range_entry_wrapper! {
+      $(#[$meta])*
+      $ent($inner => RawRangeDeletionRef.fetch_range_deletion) $(::$version)?
+    }
+
+    impl<'a, C> crate::dynamic::memtable::RangeDeletionEntry<'a>
+      for $ent<'a, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+    {
+    }
+  };
+}
+
+macro_rules! range_update_wrapper {
+  (
+    $(#[$meta:meta])*
+    $ent:ident($inner:ident) $(::$version:ident)?
+  ) => {
+    range_entry_wrapper! {
+      $(#[$meta])*
+      $ent($inner => RawRangeUpdateRef.fetch_range_update) $(::$version)?
+    }
+
+    impl<'a, C> crate::dynamic::memtable::RangeUpdateEntry<'a>
+      for $ent<'a, C>
+    where
+      C: dbutils::equivalentor::BytesComparator,
+    {
+      type Value = &'a [u8];
+
+      #[inline]
+      fn value(&self) -> Self::Value {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
+        ent.value().expect("entry in Active state must have a value")
+      }
+    }
+  };
+}
 
 macro_rules! iter_wrapper {
   (
@@ -280,7 +403,7 @@ where
   }
 
   #[inline]
-  fn kind() -> Kind {
+  fn mode() -> Kind {
     Kind::Unique
   }
 }
@@ -290,8 +413,8 @@ where
   C: BytesComparator + 'static,
 {
   fn len(&self) -> usize {
-        todo!()
-    }
+    todo!()
+  }
 
   fn get<Q>(&self, key: &Q) -> Option<Self::Entry<'_>>
   where
@@ -319,12 +442,12 @@ where
   }
 
   #[inline]
-  fn point_iter(&self) -> Self::PointsIterator<'_, Active> {
+  fn iter_points(&self) -> Self::PointsIterator<'_, Active> {
     IterPoints::new(self.skl.iter())
   }
 
   #[inline]
-  fn point_range<'a, Q, R>(&'a self, range: R) -> Self::RangePoints<'a, Active, Q, R>
+  fn range_points<'a, Q, R>(&'a self, range: R) -> Self::RangePoints<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -333,12 +456,12 @@ where
   }
 
   #[inline]
-  fn bulk_deletions_iter(&self) -> Self::BulkDeletionsIterator<'_, Active> {
+  fn iter_bulk_deletions(&self) -> Self::BulkDeletionsIterator<'_, Active> {
     IterBulkDeletions::new(self.range_deletions_skl.iter())
   }
 
   #[inline]
-  fn bulk_deletions_range<'a, Q, R>(
+  fn range_bulk_deletions<'a, Q, R>(
     &'a self,
 
     range: R,
@@ -349,14 +472,14 @@ where
   {
     RangeBulkDeletions::new(self.range_deletions_skl.range(range))
   }
-  
+
   #[inline]
-  fn bulk_updates_iter(&self) -> Self::BulkUpdatesIterator<'_, Active> {
+  fn iter_bulk_updates(&self) -> Self::BulkUpdatesIterator<'_, Active> {
     IterBulkUpdates::new(self.range_updates_skl.iter())
   }
-  
+
   #[inline]
-  fn bulk_updates_range<'a, Q, R>(&'a self, range: R) -> Self::BulkUpdatesRange<'a, Active, Q, R>
+  fn range_bulk_updates<'a, Q, R>(&'a self, range: R) -> Self::BulkUpdatesRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -389,23 +512,19 @@ where
     }
 
     // find the range key entry with maximum version that shadow the next entry.
-    let range_ent = self
-      .range_updates_skl
-      .range(..=key)
-      .find_map(|ent| {
-        let ent = RangeUpdateEntry::new(ent);
-        if BytesRangeComparator::compare_contains(&self.cmp, &ent.range(), key) {
-          Some(ent)
-        } else {
-          None
-        }
-      });
+    let range_ent = self.range_updates_skl.range(..=key).find_map(|ent| {
+      let ent = RangeUpdateEntry::new(ent);
+      if BytesRangeComparator::compare_contains(&self.cmp, &ent.range(), key) {
+        Some(ent)
+      } else {
+        None
+      }
+    });
 
     // check if the next entry's value should be shadowed by the range key entries.
     if let Some(range_ent) = range_ent {
-      if let Some(val) = range_ent.value() {
-        return ControlFlow::Break(Some(Entry::new(self, ent, key, val)));
-      }
+      let val = range_ent.value();
+      return ControlFlow::Break(Some(Entry::new(self, ent, key, val)));
 
       // if value is None, the such range is unset, so we should return the value of the point entry.
     }

@@ -9,7 +9,7 @@ pub struct Entry<'a, S, C>
 where
   S: State<'a>,
 {
-  table: &'a super::MultipleVersionTable<C>,
+  table: &'a super::Table<C>,
   point_ent: PointEntry<'a, S, C>,
   key: &'a [u8],
   val: S::BytesValueOutput,
@@ -55,7 +55,7 @@ where
 {
   #[inline]
   pub(crate) fn new(
-    table: &'a super::MultipleVersionTable<C>,
+    table: &'a super::Table<C>,
     query_version: u64,
     point_ent: PointEntry<'a, S, C>,
     key: &'a [u8],

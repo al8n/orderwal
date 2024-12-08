@@ -1,6 +1,6 @@
 use {
   super::wal::{RecordPointer, ValuePointer},
-  crate::{types::Kind, WithVersion, WithoutVersion},
+  crate::{types::Mode, WithVersion, WithoutVersion},
   core::ops::{Bound, RangeBounds},
   dbutils::equivalent::Comparable,
 };
@@ -100,7 +100,7 @@ pub trait BaseTable {
     RecordPointer<Self::Key>: Ord + 'static;
 
   /// Returns the kind of the memtable.
-  fn kind() -> Kind;
+  fn mode() -> Kind;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.

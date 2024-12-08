@@ -4,7 +4,7 @@ use {
       memtable,
       wal::{RecordPointer, ValuePointer},
     },
-    types::Kind,
+    types::Mode,
     WithoutVersion,
   },
   core::{convert::Infallible, ops::RangeBounds},
@@ -141,7 +141,7 @@ where
   }
 
   #[inline]
-  fn kind() -> Kind {
+  fn mode() -> Kind {
     Kind::Plain
   }
 }

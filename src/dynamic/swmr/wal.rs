@@ -1,7 +1,4 @@
-use crate::{
-  dynamic::{memtable::BaseTable, sealed::Wal},
-  Options,
-};
+use crate::{dynamic::sealed::Wal, memtable::Memtable, Options};
 use rarena_allocator::sync::Arena;
 
 pub struct OrderCore<M, S> {
@@ -23,7 +20,7 @@ impl<M, S> core::fmt::Debug for OrderCore<M, S> {
 
 impl<M, S> Wal<S> for OrderCore<M, S>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   type Allocator = Arena;
   type Memtable = M;

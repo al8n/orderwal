@@ -12,11 +12,11 @@ use skl::either::Either;
 use crate::{
   dynamic::{
     batch::Batch,
-    memtable::{BaseTable, MultipleVersionMemtable},
     sealed::{Constructable, MultipleVersionWalReader, Wal},
     types::BufWriter,
   },
   error::Error,
+  memtable::dynamic::multiple_version::DynamicMemtable,
   types::{KeyBuilder, ValueBuilder},
   Options, WithVersion,
 };
@@ -57,7 +57,7 @@ pub trait Reader: Constructable {
   #[inline]
   fn maximum_version(&self) -> u64
   where
-    Self::Memtable: MultipleVersionMemtable + 'static,
+    Self::Memtable: DynamicMemtable + 'static,
   {
     Wal::memtable(self.as_wal()).maximum_version()
   }
@@ -66,7 +66,7 @@ pub trait Reader: Constructable {
   #[inline]
   fn minimum_version(&self) -> u64
   where
-    Self::Memtable: MultipleVersionMemtable + 'static,
+    Self::Memtable: DynamicMemtable + 'static,
   {
     Wal::memtable(self.as_wal()).minimum_version()
   }
@@ -75,7 +75,7 @@ pub trait Reader: Constructable {
   #[inline]
   fn may_contain_version(&self, version: u64) -> bool
   where
-    Self::Memtable: MultipleVersionMemtable + 'static,
+    Self::Memtable: DynamicMemtable + 'static,
   {
     Wal::memtable(self.as_wal()).may_contain_version(version)
   }
@@ -103,10 +103,10 @@ pub trait Reader: Constructable {
   fn iter<'a>(
     &'a self,
     version: u64,
-  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Iterator<'a>
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::Iterator<'a>
   where
-    Self::Memtable: MultipleVersionMemtable + 'static,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable + 'static,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().iter(version)
   }
@@ -117,32 +117,32 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     range: R,
-  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as BaseTable>::Range<'a, Q, R>
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::Range<'a, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().range(version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first<'a>(&'a self, version: u64) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn first<'a>(&'a self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().first(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last<'a>(&'a self, version: u64) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn last<'a>(&'a self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().last(version)
   }
@@ -152,19 +152,23 @@ pub trait Reader: Constructable {
   fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().contains_key(version, key)
   }
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  fn get<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().get(version, key)
   }
@@ -176,11 +180,11 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().upper_bound(version, bound)
   }
@@ -192,11 +196,11 @@ pub trait Reader: Constructable {
     &'a self,
     version: u64,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as BaseTable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().lower_bound(version, bound)
   }
@@ -205,7 +209,7 @@ pub trait Reader: Constructable {
 impl<T> Reader for T
 where
   T: Constructable,
-  T::Memtable: MultipleVersionMemtable,
+  T::Memtable: DynamicMemtable,
 {
 }
 
@@ -265,8 +269,8 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     Wal::insert::<_, &[u8]>(self.as_wal(), Some(version), kb, value).map_err(Among::into_left_right)
   }
@@ -284,8 +288,8 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable + 'a,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable + 'a,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     Wal::insert::<&[u8], _>(self.as_wal(), Some(version), key, vb).map_err(Among::into_middle_right)
   }
@@ -301,8 +305,8 @@ where
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     Wal::insert(self.as_wal(), Some(version), kb, vb)
   }
@@ -317,8 +321,8 @@ where
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     Wal::insert(self.as_wal(), Some(version), key, value).map_err(Among::unwrap_right)
   }
@@ -333,8 +337,8 @@ where
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().remove(Some(version), kb)
   }
@@ -344,8 +348,8 @@ where
   fn remove<'a>(&'a mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -361,8 +365,8 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -381,8 +385,8 @@ where
     B::Key: BufWriter,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -401,8 +405,8 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self
       .as_wal()
@@ -421,8 +425,8 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: MultipleVersionMemtable,
-    <Self::Memtable as BaseTable>::Entry<'a>: WithVersion,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().insert_batch::<Self, _>(batch)
   }

@@ -7,14 +7,14 @@ use skl::{dynamic::BytesComparator, Active};
 
 use crate::dynamic::memtable::MultipleVersionMemtable;
 
-use super::{Entry, IterPoints, MultipleVersionTable, RangePoints};
+use super::{Entry, IterPoints, RangePoints, Table};
 
 /// An iterator over the entries of a `Memtable`.
 pub struct Iter<'a, C>
 where
   C: 'static,
 {
-  table: &'a MultipleVersionTable<C>,
+  table: &'a Table<C>,
   iter: IterPoints<'a, Active, C>,
   query_version: u64,
 }
@@ -23,9 +23,9 @@ impl<'a, C> Iter<'a, C>
 where
   C: BytesComparator,
 {
-  pub(super) fn new(version: u64, table: &'a MultipleVersionTable<C>) -> Self {
+  pub(super) fn new(version: u64, table: &'a Table<C>) -> Self {
     Self {
-      iter: table.point_iter(version),
+      iter: table.iter_points(version),
       query_version: version,
       table,
     }
@@ -72,7 +72,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
 {
-  table: &'a MultipleVersionTable<C>,
+  table: &'a Table<C>,
   iter: RangePoints<'a, Active, Q, R, C>,
   query_version: u64,
 }
@@ -83,9 +83,9 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
 {
-  pub(super) fn new(version: u64, table: &'a MultipleVersionTable<C>, r: R) -> Self {
+  pub(super) fn new(version: u64, table: &'a Table<C>, r: R) -> Self {
     Self {
-      iter: table.point_range(version, r),
+      iter: table.range_points(version, r),
       query_version: version,
       table,
     }

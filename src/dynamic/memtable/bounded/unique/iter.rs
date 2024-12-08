@@ -24,7 +24,7 @@ where
 {
   pub(super) fn new(table: &'a Table<C>) -> Self {
     Self {
-      iter: table.point_iter(),
+      iter: table.iter_points(),
 
       table,
     }
@@ -83,7 +83,7 @@ where
 {
   pub(super) fn new(table: &'a Table<C>, r: R) -> Self {
     Self {
-      iter: table.point_range(r),
+      iter: table.range_points(r),
 
       table,
     }

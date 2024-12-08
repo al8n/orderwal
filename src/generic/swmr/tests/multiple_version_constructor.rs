@@ -77,7 +77,7 @@ expand_unit_tests!(
 #[test]
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(miri, ignore)]
-fn reopen_wrong_kind() {
+fn reopen_wrong_mode() {
   use crate::Builder;
 
   let dir = tempfile::tempdir().unwrap();
@@ -109,5 +109,5 @@ fn reopen_wrong_kind() {
       .map_mut::<crate::base::OrderWal<Person, String>, _>(path.as_path())
       .unwrap_err()
   };
-  assert!(matches!(err, crate::error::Error::KindMismatch { .. }));
+  assert!(matches!(err, crate::error::Error::ModeMismatch { .. }));
 }

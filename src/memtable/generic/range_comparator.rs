@@ -1,32 +1,37 @@
-use core::{borrow::Borrow, cmp, ops::Bound};
+use core::{cmp, marker::PhantomData, ops::Bound};
 
 use skl::{
   dynamic::{BytesComparator, BytesEquivalentor},
-  generic::{
-    Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
-    TypeRefQueryEquivalentor,
-  },
+  generic::{Comparator, Equivalentor},
 };
 use triomphe::Arc;
 
-use crate::types::{RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer};
-
-use super::{
+use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
+  RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
 };
 
-pub(super) struct MemtableRangeComparator<C: ?Sized> {
+pub struct MemtableRangeComparator<K: ?Sized, C: ?Sized> {
   /// The start pointer of the parent ARENA.
   ptr: *const u8,
   cmp: Arc<C>,
+  _k: PhantomData<K>,
 }
 
-impl<C: ?Sized> MemtableRangeComparator<C> {
+impl<K: ?Sized, C: ?Sized> super::super::sealed::ComparatorConstructor<C>
+  for MemtableRangeComparator<K, C>
+{
   #[inline]
-  pub const fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp }
+  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
+    Self {
+      ptr,
+      cmp,
+      _k: PhantomData,
+    }
   }
+}
 
+impl<K: ?Sized, C: ?Sized> MemtableRangeComparator<K, C> {
   #[inline]
   pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a> {
     unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
@@ -116,17 +121,18 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
   }
 }
 
-impl<C: ?Sized> Clone for MemtableRangeComparator<C> {
+impl<K: ?Sized, C: ?Sized> Clone for MemtableRangeComparator<K, C> {
   #[inline]
   fn clone(&self) -> Self {
     Self {
       ptr: self.ptr,
       cmp: self.cmp.clone(),
+      _k: PhantomData,
     }
   }
 }
 
-impl<C> core::fmt::Debug for MemtableRangeComparator<C>
+impl<K, C> core::fmt::Debug for MemtableRangeComparator<K, C>
 where
   C: core::fmt::Debug + ?Sized,
 {
@@ -139,106 +145,105 @@ where
   }
 }
 
-impl<C> Equivalentor for MemtableRangeComparator<C>
-where
-  C: BytesEquivalentor + ?Sized,
-{
-  type Type = RecordPointer;
+// impl<K, C> Equivalentor<[u8]> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesEquivalentor + ?Sized,
+// {
+//   #[inline]
+//   fn equivalent(&self, a: &[u8], b: &[u8]) -> bool {
+//     self.equivalent_in(a, b)
+//   }
+// }
 
-  #[inline]
-  fn equivalent(&self, a: &Self::Type, b: &Self::Type) -> bool {
-    self.equivalent_in(a, b)
-  }
-}
+// impl<'a, C> TypeRefEquivalentor<'a, [u8]> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesEquivalentor + ?Sized,
+// {
+//   #[inline]
+//   fn equivalent_ref(&self, a: &[u8], b: &<[u8] as Type>::Ref<'a>) -> bool {
+//     self.equivalent_in(a, b)
+//   }
 
-impl<'a, C> TypeRefEquivalentor<'a> for MemtableRangeComparator<C>
-where
-  C: BytesEquivalentor + ?Sized,
-{
-  #[inline]
-  fn equivalent_ref(&self, a: &Self::Type, b: &<Self::Type as Type>::Ref<'a>) -> bool {
-    self.equivalent_in(a, b)
-  }
+//   #[inline]
+//   fn equivalent_refs(
+//     &self,
+//     a: &<[u8] as Type>::Ref<'a>,
+//     b: &<[u8] as Type>::Ref<'a>,
+//   ) -> bool {
+//     self.equivalent_in(a, b)
+//   }
+// }
 
-  #[inline]
-  fn equivalent_refs(
-    &self,
-    a: &<Self::Type as Type>::Ref<'a>,
-    b: &<Self::Type as Type>::Ref<'a>,
-  ) -> bool {
-    self.equivalent_in(a, b)
-  }
-}
+// impl<'a, Q, C> TypeRefQueryEquivalentor<'a, [u8], Q> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesEquivalentor + ?Sized,
+//   Q: ?Sized + Borrow<[u8]>,
+// {
+//   #[inline]
+//   fn query_equivalent_ref(&self, a: &<[u8] as Type>::Ref<'a>, b: &Q) -> bool {
+//     self.equivalent_start_key(a, b.borrow())
+//   }
+// }
 
-impl<'a, Q, C> TypeRefQueryEquivalentor<'a, Q> for MemtableRangeComparator<C>
-where
-  C: BytesEquivalentor + ?Sized,
-  Q: ?Sized + Borrow<[u8]>,
-{
-  #[inline]
-  fn query_equivalent_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &Q) -> bool {
-    self.equivalent_start_key(a, b.borrow())
-  }
-}
+// impl<K, C> Comparator<[u8]> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesComparator + ?Sized,
+// {
+//   #[inline]
+//   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
+//     self.compare_in(a, b)
+//   }
+// }
 
-impl<C> Comparator for MemtableRangeComparator<C>
-where
-  C: BytesComparator + ?Sized,
-{
-  #[inline]
-  fn compare(&self, a: &Self::Type, b: &Self::Type) -> cmp::Ordering {
-    self.compare_in(a, b)
-  }
-}
+// impl<'a, C> TypeRefComparator<'a, [u8]> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesComparator + ?Sized,
+// {
+//   #[inline]
+//   fn compare_ref(&self, a: &[u8], b: &<[u8] as Type>::Ref<'a>) -> cmp::Ordering {
+//     self.compare_in(a, b)
+//   }
 
-impl<'a, C> TypeRefComparator<'a> for MemtableRangeComparator<C>
-where
-  C: BytesComparator + ?Sized,
-{
-  #[inline]
-  fn compare_ref(&self, a: &Self::Type, b: &<Self::Type as Type>::Ref<'a>) -> cmp::Ordering {
-    self.compare_in(a, b)
-  }
+//   fn compare_refs(
+//     &self,
+//     a: &<[u8] as Type>::Ref<'a>,
+//     b: &<[u8] as Type>::Ref<'a>,
+//   ) -> cmp::Ordering {
+//     self.compare_in(a, b)
+//   }
+// }
 
-  fn compare_refs(
-    &self,
-    a: &<Self::Type as Type>::Ref<'a>,
-    b: &<Self::Type as Type>::Ref<'a>,
-  ) -> cmp::Ordering {
-    self.compare_in(a, b)
-  }
-}
+// impl<'a, Q, C> TypeRefQueryComparator<'a, [u8], Q> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesComparator + ?Sized,
+//   Q: ?Sized + Borrow<[u8]>,
+// {
+//   #[inline]
+//   fn query_compare_ref(&self, a: &<[u8] as Type>::Ref<'a>, b: &Q) -> cmp::Ordering {
+//     self.compare_start_key(a, b.borrow())
+//   }
+// }
 
-impl<'a, Q, C> TypeRefQueryComparator<'a, Q> for MemtableRangeComparator<C>
-where
-  C: BytesComparator + ?Sized,
-  Q: ?Sized + Borrow<[u8]>,
-{
-  #[inline]
-  fn query_compare_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &Q) -> cmp::Ordering {
-    self.compare_start_key(a, b.borrow())
-  }
-}
+// impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer> for MemtableRangeComparator<K, C>
+// where
+//   C: TypeRefEquivalentor<'a, K> + ?Sized,
+//   K: Type + ?Sized,
+// {
+//   fn query_equivalent_ref(&self, a: &<[u8] as Type>::Ref<'a>, b: &RecordPointer) -> bool {
+//     self.equivalent_in(a, b)
+//   }
+// }
 
-impl<'a, C> TypeRefQueryEquivalentor<'a, RecordPointer> for MemtableRangeComparator<C>
-where
-  C: BytesComparator + ?Sized,
-{
-  fn query_equivalent_ref(&self, a: &<Self::Type as Type>::Ref<'a>, b: &RecordPointer) -> bool {
-    self.equivalent_in(a, b)
-  }
-}
-
-impl<'a, C> TypeRefQueryComparator<'a, RecordPointer> for MemtableRangeComparator<C>
-where
-  C: BytesComparator + ?Sized,
-{
-  #[inline]
-  fn query_compare_ref(
-    &self,
-    a: &<Self::Type as Type>::Ref<'a>,
-    b: &RecordPointer,
-  ) -> cmp::Ordering {
-    self.compare_in(a, b)
-  }
-}
+// impl<'a, K, C> TypeRefQueryComparator<'a, RecordPointer, RecordPointer> for MemtableRangeComparator<K, C>
+// where
+//   C: BytesComparator + ?Sized,
+// {
+//   #[inline]
+//   fn query_compare_ref(
+//     &self,
+//     a: &<[u8] as Type>::Ref<'a>,
+//     b: &RecordPointer,
+//   ) -> cmp::Ordering {
+//     self.compare_in(a, b)
+//   }
+// }

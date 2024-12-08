@@ -4,9 +4,6 @@ pub use swmr::*;
 /// Batch insertions related traits and structs.
 pub mod batch;
 
-/// The memory table implementation.
-pub mod memtable;
-
 /// Types
 pub mod types;
 

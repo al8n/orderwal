@@ -4,7 +4,7 @@ use {
       memtable::{self, BaseEntry, MultipleVersionMemtableEntry},
       wal::{RecordPointer, ValuePointer},
     },
-    types::Kind,
+    types::Mode,
     WithVersion,
   },
   core::{
@@ -191,7 +191,7 @@ where
   }
 
   #[inline]
-  fn kind() -> Kind {
+  fn mode() -> Kind {
     Kind::MultipleVersion
   }
 }

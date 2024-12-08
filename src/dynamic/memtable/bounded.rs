@@ -1,4 +1,3 @@
-
 macro_rules! construct_skl {
   ($builder:ident) => {{
     $builder.alloc()
@@ -155,8 +154,3 @@ pub mod unique;
 
 // pub use multiple_version::MultipleVersionTable;
 // pub use table::Table;
-
-mod comparator;
-use comparator::MemtableComparator;
-mod range_comparator;
-use range_comparator::MemtableRangeComparator;

@@ -1,7 +1,10 @@
 use super::{reader::OrderWalReader, wal::OrderCore};
-use crate::dynamic::{
-  memtable::{BaseTable, Memtable, MultipleVersionMemtable},
-  sealed::Constructable,
+use crate::{
+  dynamic::sealed::Constructable,
+  memtable::{
+    dynamic::{multiple_version, unique},
+    Memtable,
+  },
 };
 use dbutils::checksum::Crc32;
 use rarena_allocator::sync::Arena;
@@ -35,7 +38,7 @@ impl<P, S> OrderWal<P, S> {
 impl<M, S> Constructable for OrderWal<M, S>
 where
   S: 'static,
-  M: BaseTable + 'static,
+  M: Memtable + 'static,
 {
   type Allocator = Arena;
   type Wal = OrderCore<Self::Memtable, Self::Checksumer>;
@@ -59,7 +62,7 @@ where
 impl<M, S> OrderWal<M, S>
 where
   S: 'static,
-  M: BaseTable + 'static,
+  M: Memtable + 'static,
 {
   /// Returns the path of the WAL if it is backed by a file.
   ///
@@ -81,9 +84,9 @@ where
   }
 }
 
-impl<M, S> crate::dynamic::wal::base::Writer for OrderWal<M, S>
+impl<M, S> crate::dynamic::wal::unique::Writer for OrderWal<M, S>
 where
-  M: Memtable + 'static,
+  M: unique::DynamicMemtable + 'static,
   S: 'static,
 {
   #[inline]
@@ -94,7 +97,7 @@ where
 
 impl<M, S> crate::dynamic::wal::multiple_version::Writer for OrderWal<M, S>
 where
-  M: MultipleVersionMemtable + 'static,
+  M: multiple_version::DynamicMemtable + 'static,
   S: 'static,
 {
   #[inline]

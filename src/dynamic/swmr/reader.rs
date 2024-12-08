@@ -1,8 +1,8 @@
 use super::{
-  super::{memtable::BaseTable, sealed::Constructable, swmr::wal::OrderCore},
+  super::{sealed::Constructable, swmr::wal::OrderCore},
   writer::OrderWal,
 };
-use crate::Immutable;
+use crate::{memtable::Memtable, Immutable};
 use rarena_allocator::sync::Arena;
 use std::sync::Arc;
 
@@ -29,7 +29,7 @@ impl<P, S> OrderWalReader<P, S> {
 impl<M, S> Constructable for OrderWalReader<M, S>
 where
   S: 'static,
-  M: BaseTable + 'static,
+  M: Memtable + 'static,
 {
   type Allocator = Arena;
   type Wal = OrderCore<Self::Memtable, Self::Checksumer>;

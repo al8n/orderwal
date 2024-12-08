@@ -291,16 +291,15 @@ macro_rules! range_wrapper {
   };
 }
 
-
 /// A memory table implementation based on ARENA [`SkipMap`](skl).
-pub struct MultipleVersionTable<C = Ascend> {
+pub struct Table<C = Ascend> {
   cmp: Arc<C>,
   skl: GenericSkipMap<RecordPointer, (), MemtableComparator<C>>,
   range_deletions_skl: GenericSkipMap<RecordPointer, (), MemtableRangeComparator<C>>,
   range_updates_skl: GenericSkipMap<RecordPointer, (), MemtableRangeComparator<C>>,
 }
 
-impl<C> BaseTable for MultipleVersionTable<C>
+impl<C> BaseTable for Table<C>
 where
   C: BytesComparator + 'static,
 {
@@ -440,12 +439,12 @@ where
   }
 
   #[inline]
-  fn kind() -> Kind {
+  fn mode() -> Kind {
     Kind::MultipleVersion
   }
 }
 
-impl<C> MultipleVersionMemtable for MultipleVersionTable<C>
+impl<C> MultipleVersionMemtable for Table<C>
 where
   C: BytesComparator + 'static,
 {
@@ -500,17 +499,17 @@ where
   }
 
   #[inline]
-  fn point_iter(&self, version: u64) -> Self::PointsIterator<'_, Active> {
+  fn iter_points(&self, version: u64) -> Self::PointsIterator<'_, Active> {
     IterPoints::new(self.skl.iter(version))
   }
 
   #[inline]
-  fn point_iter_with_tombstone(&self, version: u64) -> Self::PointsIterator<'_, MaybeTombstone> {
+  fn iter_points_with_tombstone(&self, version: u64) -> Self::PointsIterator<'_, MaybeTombstone> {
     IterPoints::new(self.skl.iter_with_tombstone(version))
   }
 
   #[inline]
-  fn point_range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangePoints<'a, Active, Q, R>
+  fn range_points<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangePoints<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -519,7 +518,7 @@ where
   }
 
   #[inline]
-  fn point_range_with_tombstone<'a, Q, R>(
+  fn range_points_with_tombstone<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -532,12 +531,12 @@ where
   }
 
   #[inline]
-  fn bulk_deletions_iter(&self, version: u64) -> Self::BulkDeletionsIterator<'_, Active> {
+  fn iter_bulk_deletions(&self, version: u64) -> Self::BulkDeletionsIterator<'_, Active> {
     IterBulkDeletions::new(self.range_deletions_skl.iter(version))
   }
 
   #[inline]
-  fn bulk_deletions_iter_with_tombstone(
+  fn iter_bulk_deletions_with_tombstone(
     &self,
     version: u64,
   ) -> Self::BulkDeletionsIterator<'_, MaybeTombstone> {
@@ -545,7 +544,7 @@ where
   }
 
   #[inline]
-  fn bulk_deletions_range<'a, Q, R>(
+  fn range_bulk_deletions<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -558,7 +557,7 @@ where
   }
 
   #[inline]
-  fn bulk_deletions_range_with_tombstone<'a, Q, R>(
+  fn range_bulk_deletions_with_tombstone<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -575,12 +574,12 @@ where
   }
 
   #[inline]
-  fn bulk_updates_iter(&self, version: u64) -> Self::BulkUpdatesIterator<'_, Active> {
+  fn iter_bulk_updates(&self, version: u64) -> Self::BulkUpdatesIterator<'_, Active> {
     IterBulkUpdates::new(self.range_updates_skl.iter(version))
   }
 
   #[inline]
-  fn bulk_updates_iter_with_tombstone(
+  fn iter_bulk_updates_with_tombstone(
     &self,
     version: u64,
   ) -> Self::BulkUpdatesIterator<'_, MaybeTombstone> {
@@ -588,7 +587,7 @@ where
   }
 
   #[inline]
-  fn bulk_updates_range<'a, Q, R>(
+  fn range_bulk_updates<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -601,7 +600,7 @@ where
   }
 
   #[inline]
-  fn bulk_updates_range_with_tombstone<'a, Q, R>(
+  fn range_bulk_updates_with_tombstone<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
@@ -614,7 +613,7 @@ where
   }
 }
 
-impl<C> MultipleVersionTable<C>
+impl<C> Table<C>
 where
   C: BytesComparator + 'static,
 {

@@ -1,6 +1,7 @@
-use super::{memtable::BaseTable, sealed::Constructable};
+use super::sealed::Constructable;
 use crate::{
   error::Error,
+  memtable::Memtable,
   options::{arena_options, Options},
 };
 use dbutils::checksum::Crc32;
@@ -12,7 +13,7 @@ mod memmap;
 /// A write-ahead log builder.
 pub struct Builder<M, S = Crc32>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   pub(super) opts: Options,
   pub(super) cks: S,
@@ -21,7 +22,7 @@ where
 
 impl<M> Default for Builder<M>
 where
-  M: BaseTable,
+  M: Memtable,
   M::Options: Default,
 {
   #[inline]
@@ -32,7 +33,7 @@ where
 
 impl<M> Builder<M>
 where
-  M: BaseTable,
+  M: Memtable,
   M::Options: Default,
 {
   /// Returns a new write-ahead log builder with the given options.
@@ -48,7 +49,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Returns a new write-ahead log builder with the new checksumer
   ///
@@ -116,7 +117,7 @@ where
   #[inline]
   pub fn change_memtable<NM>(self) -> Builder<NM, S>
   where
-    NM: BaseTable,
+    NM: Memtable,
     NM::Options: Default,
   {
     Builder {
@@ -138,7 +139,7 @@ where
   #[inline]
   pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, S>
   where
-    NM: BaseTable,
+    NM: Memtable,
   {
     Builder {
       opts: self.opts,
@@ -365,7 +366,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///

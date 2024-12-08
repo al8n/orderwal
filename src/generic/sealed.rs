@@ -1022,7 +1022,7 @@ pub trait Constructable: Sized {
       let mut cursor = 0;
       slice[0..MAGIC_TEXT_SIZE].copy_from_slice(&MAGIC_TEXT);
       cursor += MAGIC_TEXT_SIZE;
-      slice[MAGIC_TEXT_SIZE] = <Self::Memtable as BaseTable>::kind() as u8;
+      slice[MAGIC_TEXT_SIZE] = <Self::Memtable as BaseTable>::mode() as u8;
       cursor += WAL_KIND_SIZE;
       slice[cursor..HEADER_SIZE].copy_from_slice(&opts.magic_version().to_le_bytes());
     }
@@ -1063,7 +1063,7 @@ pub trait Constructable: Sized {
       KeyRef<'a, <Self::Memtable as BaseTable>::Key>,
   {
     use {
-      crate::{types::Kind, utils::split_lengths},
+      crate::{types::Mode, utils::split_lengths},
       dbutils::leb128::decode_u64_varint,
     };
 
@@ -1075,7 +1075,7 @@ pub trait Constructable: Sized {
     }
     cursor += MAGIC_TEXT_SIZE;
     let kind = Kind::try_from(slice[cursor])?;
-    let created_kind = <Self::Memtable as BaseTable>::kind();
+    let created_kind = <Self::Memtable as BaseTable>::mode();
     if kind != created_kind {
       return Err(Error::wal_kind_mismatch(kind, created_kind));
     }

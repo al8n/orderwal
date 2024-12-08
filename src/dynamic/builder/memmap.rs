@@ -1,14 +1,11 @@
 use super::*;
 use crate::{options::ArenaOptionsExt, Immutable};
-use dbutils::{
-  checksum::BuildChecksumer,
-  types::{KeyRef, Type},
-};
+use dbutils::checksum::BuildChecksumer;
 use skl::either::Either;
 
 impl<M, S> Builder<M, S>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Set if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
   /// When using memory map backed WAL, the meta of the WAL
@@ -281,7 +278,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Get if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
   /// When using memory map backed WAL, the meta of the WAL
@@ -461,7 +458,7 @@ where
 
 impl<M, S> Builder<M, S>
 where
-  M: BaseTable,
+  M: Memtable,
 {
   /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
   ///
