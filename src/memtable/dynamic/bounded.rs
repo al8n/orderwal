@@ -9,7 +9,7 @@ macro_rules! point_entry_wrapper {
       S: $crate::State<'a>,
       T: $crate::types::Kind
     {
-      ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::MemtableComparator<C>>,
+      ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>,
       data: core::cell::OnceCell<$crate::types::RawEntryRef<'a, T>>,
     }
 
@@ -35,7 +35,7 @@ macro_rules! point_entry_wrapper {
       T: $crate::types::Kind,
     {
       #[inline]
-      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::MemtableComparator<C>>) -> Self {
+      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>) -> Self {
         Self {
           ent,
           data: core::cell::OnceCell::new(),
@@ -45,19 +45,20 @@ macro_rules! point_entry_wrapper {
 
     impl<'a, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, $crate::Active, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       T: $crate::types::Kind,
-      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>,
+      <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
     {
-      type Key = <T::Key<'a> as crate::types::sealed::Pointee>::Output;
-      type Value = <T::Value<'a> as crate::types::sealed::Pointee>::Output;
+      type Key = <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output;
+      type Value = <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output;
 
       #[inline]
       fn key(&self) -> Self::Key {
-        use crate::types::sealed::Pointee;
+        use crate::types::sealed::{Pointee, PointComparator};
 
         self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
@@ -68,7 +69,7 @@ macro_rules! point_entry_wrapper {
 
       #[inline]
       fn value(&self) -> Self::Value {
-        use crate::types::sealed::Pointee;
+        use crate::types::sealed::{Pointee, PointComparator};
 
         let ent = self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
@@ -90,19 +91,20 @@ macro_rules! point_entry_wrapper {
 
     impl<'a, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, $crate::MaybeTombstone, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       T: $crate::types::Kind,
-      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>,
+      <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
     {
-      type Key = <T::Key<'a> as crate::types::sealed::Pointee>::Output;
-      type Value = Option<<T::Value<'a> as crate::types::sealed::Pointee>::Output>;
+      type Key = <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output;
+      type Value = Option<<T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output>;
 
       #[inline]
       fn key(&self) -> Self::Key {
-        use crate::types::sealed::Pointee;
+        use crate::types::sealed::{Pointee, PointComparator};
 
         self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
@@ -113,7 +115,7 @@ macro_rules! point_entry_wrapper {
 
       #[inline]
       fn value(&self) -> Self::Value {
-        use crate::types::sealed::Pointee;
+        use crate::types::sealed::{Pointee, PointComparator};
 
         let ent = self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
@@ -136,7 +138,7 @@ macro_rules! point_entry_wrapper {
     $(
       impl<'a, S, C, T> $crate::WithVersion for $ent<'a, S, C, T>
       where
-        C: dbutils::equivalentor::BytesComparator,
+        C: 'static,
         S: $crate::State<'a>,
         T: $crate::types::Kind,
       {
@@ -160,7 +162,7 @@ macro_rules! range_entry_wrapper {
       S: $crate::State<'a>,
       T: $crate::types::Kind,
     {
-      ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>,
+      pub(crate) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>,
       data: core::cell::OnceCell<$crate::types::$raw<'a, T>>,
     }
 
@@ -195,18 +197,18 @@ macro_rules! range_entry_wrapper {
 
     impl<'a, S, C, T> $crate::memtable::RangeEntry<'a> for $ent<'a, S, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::Kind,
-      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      T::RangeComparator<C>: 
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      T::RangeComparator<C>:
         dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
         + crate::types::sealed::RangeComparator<C>,
     {
-      type Key = <T::Key<'a> as crate::types::sealed::Pointee>::Output;
+      type Key = <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output;
 
       #[inline]
       fn start_bound(&self) -> core::ops::Bound<Self::Key> {
@@ -242,7 +244,7 @@ macro_rules! range_entry_wrapper {
     $(
       impl<'a, S, C, T> $crate::WithVersion for $ent<'a, S, C, T>
       where
-        C: dbutils::equivalentor::BytesComparator,
+        C: 'static,
         S: $crate::State<'a>,
         T: $crate::types::Kind,
       {
@@ -268,14 +270,14 @@ macro_rules! range_deletion_wrapper {
     impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a>
       for $ent<'a, S, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::Kind,
-      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      T::RangeComparator<C>: 
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      T::RangeComparator<C>:
         dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
         + crate::types::sealed::RangeComparator<C>,
     {
@@ -296,17 +298,17 @@ macro_rules! range_update_wrapper {
     impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a>
       for $ent<'a, $crate::MaybeTombstone, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       T: $crate::types::Kind,
-      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      T::RangeComparator<C>: 
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      T::RangeComparator<C>:
         dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
         + crate::types::sealed::RangeComparator<C>,
     {
-      type Value = Option<<T::Value<'a> as crate::types::sealed::Pointee>::Output>;
+      type Value = Option<<T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output>;
 
       #[inline]
       fn value(&self) -> Self::Value {
@@ -322,17 +324,17 @@ macro_rules! range_update_wrapper {
     impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a>
       for $ent<'a, $crate::Active, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       T: $crate::types::Kind,
-      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
-      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
-      T::RangeComparator<C>: 
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output: 'a,
+      T::RangeComparator<C>:
         dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
         + crate::types::sealed::RangeComparator<C>,
     {
-      type Value = <T::Value<'a> as crate::types::sealed::Pointee>::Output;
+      type Value = <T::Value<'a> as crate::types::sealed::Pointee<'a>>::Output;
 
       #[inline]
       fn value(&self) -> Self::Value {
@@ -374,10 +376,10 @@ macro_rules! iter_wrapper {
 
     impl<'a, S, C, T> Iterator for $iter<'a, S, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::Kind,
-      T::$cmp<C>: 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, $crate::types::RecordPointer> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -389,9 +391,10 @@ macro_rules! iter_wrapper {
 
     impl<'a, S, C, T> DoubleEndedIterator for $iter<'a, S, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::Kind,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, $crate::types::RecordPointer> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {
@@ -430,12 +433,12 @@ macro_rules! range_wrapper {
 
     impl<'a, S, Q, R, C, T> Iterator for $iter<'a, S, Q, R, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       S: $crate::State<'a>,
       R: core::ops::RangeBounds<Q>,
-      Q: ?Sized + core::borrow::Borrow<[u8]>,
+      Q: ?Sized,
       T: $crate::types::Kind,
-      T::$cmp<C>: 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -447,12 +450,12 @@ macro_rules! range_wrapper {
 
     impl<'a, S, Q, R, C, T> DoubleEndedIterator for $iter<'a, S, Q, R, C, T>
     where
-      C: dbutils::equivalentor::BytesComparator,
+      C: 'static,
       S: $crate::State<'a>,
       R: core::ops::RangeBounds<Q>,
-      Q: ?Sized + core::borrow::Borrow<[u8]>,
+      Q: ?Sized,
       T: $crate::types::Kind,
-      T::$cmp<C>: 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {

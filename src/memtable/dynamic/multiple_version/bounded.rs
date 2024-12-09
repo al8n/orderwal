@@ -3,10 +3,11 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
-use skl::{dynamic::BytesRangeComparator, Active};
+use skl::{dynamic::BytesRangeComparator, Active, MaybeTombstone};
 
 use crate::{
   memtable::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
+  types::Dynamic,
   State, WithVersion as _,
 };
 
@@ -26,29 +27,29 @@ mod range_update;
 
 dynamic_memtable!(multiple_version(version));
 
-impl<C> DynamicMemtable for Table<C>
+impl<C> DynamicMemtable for Table<C, Dynamic>
 where
   C: BytesComparator + 'static,
 {
   type Entry<'a>
-    = Entry<'a, Active, C>
+    = Entry<'a, Active, C, Dynamic>
   where
     Self: 'a;
 
   type PointEntry<'a, S>
-    = PointEntry<'a, S, C>
+    = PointEntry<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangeDeletionEntry<'a, S>
-    = RangeDeletionEntry<'a, S, C>
+    = RangeDeletionEntry<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangeUpdateEntry<'a, S>
-    = RangeUpdateEntry<'a, S, C>
+    = RangeUpdateEntry<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;
@@ -66,13 +67,13 @@ where
     Q: ?Sized + Borrow<[u8]>;
 
   type PointsIterator<'a, S>
-    = IterPoints<'a, S, C>
+    = IterPoints<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangePoints<'a, S, Q, R>
-    = RangePoints<'a, S, Q, R, C>
+    = RangePoints<'a, S, Q, R, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>,
@@ -80,13 +81,13 @@ where
     Q: ?Sized + Borrow<[u8]>;
 
   type BulkDeletionsIterator<'a, S>
-    = IterBulkDeletions<'a, S, C>
+    = IterBulkDeletions<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;
 
   type BulkDeletionsRange<'a, S, Q, R>
-    = RangeBulkDeletions<'a, S, Q, R, C>
+    = RangeBulkDeletions<'a, S, Q, R, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>,
@@ -94,13 +95,13 @@ where
     Q: ?Sized + Borrow<[u8]>;
 
   type BulkUpdatesIterator<'a, S>
-    = IterBulkUpdates<'a, S, C>
+    = IterBulkUpdates<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;
 
   type BulkUpdatesRange<'a, S, Q, R>
-    = RangeBulkUpdates<'a, S, Q, R, C>
+    = RangeBulkUpdates<'a, S, Q, R, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>,
@@ -272,15 +273,15 @@ where
   }
 }
 
-impl<C> Table<C>
+impl<C> Table<C, Dynamic>
 where
   C: BytesComparator + 'static,
 {
   fn validate<'a>(
     &'a self,
     query_version: u64,
-    ent: PointEntry<'a, Active, C>,
-  ) -> ControlFlow<Option<Entry<'a, Active, C>>, PointEntry<'a, Active, C>> {
+    ent: PointEntry<'a, Active, C, Dynamic>,
+  ) -> ControlFlow<Option<Entry<'a, Active, C, Dynamic>>, PointEntry<'a, Active, C, Dynamic>> {
     let key = ent.key();
     let version = ent.version();
 
@@ -297,8 +298,8 @@ where
           return false;
         }
 
-        let ent = RangeDeletionEntry::new(ent);
-        BytesRangeComparator::compare_contains(&self.cmp, &ent.range(), key)
+        let ent = RangeDeletionEntry::<Active, C, Dynamic>::new(ent);
+        BytesRangeComparator::compare_contains(&self.cmp, &ent.range::<[u8]>(), key)
       });
 
     if shadow {
@@ -315,8 +316,8 @@ where
           return None;
         }
 
-        let ent = RangeUpdateEntry::new(ent);
-        if BytesRangeComparator::compare_contains(&self.cmp, &ent.range(), key) {
+        let ent = RangeUpdateEntry::<MaybeTombstone, C, Dynamic>::new(ent);
+        if BytesRangeComparator::compare_contains(&self.cmp, &ent.range::<[u8]>(), key) {
           Some(ent)
         } else {
           None

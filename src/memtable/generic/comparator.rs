@@ -1,13 +1,14 @@
 use core::{cmp, marker::PhantomData};
 
 use skl::generic::{
-  Comparator, Equivalentor, Type, TypeRef, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor
+  Comparator, Equivalentor, Type, TypeRef, TypeRefComparator, TypeRefEquivalentor,
+  TypeRefQueryComparator, TypeRefQueryEquivalentor,
 };
 use triomphe::Arc;
 
 use crate::types::{fetch_entry, fetch_raw_key, Generic, RawEntryRef, RecordPointer};
 
-use super::Query;
+use super::super::Query;
 
 pub struct MemtableComparator<K, C>
 where
@@ -20,17 +21,6 @@ where
   _k: PhantomData<K>,
 }
 
-impl<K, C> super::super::sealed::ComparatorConstructor<C> for MemtableComparator<K, C>
-where
-  K: ?Sized,
-  C: ?Sized,
-{
-  #[inline]
-  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp, _k: PhantomData }
-  }
-}
-
 impl<K, C> crate::types::sealed::ComparatorConstructor<C> for MemtableComparator<K, C>
 where
   K: ?Sized,
@@ -38,7 +28,11 @@ where
 {
   #[inline]
   fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp, _k: PhantomData }
+    Self {
+      ptr,
+      cmp,
+      _k: PhantomData,
+    }
   }
 }
 
@@ -106,7 +100,7 @@ where
   {
     unsafe {
       let ak = fetch_raw_key(self.ptr, a);
-      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak); 
+      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
       let bk = fetch_raw_key(self.ptr, b);
       let bk = <K::Ref<'_> as TypeRef<'_>>::from_slice(bk);
 
@@ -222,7 +216,8 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer> for MemtableComparator<K, C>
+impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer>
+  for MemtableComparator<K, C>
 where
   C: TypeRefEquivalentor<'a, K> + ?Sized,
   K: Type + ?Sized,

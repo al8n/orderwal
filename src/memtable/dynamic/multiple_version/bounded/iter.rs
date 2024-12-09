@@ -7,15 +7,15 @@ use skl::{dynamic::BytesComparator, Active};
 
 use crate::memtable::dynamic::multiple_version::DynamicMemtable;
 
-use super::{Entry, IterPoints, RangePoints, Table};
+use super::{Dynamic, Entry, IterPoints, RangePoints, Table};
 
 /// An iterator over the entries of a `Memtable`.
 pub struct Iter<'a, C>
 where
   C: 'static,
 {
-  table: &'a Table<C>,
-  iter: IterPoints<'a, Active, C>,
+  table: &'a Table<C, Dynamic>,
+  iter: IterPoints<'a, Active, C, Dynamic>,
   query_version: u64,
 }
 
@@ -23,7 +23,7 @@ impl<'a, C> Iter<'a, C>
 where
   C: BytesComparator,
 {
-  pub(super) fn new(version: u64, table: &'a Table<C>) -> Self {
+  pub(super) fn new(version: u64, table: &'a Table<C, Dynamic>) -> Self {
     Self {
       iter: table.iter_points(version),
       query_version: version,
@@ -36,7 +36,7 @@ impl<'a, C> Iterator for Iter<'a, C>
 where
   C: BytesComparator,
 {
-  type Item = Entry<'a, Active, C>;
+  type Item = Entry<'a, Active, C, Dynamic>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -72,8 +72,8 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
 {
-  table: &'a Table<C>,
-  iter: RangePoints<'a, Active, Q, R, C>,
+  table: &'a Table<C, Dynamic>,
+  iter: RangePoints<'a, Active, Q, R, C, Dynamic>,
   query_version: u64,
 }
 
@@ -83,7 +83,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
 {
-  pub(super) fn new(version: u64, table: &'a Table<C>, r: R) -> Self {
+  pub(super) fn new(version: u64, table: &'a Table<C, Dynamic>, r: R) -> Self {
     Self {
       iter: table.range_points(version, r),
       query_version: version,
@@ -98,7 +98,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized + Borrow<[u8]>,
 {
-  type Item = Entry<'a, Active, C>;
+  type Item = Entry<'a, Active, C, Dynamic>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {

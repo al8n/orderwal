@@ -3,41 +3,36 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
-use skl::{dynamic::BytesComparator, Active};
+use skl::{dynamic::BytesComparator, generic::unique::Map as _, Active};
 
-use crate::{memtable::dynamic::unique::DynamicMemtable, types::Kind};
-
-use super::{Entry, IterPoints, RangePoints, Table};
+use super::{Dynamic, Entry, IterPoints, RangePoints, Table};
 
 /// An iterator over the entries of a `Memtable`.
-pub struct Iter<'a, C, T>
+pub struct Iter<'a, C>
 where
   C: 'static,
-  T: Kind,
 {
-  table: &'a Table<C>,
-  iter: IterPoints<'a, Active, C, T>,
+  table: &'a Table<C, Dynamic>,
+  iter: IterPoints<'a, Active, C, Dynamic>,
 }
 
-impl<'a, C, T> Iter<'a, C, T>
+impl<'a, C> Iter<'a, C>
 where
-  C: BytesComparator,
-  T: Kind,
+  C: 'static,
 {
-  pub(super) fn new(table: &'a Table<C>) -> Self {
+  pub(super) fn new(table: &'a Table<C, Dynamic>) -> Self {
     Self {
-      iter: table.iter_points(),
+      iter: IterPoints::new(table.skl.iter()),
       table,
     }
   }
 }
 
-impl<'a, C, T> Iterator for Iter<'a, C, T>
+impl<'a, C> Iterator for Iter<'a, C>
 where
-  C: BytesComparator,
-  T: Kind,
+  C: BytesComparator + 'static,
 {
-  type Item = Entry<'a, Active, C, T>;
+  type Item = Entry<'a, Active, C, Dynamic>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -51,10 +46,9 @@ where
   }
 }
 
-impl<C, T> DoubleEndedIterator for Iter<'_, C, T>
+impl<C> DoubleEndedIterator for Iter<'_, C>
 where
-  C: BytesComparator,
-  T: Kind,
+  C: BytesComparator + 'static,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -69,39 +63,36 @@ where
 }
 
 /// An iterator over the entries of a `Memtable`.
-pub struct Range<'a, Q, R, C, T>
+pub struct Range<'a, Q, R, C>
 where
   R: RangeBounds<Q>,
   Q: ?Sized,
-  T: Kind,
 {
-  table: &'a Table<C>,
-  iter: RangePoints<'a, Active, Q, R, C, T>,
+  table: &'a Table<C, Dynamic>,
+  iter: RangePoints<'a, Active, Q, R, C, Dynamic>,
 }
 
-impl<'a, Q, R, C, T> Range<'a, Q, R, C, T>
+impl<'a, Q, R, C> Range<'a, Q, R, C>
 where
-  C: BytesComparator + 'static,
+  C: 'static,
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
-  T: Kind,
 {
-  pub(super) fn new(table: &'a Table<C>, r: R) -> Self {
+  pub(super) fn new(table: &'a Table<C, Dynamic>, r: R) -> Self {
     Self {
-      iter: table.range_points(r),
+      iter: RangePoints::new(table.skl.range(r)),
       table,
     }
   }
 }
 
-impl<'a, Q, R, C, T> Iterator for Range<'a, Q, R, C, T>
+impl<'a, Q, R, C> Iterator for Range<'a, Q, R, C>
 where
   C: BytesComparator + 'static,
   R: RangeBounds<Q>,
   Q: ?Sized + Borrow<[u8]>,
-  T: Kind,
 {
-  type Item = Entry<'a, Active, C, T>;
+  type Item = Entry<'a, Active, C, Dynamic>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -115,12 +106,11 @@ where
   }
 }
 
-impl<Q, R, C, T> DoubleEndedIterator for Range<'_, Q, R, C, T>
+impl<Q, R, C> DoubleEndedIterator for Range<'_, Q, R, C>
 where
   R: RangeBounds<Q>,
   Q: ?Sized + Borrow<[u8]>,
   C: BytesComparator + 'static,
-  T: Kind,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

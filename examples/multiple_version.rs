@@ -1,6 +1,6 @@
 use orderwal::{
-  multiple_version::{OrderWal, Reader, Writer},
-  Builder,
+  dynamic::{multiple_version::{OrderWal, Reader, Writer}, Builder},
+  // Builder,
 };
 
 fn main() {
@@ -13,23 +13,23 @@ fn main() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<OrderWal<str, [u8]>, _>(&path)
+      .map_mut::<OrderWal, _>(&path)
       .unwrap()
   };
 
-  wal.insert(1, "a", b"a1".as_slice()).unwrap();
-  wal.insert(3, "a", b"a3".as_slice()).unwrap();
-  wal.insert(1, "c", b"c1".as_slice()).unwrap();
-  wal.insert(3, "c", b"c3".as_slice()).unwrap();
+  wal.insert(1, b"a", b"a1".as_slice()).unwrap();
+  wal.insert(3, b"a", b"a3".as_slice()).unwrap();
+  wal.insert(1, b"c", b"c1".as_slice()).unwrap();
+  wal.insert(3, b"c", b"c3".as_slice()).unwrap();
 
-  let a = wal.get(2, "a").unwrap();
-  let c = wal.get(2, "c").unwrap();
+  let a = wal.get(2, b"a").unwrap();
+  let c = wal.get(2, b"c").unwrap();
 
   assert_eq!(a.value(), b"a1");
   assert_eq!(c.value(), b"c1");
 
-  let a = wal.get(3, "a").unwrap();
-  let c = wal.get(3, "c").unwrap();
+  let a = wal.get(3, b"a").unwrap();
+  let c = wal.get(3, b"c").unwrap();
 
   assert_eq!(a.value(), b"a3");
   assert_eq!(c.value(), b"c3");

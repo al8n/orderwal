@@ -11,6 +11,10 @@ pub mod dynamic;
 /// Memtables for generic(structured) key-value order WALs.
 pub mod generic;
 
+#[derive(ref_cast::RefCast)]
+#[repr(transparent)]
+struct Query<Q: ?Sized>(Q);
+
 /// An entry which is stored in the memory table.
 pub trait MemtableEntry<'a>
 where
@@ -50,7 +54,7 @@ where
   fn end_bound(&self) -> Bound<Self::Key>;
 
   /// Returns the range of the entry.
-  fn contains<Q>(&self,) -> impl RangeBounds<Self::Key> + 'a {
+  fn range<Q: ?Sized>(&self) -> impl RangeBounds<Self::Key> + 'a {
     (self.start_bound(), self.end_bound())
   }
 
@@ -60,7 +64,6 @@ where
   /// Returns the previous entry in the memory table.
   fn prev(&mut self) -> Option<Self>;
 }
-
 
 /// An entry which is stored in the memory table.
 pub trait RangeDeletionEntry<'a>: RangeEntry<'a> {}
@@ -76,7 +79,6 @@ where
   /// Returns the value in the entry.
   fn value(&self) -> Self::Value;
 }
-
 
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait Memtable {
@@ -121,31 +123,4 @@ pub trait Memtable {
 
   /// Returns the kind of the memtable.
   fn mode() -> Mode;
-}
-
-mod sealed {
-  pub trait ComparatorConstructor<C: ?Sized>: Sized {
-    fn new(ptr: *const u8, cmp: triomphe::Arc<C>) -> Self;
-  }
-
-  pub trait Sealed {
-    type GenericComparator<K: ?Sized>: ComparatorConstructor<Self>;
-    type GenericRangeComparator<K: ?Sized>: ComparatorConstructor<Self>;
-    type DynamicComparator: ComparatorConstructor<Self>;
-    type DynamicRangeComparator: ComparatorConstructor<Self>;
-  }
-
-  impl<C> Sealed for C
-  where
-    C: ?Sized,
-  {
-    type GenericComparator<K: ?Sized> = crate::memtable::generic::MemtableComparator<K, C>;
-
-    type GenericRangeComparator<K: ?Sized> =
-      crate::memtable::generic::MemtableRangeComparator<K, C>;
-
-    type DynamicComparator = crate::memtable::dynamic::MemtableComparator<C>;
-
-    type DynamicRangeComparator = crate::memtable::dynamic::MemtableRangeComparator<C>;
-  }
 }

@@ -10,20 +10,14 @@ use skl::{
 use triomphe::Arc;
 
 use crate::types::{
-  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry, Dynamic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer
+  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
+  Dynamic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
 };
 
 pub struct MemtableRangeComparator<C: ?Sized> {
   /// The start pointer of the parent ARENA.
   ptr: *const u8,
   cmp: Arc<C>,
-}
-
-impl<C: ?Sized> super::super::sealed::ComparatorConstructor<C> for MemtableRangeComparator<C> {
-  #[inline]
-  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp }
-  }
 }
 
 impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableRangeComparator<C> {
@@ -37,29 +31,29 @@ impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeCompar
   fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
   where
     T: crate::types::Kind,
-    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]> {
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+  {
     unsafe { fetch_raw_range_update_entry::<T>(self.ptr, kp) }
   }
 
   fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
   where
     T: crate::types::Kind,
-    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]> {
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+  {
     unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }
   }
 }
 
 impl<C: ?Sized> MemtableRangeComparator<C> {
   #[inline]
-  pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, Dynamic>
-  {
+  pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, Dynamic> {
     unsafe { fetch_raw_range_update_entry::<Dynamic>(self.ptr, kp) }
   }
 
   #[inline]
-  pub fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, Dynamic>
-  {
+  pub fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, Dynamic> {
     unsafe { fetch_raw_range_deletion_entry::<Dynamic>(self.ptr, kp) }
   }
 

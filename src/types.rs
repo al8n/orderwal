@@ -1,4 +1,4 @@
-use core::{mem, ops::Bound, slice};
+use core::{marker::PhantomData, mem, ops::Bound, slice};
 
 use dbutils::{
   buffer::VacantBuffer,
@@ -346,10 +346,12 @@ impl Pointer {
 
 pub trait Kind: sealed::Sealed {}
 
+#[doc(hidden)]
 #[derive(Copy, Clone)]
-pub(crate) struct Dynamic;
+pub struct Dynamic;
 
-pub(crate) struct Generic<K: ?Sized, V: ?Sized>(core::marker::PhantomData<(fn() -> K, fn() -> V)>);
+#[doc(hidden)]
+pub struct Generic<K: ?Sized, V: ?Sized>(core::marker::PhantomData<(fn() -> K, fn() -> V)>);
 
 impl<K, V> Clone for Generic<K, V>
 where
@@ -361,12 +363,19 @@ where
   }
 }
 
-impl<K, V> Copy for Generic<K, V> where K: ?Sized, V: ?Sized {}
+impl<K, V> Copy for Generic<K, V>
+where
+  K: ?Sized,
+  V: ?Sized,
+{
+}
 
 pub(crate) mod sealed {
   use skl::generic::{LazyRef, Type};
 
-  use super::{Dynamic, Generic, Kind, RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer};
+  use super::{
+    Dynamic, Generic, Kind, RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
+  };
 
   pub trait ComparatorConstructor<C: ?Sized>: Sized {
     fn new(ptr: *const u8, cmp: triomphe::Arc<C>) -> Self;
@@ -376,26 +385,26 @@ pub(crate) mod sealed {
     fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
     where
       T: Kind,
-      T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>;
+      T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>;
   }
 
   pub trait RangeComparator<C: ?Sized>: ComparatorConstructor<C> {
     fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
     where
       T: Kind,
-      T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
-      T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>;
+      T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>;
 
     fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
     where
       T: Kind,
-      T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>;
+      T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>;
   }
 
-  pub trait Pointee {
+  pub trait Pointee<'a> {
     type Input;
-    type Output;
+    type Output: Copy;
 
     fn from_input(input: Self::Input) -> Self;
 
@@ -404,7 +413,7 @@ pub(crate) mod sealed {
     fn output(&self) -> Self::Output;
   }
 
-  impl Pointee for &[u8] {
+  impl<'a> Pointee<'a> for &'a [u8] {
     type Input = Self;
     type Output = Self;
 
@@ -424,7 +433,7 @@ pub(crate) mod sealed {
     }
   }
 
-  impl<'a, T> Pointee for LazyRef<'a, T>
+  impl<'a, T> Pointee<'a> for LazyRef<'a, T>
   where
     T: Type + ?Sized,
   {
@@ -448,8 +457,8 @@ pub(crate) mod sealed {
   }
 
   pub trait Sealed: Copy {
-    type Key<'a>: Pointee;
-    type Value<'a>: Pointee;
+    type Key<'a>: Pointee<'a>;
+    type Value<'a>: Pointee<'a>;
 
     type Comparator<C>: ComparatorConstructor<C>;
     type RangeComparator<C>: ComparatorConstructor<C>;
@@ -504,7 +513,8 @@ where
   T: Kind,
   T::Key<'a>: Copy,
   T::Value<'a>: Copy,
-{}
+{
+}
 
 impl<'a, T: Kind> RawEntryRef<'a, T> {
   #[inline]
@@ -522,7 +532,6 @@ impl<'a, T: Kind> RawEntryRef<'a, T> {
     self.version
   }
 }
-
 
 pub struct RawRangeUpdateRef<'a, T: Kind> {
   flag: EntryFlags,
@@ -554,7 +563,8 @@ where
   T: Kind,
   T::Key<'a>: Copy,
   T::Value<'a>: Copy,
-{}
+{
+}
 
 impl<'a, T: Kind> RawRangeUpdateRef<'a, T> {
   #[inline]
@@ -612,7 +622,8 @@ impl<'a, T> Copy for RawRangeDeletionRef<'a, T>
 where
   T: Kind,
   T::Key<'a>: Copy,
-{}
+{
+}
 
 impl<'a, T> RawRangeDeletionRef<'a, T>
 where
@@ -721,8 +732,8 @@ pub(crate) unsafe fn fetch_entry<'a, T>(
 ) -> RawEntryRef<'a, T>
 where
   T: Kind,
-  T::Key<'a>: sealed::Pointee<Input = &'a [u8]>,
-  T::Value<'a>: sealed::Pointee<Input = &'a [u8]>,
+  T::Key<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
 {
   let record_ptr = data_ptr.add(p.offset());
   let flag = EntryFlags::from_bits_retain(*record_ptr);
@@ -752,14 +763,14 @@ where
   let value = if flag.contains(EntryFlags::REMOVED) {
     let vo = record_ptr.add(cursor);
     let (_, raw_value) = read_value_slice(data_ptr, vo, flag);
-    Some(<T::Value<'a> as sealed::Pointee>::from_input(raw_value))
+    Some(<T::Value<'a> as sealed::Pointee<'a>>::from_input(raw_value))
   } else {
     None
   };
 
   RawEntryRef {
     flag,
-    key: <T::Key<'a> as sealed::Pointee>::from_input(raw_key),
+    key: <T::Key<'a> as sealed::Pointee<'a>>::from_input(raw_key),
     value,
     version,
   }
@@ -774,7 +785,7 @@ pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a, T>(
   kp: &RecordPointer,
 ) -> Bound<T>
 where
-  T: sealed::Pointee<Input = &'a [u8]>,
+  T: sealed::Pointee<'a, Input = &'a [u8]>,
 {
   let record_ptr = data_ptr.add(kp.offset());
   let flag = EntryFlags::from_bits_retain(*record_ptr);
@@ -807,13 +818,14 @@ where
   }
 }
 
-struct FetchRangeKey<T: Pointee> {
+struct FetchRangeKey<'a, T: Pointee<'a>> {
   flag: EntryFlags,
   start_bound: Bound<T>,
   end_bound: Bound<T>,
   readed: usize,
   version: Option<u64>,
   ptr: *const u8,
+  _m: PhantomData<&'a ()>,
 }
 
 /// # Safety
@@ -824,9 +836,9 @@ unsafe fn fetch_raw_range_key_helper<'a, T>(
   data_ptr: *const u8,
   kp: &RecordPointer,
   f: impl FnOnce(&EntryFlags),
-) -> FetchRangeKey<T>
+) -> FetchRangeKey<'a, T>
 where
-  T: sealed::Pointee<Input = &'a [u8]>,
+  T: sealed::Pointee<'a, Input = &'a [u8]>,
 {
   let record_ptr = data_ptr.add(kp.offset());
   let flag = EntryFlags::from_bits_retain(*record_ptr);
@@ -886,6 +898,7 @@ where
     readed: cursor,
     ptr: record_ptr.add(cursor),
     version,
+    _m: PhantomData,
   }
 }
 
@@ -897,7 +910,7 @@ pub(crate) unsafe fn fetch_raw_range_key<'a, T>(
   p: &RecordPointer,
 ) -> (Bound<T>, Bound<T>)
 where
-  T: sealed::Pointee<Input = &'a [u8]>,
+  T: sealed::Pointee<'a, Input = &'a [u8]>,
 {
   let FetchRangeKey::<T> {
     start_bound,
@@ -924,7 +937,7 @@ pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a, T>(
 ) -> RawRangeDeletionRef<'a, T>
 where
   T: Kind,
-  T::Key<'a>: sealed::Pointee<Input = &'a [u8]>,
+  T::Key<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
 {
   let FetchRangeKey::<T::Key<'_>> {
     flag,
@@ -957,8 +970,8 @@ pub(crate) unsafe fn fetch_raw_range_update_entry<'a, T>(
 ) -> RawRangeUpdateRef<'a, T>
 where
   T: Kind,
-  T::Key<'a>: sealed::Pointee<Input = &'a [u8]>,
-  T::Value<'a>: sealed::Pointee<Input = &'a [u8]>,
+  T::Key<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
 {
   let FetchRangeKey::<T::Key<'_>> {
     flag,
@@ -976,7 +989,7 @@ where
 
   let value = if flag.contains(EntryFlags::RANGE_UNSET) {
     let (_, raw_value) = read_value_slice(data_ptr, ptr, flag);
-    Some(<T::Value<'a> as sealed::Pointee>::from_input(raw_value))
+    Some(<T::Value<'a> as sealed::Pointee<'a>>::from_input(raw_value))
   } else {
     None
   };

@@ -26,8 +26,9 @@ macro_rules! memmap_or_not {
       let mmap = $opts.map_anon();
       let cmp = Arc::new($opts.cmp);
       let ptr = $arena.raw_ptr();
-      let points_cmp = <<C as $crate::memtable::sealed::Sealed>::[< $prefix:camel Comparator >] as $crate::memtable::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
-      let rng_cmp = <<C as $crate::memtable::sealed::Sealed>::[< $prefix:camel RangeComparator >] as $crate::memtable::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
+      let points_cmp = <T::Comparator<C> as $crate::types::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
+      let range_del_cmp = <T::RangeComparator<C> as $crate::types::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
+      let range_update_cmp = <T::RangeComparator<C> as $crate::types::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
 
       let b = skl::generic::Builder::with(points_cmp).with_options(arena_opts);
 
@@ -39,10 +40,10 @@ macro_rules! memmap_or_not {
       let allocator = points.allocator().clone();
       let range_del_skl = SkipMap::<_, _, _>::create_from_allocator(
         allocator.clone(),
-        rng_cmp.clone(),
+        range_del_cmp,
       )?;
       let range_key_skl =
-        SkipMap::<_, _, _>::create_from_allocator(allocator, rng_cmp)?;
+        SkipMap::<_, _, _>::create_from_allocator(allocator, range_update_cmp)?;
 
       Ok(Self {
         skl: points,
@@ -69,17 +70,23 @@ macro_rules! dynamic_memtable {
       };
 
       /// A memory table implementation based on ARENA [`SkipMap`](skl).
-      pub struct Table<C> {
+      pub struct Table<C, T>
+      where
+        T: $crate::types::Kind,
+      {
         pub(in crate::memtable) cmp: Arc<C>,
-        pub(in crate::memtable) skl: SkipMap<RecordPointer, (), <C as crate::memtable::sealed::Sealed>::DynamicComparator>,
+        pub(in crate::memtable) skl: SkipMap<RecordPointer, (), T::Comparator<C>>,
         pub(in crate::memtable) range_deletions_skl:
-          SkipMap<RecordPointer, (), <C as crate::memtable::sealed::Sealed>::DynamicRangeComparator>,
-        pub(in crate::memtable) range_updates_skl: SkipMap<RecordPointer, (), <C as crate::memtable::sealed::Sealed>::DynamicRangeComparator>,
+          SkipMap<RecordPointer, (), T::RangeComparator<C>>,
+        pub(in crate::memtable) range_updates_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
       }
 
-      impl<C> Memtable for Table<C>
+      impl<C, T> Memtable for Table<C, T>
       where
-        C: BytesComparator + 'static,
+        C: 'static,
+        T: $crate::types::Kind,
+        T::Comparator<C>: for<'a> dbutils::equivalentor::TypeRefComparator<'a, RecordPointer> + 'static,
+        T::RangeComparator<C>: for<'a> dbutils::equivalentor::TypeRefComparator<'a, RecordPointer> + 'static,
       {
         type Options = TableOptions<C>;
 

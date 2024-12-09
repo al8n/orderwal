@@ -1,15 +1,17 @@
 use core::{cmp, marker::PhantomData, ops::Bound};
 
 use skl::generic::{
-  Comparator, Equivalentor, LazyRef, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor
+  Comparator, Equivalentor, LazyRef, Type, TypeRefComparator, TypeRefEquivalentor,
+  TypeRefQueryComparator, TypeRefQueryEquivalentor,
 };
 use triomphe::Arc;
 
 use crate::types::{
-  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry, sealed::Pointee, Generic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer
+  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
+  sealed::Pointee, Generic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
 };
 
-use super::Query;
+use super::super::Query;
 
 pub struct MemtableRangeComparator<K, C>
 where
@@ -22,17 +24,6 @@ where
   _k: PhantomData<K>,
 }
 
-impl<K, C> super::super::sealed::ComparatorConstructor<C> for MemtableRangeComparator<K, C>
-where
-  K: ?Sized,
-  C: ?Sized,
-{
-  #[inline]
-  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp, _k: PhantomData }
-  }
-}
-
 impl<K, C> crate::types::sealed::ComparatorConstructor<C> for MemtableRangeComparator<K, C>
 where
   K: ?Sized,
@@ -40,7 +31,11 @@ where
 {
   #[inline]
   fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp, _k: PhantomData }
+    Self {
+      ptr,
+      cmp,
+      _k: PhantomData,
+    }
   }
 }
 
@@ -50,7 +45,10 @@ where
   C: ?Sized,
 {
   #[inline]
-  pub fn fetch_range_update<'a, V>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, Generic<K, V>>
+  pub fn fetch_range_update<'a, V>(
+    &self,
+    kp: &RecordPointer,
+  ) -> RawRangeUpdateRef<'a, Generic<K, V>>
   where
     V: Type + ?Sized,
     K: Type,
@@ -59,7 +57,10 @@ where
   }
 
   #[inline]
-  pub fn fetch_range_deletion<'a, V>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, Generic<K, V>>
+  pub fn fetch_range_deletion<'a, V>(
+    &self,
+    kp: &RecordPointer,
+  ) -> RawRangeDeletionRef<'a, Generic<K, V>>
   where
     V: Type + ?Sized,
     K: Type,
@@ -120,7 +121,10 @@ where
       let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
       match &ak {
         Bound::Included(k) => self.cmp.query_compare_ref(k, b),
-        Bound::Excluded(k) => self.cmp.query_compare_ref(k, b).then(cmp::Ordering::Greater),
+        Bound::Excluded(k) => self
+          .cmp
+          .query_compare_ref(k, b)
+          .then(cmp::Ordering::Greater),
         Bound::Unbounded => cmp::Ordering::Less,
       }
     }
@@ -208,7 +212,8 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>> for MemtableRangeComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
   Q: ?Sized,
@@ -246,7 +251,8 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>> for MemtableRangeComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
   Q: ?Sized,
@@ -258,7 +264,8 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer> for MemtableRangeComparator<K, C>
+impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefComparator<'a, K> + ?Sized,
   K: Type + ?Sized,
@@ -268,7 +275,8 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefQueryComparator<'a, RecordPointer, RecordPointer> for MemtableRangeComparator<K, C>
+impl<'a, K, C> TypeRefQueryComparator<'a, RecordPointer, RecordPointer>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefComparator<'a, K> + ?Sized,
   K: Type + ?Sized,

@@ -30,9 +30,12 @@ pub mod unique {
     dbutils::checksum::Crc32,
   };
 
-  pub use crate::dynamic::{
-    // memtable::bounded::TableOptions as BoundedTableOptions,
-    wal::unique::{Reader, Writer},
+  pub use crate::{
+    dynamic::{
+      // memtable::bounded::TableOptions as BoundedTableOptions,
+      wal::unique::{Reader, Writer},
+    },
+    types::Dynamic,
   };
 
   // /// An memory table for [`OrderWal`] or [`OrderWalReader`] based on [`linked::Table`](BaseLinkedTable).
@@ -49,7 +52,7 @@ pub mod unique {
 
   /// The default memory table used by [`OrderWal`] or [`OrderWalReader`].
   // #[cfg(not(feature = "std"))]
-  pub type DefaultMemtable = unique::bounded::Table<Ascend>;
+  pub type DefaultMemtable = unique::bounded::Table<Ascend, Dynamic>;
 
   /// A dynamic ordered write-ahead log implementation for multiple threads environments.
   pub type OrderWal<M = DefaultMemtable, S = Crc32> = writer::OrderWal<M, S>;
@@ -74,9 +77,12 @@ pub mod multiple_version {
     dbutils::checksum::Crc32,
   };
 
-  pub use crate::dynamic::{
-    // types::multiple_version::{Entry, Key, Value, VersionedEntry},
-    wal::multiple_version::{Reader, Writer},
+  pub use crate::{
+    dynamic::{
+      // types::multiple_version::{Entry, Key, Value, VersionedEntry},
+      wal::multiple_version::{Reader, Writer},
+    },
+    types::Dynamic,
   };
 
   // /// An memory table for multiple version [`OrderWal`] or [`OrderWalReader`] based on [`linked::MultipleVersionTable`](BaseLinkedTable).
@@ -93,7 +99,7 @@ pub mod multiple_version {
 
   /// The default memory table used by [`OrderWal`] or [`OrderWalReader`].
   // #[cfg(not(feature = "std"))]
-  pub type DefaultMemtable = multiple_version::bounded::Table<Ascend>;
+  pub type DefaultMemtable = multiple_version::bounded::Table<Ascend, Dynamic>;
 
   /// A multiple versioned dynamic ordered write-ahead log implementation for multiple threads environments.
   pub type OrderWal<M = DefaultMemtable, S = Crc32> = writer::OrderWal<M, S>;

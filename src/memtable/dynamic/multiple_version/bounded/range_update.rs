@@ -7,10 +7,10 @@ range_update_wrapper!(
 
 iter_wrapper!(
   /// The iterator for point entries.
-  IterBulkUpdates(Iter) yield RangeUpdateEntry by MemtableRangeComparator
+  IterBulkUpdates(Iter) yield RangeUpdateEntry by RangeComparator
 );
 
 range_wrapper!(
   /// The iterator over a subset of point entries.
-  RangeBulkUpdates(Range) yield RangeUpdateEntry by MemtableRangeComparator
+  RangeBulkUpdates(Range) yield RangeUpdateEntry by RangeComparator
 );

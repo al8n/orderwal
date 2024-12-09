@@ -17,13 +17,6 @@ pub struct MemtableComparator<C: ?Sized> {
   cmp: Arc<C>,
 }
 
-impl<C: ?Sized> super::super::sealed::ComparatorConstructor<C> for MemtableComparator<C> {
-  #[inline]
-  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
-    Self { ptr, cmp }
-  }
-}
-
 impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableComparator<C> {
   #[inline]
   fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
@@ -36,8 +29,8 @@ impl<C: ?Sized> crate::types::sealed::PointComparator<C> for MemtableComparator<
   fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
   where
     T: Kind,
-    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {
     unsafe { fetch_entry::<T>(self.ptr, kp) }
   }
@@ -48,8 +41,8 @@ impl<C: ?Sized> MemtableComparator<C> {
   pub fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
   where
     T: Kind,
-    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {
     unsafe { fetch_entry::<T>(self.ptr, kp) }
   }

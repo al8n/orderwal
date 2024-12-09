@@ -1,6 +1,9 @@
 use skl::dynamic::BytesComparator;
 
-use crate::{types::Kind, State};
+use crate::{
+  types::{sealed::Pointee, Kind},
+  State,
+};
 
 use super::PointEntry;
 
@@ -10,10 +13,10 @@ where
   S: State<'a>,
   T: Kind,
 {
-  table: &'a super::Table<C>,
+  table: &'a super::Table<C, T>,
   point_ent: PointEntry<'a, S, C, T>,
-  key: &'a [u8],
-  val: S::BytesValueOutput,
+  key: <T::Key<'a> as Pointee<'a>>::Output,
+  val: <T::Value<'a> as Pointee<'a>>::Output,
 }
 
 impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
@@ -22,6 +25,8 @@ where
   S::BytesValueOutput: core::fmt::Debug,
   C: BytesComparator,
   T: Kind,
+  <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
+  <T::Value<'a> as Pointee<'a>>::Output: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Entry")
@@ -56,10 +61,10 @@ where
 {
   #[inline]
   pub(crate) fn new(
-    table: &'a super::Table<C>,
+    table: &'a super::Table<C, T>,
     point_ent: PointEntry<'a, S, C, T>,
-    key: &'a [u8],
-    val: S::BytesValueOutput,
+    key: <T::Key<'a> as Pointee<'a>>::Output,
+    val: <T::Value<'a> as Pointee<'a>>::Output,
   ) -> Self {
     Self {
       table,
@@ -71,13 +76,13 @@ where
 
   /// Returns the key in the entry.
   #[inline]
-  pub const fn key(&self) -> &'a [u8] {
+  pub const fn key(&self) -> <T::Key<'a> as Pointee<'a>>::Output {
     self.key
   }
 
   /// Returns the value in the entry.
   #[inline]
-  pub const fn value(&self) -> S::BytesValueOutput {
+  pub const fn value(&self) -> <T::Value<'a> as Pointee<'a>>::Output {
     self.val
   }
 }
