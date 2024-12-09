@@ -13,6 +13,7 @@ use crate::{
   WAL_KIND_SIZE,
 };
 use among::Among;
+use skl::Active;
 use core::{
   borrow::Borrow,
   ops::{Bound, RangeBounds},
@@ -60,6 +61,24 @@ pub trait WalReader<S> {
     Self::Memtable: unique::DynamicMemtable,
   {
     unique::DynamicMemtable::range(self.memtable(), range)
+  }
+
+  #[inline]
+  fn iter_points(&self) -> <Self::Memtable as unique::DynamicMemtable>::PointsIterator<'_, Active>
+  where
+    Self::Memtable: unique::DynamicMemtable,
+  {
+    unique::DynamicMemtable::iter_points(self.memtable())
+  }
+
+  #[inline]
+  fn range_points<Q, R>(&self, range: R) -> <Self::Memtable as unique::DynamicMemtable>::RangePoints<'_, Active, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: unique::DynamicMemtable,
+  {
+    unique::DynamicMemtable::range_points(self.memtable(), range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
@@ -153,6 +172,24 @@ pub trait MultipleVersionWalReader<S> {
     Self::Memtable: multiple_version::DynamicMemtable,
   {
     multiple_version::DynamicMemtable::range(self.memtable(), version, range)
+  }
+
+  #[inline]
+  fn iter_points(&self, version: u64) -> <Self::Memtable as multiple_version::DynamicMemtable>::PointsIterator<'_, Active>
+  where
+    Self::Memtable: multiple_version::DynamicMemtable,
+  {
+    multiple_version::DynamicMemtable::iter_points(self.memtable(), version)
+  }
+
+  #[inline]
+  fn range_points<Q, R>(&self, version: u64, range: R) -> <Self::Memtable as multiple_version::DynamicMemtable>::RangePoints<'_, Active, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: multiple_version::DynamicMemtable,
+  {
+    multiple_version::DynamicMemtable::range_points(self.memtable(), version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.

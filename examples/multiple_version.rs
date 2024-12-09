@@ -1,5 +1,5 @@
 use orderwal::{
-  dynamic::{multiple_version::{OrderWal, Reader, Writer}, Builder},
+  dynamic::{multiple_version::{OrderWal, Reader, Writer}, Builder}
   // Builder,
 };
 

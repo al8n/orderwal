@@ -7,7 +7,7 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, checksum::BuildChecksumer};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::either::Either;
+use skl::{either::Either, Active};
 
 use crate::{
   dynamic::{
@@ -125,6 +125,35 @@ pub trait Reader: Constructable {
     <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
   {
     self.as_wal().range(version, range)
+  }
+
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  fn iter_points<'a>(
+    &'a self,
+    version: u64,
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::PointsIterator<'a, Active>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
+  {
+    self.as_wal().iter_points(version)
+  }
+
+  /// Returns an iterator over a subset of entries in the WAL.
+  #[inline]
+  fn range_points<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::RangePoints<'a, Active, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithVersion,
+  {
+    self.as_wal().range_points(version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.

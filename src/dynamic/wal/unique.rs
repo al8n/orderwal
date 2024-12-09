@@ -7,7 +7,7 @@ use among::Among;
 use dbutils::{buffer::VacantBuffer, checksum::BuildChecksumer};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::either::Either;
+use skl::{either::Either, Active};
 
 use crate::{
   dynamic::{
@@ -116,6 +116,33 @@ pub trait Reader: Constructable {
     self.as_wal().range(range)
   }
 
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  fn iter_points<'a>(
+    &'a self,
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::PointsIterator<'a, Active>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
+  {
+    self.as_wal().iter_points()
+  }
+
+  /// Returns an iterator over a subset of entries in the WAL.
+  #[inline]
+  fn range_points<'a, Q, R>(
+    &'a self,
+    range: R,
+  ) -> <<Self::Wal as Wal<Self::Checksumer>>::Memtable as DynamicMemtable>::RangePoints<'a, Active, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
+  {
+    self.as_wal().range_points(range)
+  }
+
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
   fn first<'a>(&'a self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
@@ -153,7 +180,7 @@ pub trait Reader: Constructable {
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
-    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
+    // <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().get(key)
   }
@@ -168,7 +195,7 @@ pub trait Reader: Constructable {
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
-    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
+    // <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().upper_bound(bound)
   }
@@ -298,7 +325,7 @@ where
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
-    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
+    // <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     Wal::insert(self.as_wal(), None, key, value).map_err(Among::unwrap_right)
   }
@@ -313,7 +340,7 @@ where
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
-    <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
+    // <Self::Memtable as DynamicMemtable>::Entry<'a>: WithoutVersion,
   {
     self.as_wal().remove(None, kb)
   }

@@ -1,6 +1,6 @@
 use core::ops::{Bound, RangeBounds};
 
-use crate::types::{Kind, Mode, RecordPointer};
+use crate::types::{Mode, RecordPointer};
 
 #[macro_use]
 mod bounded;
