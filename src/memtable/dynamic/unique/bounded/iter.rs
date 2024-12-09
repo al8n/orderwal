@@ -5,22 +5,24 @@ use core::{
 
 use skl::{dynamic::BytesComparator, Active};
 
-use crate::memtable::dynamic::unique::DynamicMemtable;
+use crate::{memtable::dynamic::unique::DynamicMemtable, types::Kind};
 
 use super::{Entry, IterPoints, RangePoints, Table};
 
 /// An iterator over the entries of a `Memtable`.
-pub struct Iter<'a, C>
+pub struct Iter<'a, C, T>
 where
   C: 'static,
+  T: Kind,
 {
   table: &'a Table<C>,
-  iter: IterPoints<'a, Active, C>,
+  iter: IterPoints<'a, Active, C, T>,
 }
 
-impl<'a, C> Iter<'a, C>
+impl<'a, C, T> Iter<'a, C, T>
 where
   C: BytesComparator,
+  T: Kind,
 {
   pub(super) fn new(table: &'a Table<C>) -> Self {
     Self {
@@ -30,11 +32,12 @@ where
   }
 }
 
-impl<'a, C> Iterator for Iter<'a, C>
+impl<'a, C, T> Iterator for Iter<'a, C, T>
 where
   C: BytesComparator,
+  T: Kind,
 {
-  type Item = Entry<'a, Active, C>;
+  type Item = Entry<'a, Active, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -48,9 +51,10 @@ where
   }
 }
 
-impl<C> DoubleEndedIterator for Iter<'_, C>
+impl<C, T> DoubleEndedIterator for Iter<'_, C, T>
 where
   C: BytesComparator,
+  T: Kind,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -65,20 +69,22 @@ where
 }
 
 /// An iterator over the entries of a `Memtable`.
-pub struct Range<'a, Q, R, C>
+pub struct Range<'a, Q, R, C, T>
 where
   R: RangeBounds<Q>,
   Q: ?Sized,
+  T: Kind,
 {
   table: &'a Table<C>,
-  iter: RangePoints<'a, Active, Q, R, C>,
+  iter: RangePoints<'a, Active, Q, R, C, T>,
 }
 
-impl<'a, Q, R, C> Range<'a, Q, R, C>
+impl<'a, Q, R, C, T> Range<'a, Q, R, C, T>
 where
   C: BytesComparator + 'static,
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
+  T: Kind,
 {
   pub(super) fn new(table: &'a Table<C>, r: R) -> Self {
     Self {
@@ -88,13 +94,14 @@ where
   }
 }
 
-impl<'a, Q, R, C> Iterator for Range<'a, Q, R, C>
+impl<'a, Q, R, C, T> Iterator for Range<'a, Q, R, C, T>
 where
   C: BytesComparator + 'static,
   R: RangeBounds<Q>,
   Q: ?Sized + Borrow<[u8]>,
+  T: Kind,
 {
-  type Item = Entry<'a, Active, C>;
+  type Item = Entry<'a, Active, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -108,11 +115,12 @@ where
   }
 }
 
-impl<Q, R, C> DoubleEndedIterator for Range<'_, Q, R, C>
+impl<Q, R, C, T> DoubleEndedIterator for Range<'_, Q, R, C, T>
 where
   R: RangeBounds<Q>,
   Q: ?Sized + Borrow<[u8]>,
   C: BytesComparator + 'static,
+  T: Kind,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

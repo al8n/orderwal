@@ -6,8 +6,7 @@ use core::{
 use skl::{dynamic::BytesRangeComparator, Active};
 
 use crate::{
-  memtable::dynamic::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
-  State,
+  memtable::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _}, types::Dynamic, State
 };
 
 use super::DynamicMemtable;
@@ -36,7 +35,7 @@ where
     Self: 'a;
 
   type PointEntry<'a, S>
-    = PointEntry<'a, S, C>
+    = PointEntry<'a, S, C, Dynamic>
   where
     Self: 'a,
     S: State<'a>;

@@ -4,18 +4,21 @@ macro_rules! point_entry_wrapper {
     $ent:ident($inner:ident) $(::$version:ident)?
   ) => {
     $(#[$meta])*
-    pub struct $ent<'a, S, C>
+    pub struct $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind
     {
       ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::MemtableComparator<C>>,
-      data: core::cell::OnceCell<$crate::types::RawEntryRef<'a>>,
+      data: core::cell::OnceCell<$crate::types::RawEntryRef<'a, T>>,
     }
 
-    impl<'a, S, C> Clone for $ent<'a, S, C>
+    impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-
+      T: $crate::types::Kind,
+      T::Value<'a>: Clone,
+      T::Key<'a>: Clone,
     {
       #[inline]
       fn clone(&self) -> Self {
@@ -26,9 +29,10 @@ macro_rules! point_entry_wrapper {
       }
     }
 
-    impl<'a, S, C> $ent<'a, S, C>
+    impl<'a, S, C, T> $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
     {
       #[inline]
       pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::MemtableComparator<C>>) -> Self {
@@ -39,26 +43,38 @@ macro_rules! point_entry_wrapper {
       }
     }
 
-    impl<'a, C> $crate::memtable::dynamic::MemtableEntry<'a> for $ent<'a, $crate::Active, C>
+    impl<'a, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, $crate::Active, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
     {
-      type Value = &'a [u8];
+      type Key = <T::Key<'a> as crate::types::sealed::Pointee>::Output;
+      type Value = <T::Value<'a> as crate::types::sealed::Pointee>::Output;
 
       #[inline]
-      fn key(&self) -> &'a [u8] {
+      fn key(&self) -> Self::Key {
+        use crate::types::sealed::Pointee;
+
         self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
-        }).key()
+        })
+        .key()
+        .output()
       }
 
       #[inline]
       fn value(&self) -> Self::Value {
+        use crate::types::sealed::Pointee;
+
         let ent = self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
         });
 
-        ent.value().expect("entry in Active state must have a value")
+        ent.value().expect("entry in Active state must have a value").output()
       }
 
       #[inline]
@@ -72,26 +88,38 @@ macro_rules! point_entry_wrapper {
       }
     }
 
-    impl<'a, C> $crate::memtable::dynamic::MemtableEntry<'a> for $ent<'a, $crate::MaybeTombstone, C>
+    impl<'a, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, $crate::MaybeTombstone, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
     {
-      type Value = Option<&'a [u8]>;
+      type Key = <T::Key<'a> as crate::types::sealed::Pointee>::Output;
+      type Value = Option<<T::Value<'a> as crate::types::sealed::Pointee>::Output>;
 
       #[inline]
-      fn key(&self) -> &'a [u8] {
+      fn key(&self) -> Self::Key {
+        use crate::types::sealed::Pointee;
+
         self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
-        }).key()
+        })
+        .key()
+        .output()
       }
 
       #[inline]
       fn value(&self) -> Self::Value {
+        use crate::types::sealed::Pointee;
+
         let ent = self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
         });
 
-        ent.value()
+        ent.value().map(|v| v.output())
       }
 
       #[inline]
@@ -106,10 +134,11 @@ macro_rules! point_entry_wrapper {
     }
 
     $(
-      impl<'a, S, C> $crate::WithVersion for $ent<'a, S, C>
+      impl<'a, S, C, T> $crate::WithVersion for $ent<'a, S, C, T>
       where
         C: dbutils::equivalentor::BytesComparator,
         S: $crate::State<'a>,
+        T: $crate::types::Kind,
       {
         #[inline]
         fn $version(&self) -> u64 {
@@ -126,17 +155,21 @@ macro_rules! range_entry_wrapper {
     $ent:ident($inner:ident => $raw:ident.$fetch:ident) $(::$version:ident)?
   ) => {
     $(#[$meta])*
-    pub struct $ent<'a, S, C>
+    pub struct $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
     {
-      ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::MemtableRangeComparator<C>>,
-      data: core::cell::OnceCell<$crate::types::$raw<'a>>,
+      ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>,
+      data: core::cell::OnceCell<$crate::types::$raw<'a, T>>,
     }
 
-    impl<'a, S, C> Clone for $ent<'a, S, C>
+    impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
+      T::Value<'a>: Clone,
+      T::Key<'a>: Clone,
     {
       #[inline]
       fn clone(&self) -> Self {
@@ -147,11 +180,12 @@ macro_rules! range_entry_wrapper {
       }
     }
 
-    impl<'a, S, C> $ent<'a, S, C>
+    impl<'a, S, C, T> $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
     {
-      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::MemtableRangeComparator<C>>) -> Self {
+      pub(super) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>) -> Self {
         Self {
           ent,
           data: core::cell::OnceCell::new(),
@@ -159,25 +193,39 @@ macro_rules! range_entry_wrapper {
       }
     }
 
-    impl<'a, S, C> $crate::memtable::dynamic::RangeEntry<'a> for $ent<'a, S, C>
+    impl<'a, S, C, T> $crate::memtable::RangeEntry<'a> for $ent<'a, S, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      T::RangeComparator<C>: 
+        dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
+        + crate::types::sealed::RangeComparator<C>,
     {
+      type Key = <T::Key<'a> as crate::types::sealed::Pointee>::Output;
+
       #[inline]
-      fn start_bound(&self) -> core::ops::Bound<&'a [u8]> {
+      fn start_bound(&self) -> core::ops::Bound<Self::Key> {
+        use crate::types::sealed::{Pointee, RangeComparator};
+
         let ent = self
           .data
           .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
-        ent.start_bound()
+        ent.start_bound().map(|k| k.output())
       }
 
       #[inline]
-      fn end_bound(&self) -> core::ops::Bound<&'a [u8]> {
+      fn end_bound(&self) -> core::ops::Bound<Self::Key> {
+        use crate::types::sealed::{Pointee, RangeComparator};
+
         let ent = self
           .data
           .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
-        ent.end_bound()
+        ent.end_bound().map(|k| k.output())
       }
 
       #[inline]
@@ -192,10 +240,11 @@ macro_rules! range_entry_wrapper {
     }
 
     $(
-      impl<'a, S, C> $crate::WithVersion for $ent<'a, S, C>
+      impl<'a, S, C, T> $crate::WithVersion for $ent<'a, S, C, T>
       where
         C: dbutils::equivalentor::BytesComparator,
         S: $crate::State<'a>,
+        T: $crate::types::Kind,
       {
         #[inline]
         fn $version(&self) -> u64 {
@@ -216,11 +265,19 @@ macro_rules! range_deletion_wrapper {
       $ent($inner => RawRangeDeletionRef.fetch_range_deletion) $(::$version)?
     }
 
-    impl<'a, S, C> crate::memtable::dynamic::RangeDeletionEntry<'a>
-      for $ent<'a, S, C>
+    impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a>
+      for $ent<'a, S, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      T::RangeComparator<C>: 
+        dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
+        + crate::types::sealed::RangeComparator<C>,
     {
     }
   };
@@ -236,35 +293,55 @@ macro_rules! range_update_wrapper {
       $ent($inner => RawRangeUpdateRef.fetch_range_update) $(::$version)?
     }
 
-    impl<'a, C> crate::memtable::dynamic::RangeUpdateEntry<'a>
-      for $ent<'a, $crate::MaybeTombstone, C>
+    impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a>
+      for $ent<'a, $crate::MaybeTombstone, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      T::RangeComparator<C>: 
+        dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
+        + crate::types::sealed::RangeComparator<C>,
     {
-      type Value = Option<&'a [u8]>;
+      type Value = Option<<T::Value<'a> as crate::types::sealed::Pointee>::Output>;
 
       #[inline]
       fn value(&self) -> Self::Value {
+        use crate::types::sealed::{RangeComparator, Pointee};
+
         let ent = self
           .data
           .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-        ent.value()
+        ent.value().map(|v| v.output())
       }
     }
 
-    impl<'a, C> crate::memtable::dynamic::RangeUpdateEntry<'a>
-      for $ent<'a, $crate::Active, C>
+    impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a>
+      for $ent<'a, $crate::Active, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<Input = &'a [u8]>,
+      <T::Key<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      <T::Value<'a> as crate::types::sealed::Pointee>::Output: 'a,
+      T::RangeComparator<C>: 
+        dbutils::equivalentor::TypeRefComparator<'a, crate::types::RecordPointer>
+        + crate::types::sealed::RangeComparator<C>,
     {
-      type Value = &'a [u8];
+      type Value = <T::Value<'a> as crate::types::sealed::Pointee>::Output;
 
       #[inline]
       fn value(&self) -> Self::Value {
+        use crate::types::sealed::{RangeComparator, Pointee};
+
         let ent = self
           .data
           .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-        ent.value().expect("entry in Active state must have a value")
+        ent.value().expect("entry in Active state must have a value").output()
       }
     }
   };
@@ -276,30 +353,33 @@ macro_rules! iter_wrapper {
     $iter:ident($inner:ident) yield $ent:ident by $cmp:ident
   ) => {
     $(#[$meta])*
-    pub struct $iter<'a, S, C>
+    pub struct $iter<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
     {
-      iter: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::$cmp<C>>,
+      iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>,
     }
 
-    impl<'a, S, C> $iter<'a, S, C>
+    impl<'a, S, C, T> $iter<'a, S, C, T>
     where
       S: $crate::State<'a>,
+      T: $crate::types::Kind,
     {
       #[inline]
-      pub(super) const fn new(iter: $inner<'a, $crate::types::RecordPointer, (), S, $crate::memtable::dynamic::$cmp<C>>) -> Self {
+      pub(super) const fn new(iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>) -> Self {
         Self { iter }
       }
     }
 
-    impl<'a, S, C> Iterator for $iter<'a, S, C>
+    impl<'a, S, C, T> Iterator for $iter<'a, S, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::State<'a>,
-
+      T: $crate::types::Kind,
+      T::$cmp<C>: 'a,
     {
-      type Item = $ent<'a, S, C>;
+      type Item = $ent<'a, S, C, T>;
 
       #[inline]
       fn next(&mut self) -> Option<Self::Item> {
@@ -307,11 +387,11 @@ macro_rules! iter_wrapper {
       }
     }
 
-    impl<'a, S, C> DoubleEndedIterator for $iter<'a, S, C>
+    impl<'a, S, C, T> DoubleEndedIterator for $iter<'a, S, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::State<'a>,
-
+      T: $crate::types::Kind,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {
@@ -327,33 +407,37 @@ macro_rules! range_wrapper {
     $iter:ident($inner:ident) yield $ent:ident by $cmp:ident
   ) => {
     $(#[$meta])*
-    pub struct $iter<'a, S, Q, R, C>
+    pub struct $iter<'a, S, Q, R, C, T>
     where
       S: $crate::State<'a>,
       Q: ?Sized,
+      T: $crate::types::Kind,
     {
-      range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, $crate::memtable::dynamic::$cmp<C>>,
+      range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, T::$cmp<C>>,
     }
 
-    impl<'a, S, Q, R, C> $iter<'a, S, Q, R, C>
+    impl<'a, S, Q, R, C, T> $iter<'a, S, Q, R, C, T>
     where
       S: $crate::State<'a>,
       Q: ?Sized,
+      T: $crate::types::Kind,
     {
       #[inline]
-      pub(super) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, $crate::memtable::dynamic::$cmp<C>>) -> Self {
+      pub(super) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, T::$cmp<C>>) -> Self {
         Self { range }
       }
     }
 
-    impl<'a, S, Q, R, C> Iterator for $iter<'a, S, Q, R, C>
+    impl<'a, S, Q, R, C, T> Iterator for $iter<'a, S, Q, R, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::State<'a>,
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized + core::borrow::Borrow<[u8]>,
+      T: $crate::types::Kind,
+      T::$cmp<C>: 'a,
     {
-      type Item = $ent<'a, S, C>;
+      type Item = $ent<'a, S, C, T>;
 
       #[inline]
       fn next(&mut self) -> Option<Self::Item> {
@@ -361,13 +445,14 @@ macro_rules! range_wrapper {
       }
     }
 
-    impl<'a, S, Q, R, C> DoubleEndedIterator for $iter<'a, S, Q, R, C>
+    impl<'a, S, Q, R, C, T> DoubleEndedIterator for $iter<'a, S, Q, R, C, T>
     where
       C: dbutils::equivalentor::BytesComparator,
       S: $crate::State<'a>,
-
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized + core::borrow::Borrow<[u8]>,
+      T: $crate::types::Kind,
+      T::$cmp<C>: 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {

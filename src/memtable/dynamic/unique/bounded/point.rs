@@ -7,10 +7,10 @@ point_entry_wrapper!(
 
 iter_wrapper!(
   /// The iterator for point entries.
-  IterPoints(Iter) yield PointEntry by MemtableComparator
+  IterPoints(Iter) yield PointEntry by Comparator
 );
 
 range_wrapper!(
   /// The iterator over a subset of point entries.
-  RangePoints(Range) yield PointEntry by MemtableComparator
+  RangePoints(Range) yield PointEntry by Comparator
 );

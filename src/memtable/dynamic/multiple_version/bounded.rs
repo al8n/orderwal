@@ -6,7 +6,7 @@ use core::{
 use skl::{dynamic::BytesRangeComparator, Active};
 
 use crate::{
-  memtable::dynamic::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
+  memtable::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
   State, WithVersion as _,
 };
 

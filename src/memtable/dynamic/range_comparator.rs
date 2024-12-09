@@ -10,8 +10,7 @@ use skl::{
 use triomphe::Arc;
 
 use crate::types::{
-  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
+  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry, Dynamic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer
 };
 
 pub struct MemtableRangeComparator<C: ?Sized> {
@@ -27,24 +26,50 @@ impl<C: ?Sized> super::super::sealed::ComparatorConstructor<C> for MemtableRange
   }
 }
 
+impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableRangeComparator<C> {
+  #[inline]
+  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
+    Self { ptr, cmp }
+  }
+}
+
+impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeComparator<C> {
+  fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
+  where
+    T: crate::types::Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]> {
+    unsafe { fetch_raw_range_update_entry::<T>(self.ptr, kp) }
+  }
+
+  fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
+  where
+    T: crate::types::Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]> {
+    unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }
+  }
+}
+
 impl<C: ?Sized> MemtableRangeComparator<C> {
   #[inline]
-  pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a> {
-    unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
+  pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, Dynamic>
+  {
+    unsafe { fetch_raw_range_update_entry::<Dynamic>(self.ptr, kp) }
   }
 
   #[inline]
-  pub fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a> {
-    unsafe { fetch_raw_range_deletion_entry(self.ptr, kp) }
+  pub fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, Dynamic>
+  {
+    unsafe { fetch_raw_range_deletion_entry::<Dynamic>(self.ptr, kp) }
   }
 
   #[inline]
-  fn equivalent_start_key(&self, a: &RecordPointer, b: &[u8]) -> bool
+  fn equivalent_start_key<'a>(&self, a: &RecordPointer, b: &[u8]) -> bool
   where
     C: BytesEquivalentor,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
+      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
       match ak {
         Bound::Included(k) => self.cmp.equivalent(k, b),
         Bound::Excluded(k) => self.cmp.equivalent(k, b),
@@ -54,13 +79,13 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
   }
 
   #[inline]
-  fn equivalent_in(&self, a: &RecordPointer, b: &RecordPointer) -> bool
+  fn equivalent_in<'a>(&self, a: &RecordPointer, b: &RecordPointer) -> bool
   where
     C: BytesEquivalentor,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
-      let bk = fetch_raw_range_key_start_bound(self.ptr, b);
+      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
+      let bk = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, b);
 
       match (ak, bk) {
         (Bound::Unbounded, Bound::Unbounded) => true,
@@ -83,7 +108,7 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     C: BytesComparator,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
+      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
       match ak {
         Bound::Included(k) => self.cmp.compare(k, b),
         Bound::Excluded(k) => self.cmp.compare(k, b).then(cmp::Ordering::Greater),
@@ -98,8 +123,8 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     C: BytesComparator,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
-      let bk = fetch_raw_range_key_start_bound(self.ptr, b);
+      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
+      let bk = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, b);
 
       match (ak, bk) {
         (Bound::Included(_), Bound::Unbounded) => cmp::Ordering::Greater,

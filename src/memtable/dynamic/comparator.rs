@@ -9,7 +9,7 @@ use skl::{
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, RawEntryRef, RecordPointer};
+use crate::types::{fetch_entry, fetch_raw_key, Kind, RawEntryRef, RecordPointer};
 
 pub struct MemtableComparator<C: ?Sized> {
   /// The start pointer of the parent ARENA.
@@ -24,10 +24,34 @@ impl<C: ?Sized> super::super::sealed::ComparatorConstructor<C> for MemtableCompa
   }
 }
 
+impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableComparator<C> {
+  #[inline]
+  fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
+    Self { ptr, cmp }
+  }
+}
+
+impl<C: ?Sized> crate::types::sealed::PointComparator<C> for MemtableComparator<C> {
+  #[inline]
+  fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
+  where
+    T: Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+  {
+    unsafe { fetch_entry::<T>(self.ptr, kp) }
+  }
+}
+
 impl<C: ?Sized> MemtableComparator<C> {
   #[inline]
-  pub fn fetch_entry<'a>(&self, kp: &RecordPointer) -> RawEntryRef<'a> {
-    unsafe { fetch_entry(self.ptr, kp) }
+  pub fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
+  where
+    T: Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<Input = &'a [u8]>,
+  {
+    unsafe { fetch_entry::<T>(self.ptr, kp) }
   }
 
   #[inline]
