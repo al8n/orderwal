@@ -493,6 +493,26 @@ pub struct RawEntryRef<'a, T: Kind> {
   version: Option<u64>,
 }
 
+impl<T> RawEntryRef<'_, T>
+where
+  T: Kind,
+{
+  #[inline]
+  pub(crate) fn write_fmt(&self, wrapper_name: &'static str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut debugger = f.debug_struct(wrapper_name);
+    debugger
+      .field("flag", &self.flag)
+      .field("key", &self.key.output())
+      .field("value", &self.value.as_ref().map(|v| v.output()));
+
+    if let Some(version) = self.version {
+      debugger.field("version", &version);
+    }
+
+    debugger.finish()
+  }
+}
+
 impl<'a, T> Clone for RawEntryRef<'a, T>
 where
   T: Kind,
@@ -792,18 +812,18 @@ where
   cursor += klen as usize;
 
   let v = if flag.contains(EntryFlags::REMOVED) {
-    let vo = &entry_buf[cursor..cursor + vlen as usize];
-    if !flag.contains(EntryFlags::VALUE_POINTER) {
-      Some(&vo[..vlen as usize])
-    } else {
-      let pointer = Pointer::from_slice(vo);
+    None
+  } else {
+    let v = &entry_buf[cursor..cursor + vlen as usize];
+    if flag.contains(EntryFlags::VALUE_POINTER) {
+      let pointer = Pointer::from_slice(v);
       Some(slice::from_raw_parts(
         data_ptr.add(pointer.offset() as usize),
         pointer.len() as usize,
       ))
+    } else {
+      Some(v)
     }
-  } else {
-    None
   };
 
   RawEntryRef {

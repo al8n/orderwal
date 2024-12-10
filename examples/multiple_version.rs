@@ -18,11 +18,6 @@ fn main() {
       .unwrap()
   };
 
-  println!("{:?} {:?}", b"a", b"a1");
-  for point in wal.iter_points(3) {
-    println!("{} {:?} {:?}", point.version(), point.key(), point.value());
-  }
-
   wal.insert(1, b"a", b"a1".as_slice()).unwrap();
   // wal.insert(3, b"a", b"a3".as_slice()).unwrap();
   // wal.insert(1, b"c", b"c1".as_slice()).unwrap();

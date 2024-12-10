@@ -175,6 +175,23 @@ macro_rules! point_entry_wrapper {
       data: core::cell::OnceCell<$crate::types::RawEntryRef<'a, T>>,
     }
 
+    impl<'a, S, C, T> core::fmt::Debug for $ent<'a, S, C, T>
+    where
+      S: $crate::State<'a>,
+      T: $crate::types::Kind,
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Comparator<C>: $crate::types::sealed::PointComparator<C>,
+    {
+      fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use crate::types::sealed::PointComparator;
+
+        self.data.get_or_init(|| {
+          self.ent.comparator().fetch_entry(self.ent.key())
+        }).write_fmt(stringify!($ent), f)
+      } 
+    }    
+
     impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
@@ -236,8 +253,6 @@ macro_rules! point_entry_wrapper {
         let ent = self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
         });
-
-        std::println!("{:?} {:?}", ent.key().output(), ent.value().map(|v| v.output()));
 
         ent.value().expect("entry in Active state must have a value").output()
       }
