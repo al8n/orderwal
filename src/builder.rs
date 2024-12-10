@@ -1,6 +1,6 @@
-use super::sealed::Constructable;
 use crate::{
   error::Error,
+  log::Log,
   memtable::Memtable,
   options::{arena_options, Options},
 };
@@ -381,9 +381,9 @@ where
   ///   .alloc::<OrderWal<[u8], [u8]>>()
   ///   .unwrap();
   /// ```
-  pub fn alloc<W>(self) -> Result<W, Error<W::Memtable>>
+  pub fn alloc<L>(self) -> Result<L, Error<L::Memtable>>
   where
-    W: Constructable<Memtable = M, Checksumer = S>,
+    L: Log<Memtable = M, Checksumer = S>,
   {
     let Self {
       opts,
@@ -394,6 +394,6 @@ where
       .with_capacity(opts.capacity())
       .alloc()
       .map_err(Error::from_insufficient_space)
-      .and_then(|arena| W::new_in(arena, opts, memtable_opts, cks).map(W::from_core))
+      .and_then(|arena| L::new(arena, opts, memtable_opts, cks))
   }
 }

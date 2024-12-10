@@ -168,7 +168,6 @@ pub trait DynamicMemtable: Memtable {
   /// Returns an iterator over a subset of range deletions entries in the memtable.
   fn range_bulk_deletions<'a, Q, R>(
     &'a self,
-
     range: R,
   ) -> Self::BulkDeletionsRange<'a, Active, Q, R>
   where
@@ -178,7 +177,6 @@ pub trait DynamicMemtable: Memtable {
   /// Returns an iterator over all the range deletions entries in a subset of the memtable.
   fn range_bulk_deletions_with_tombstone<'a, Q, R>(
     &'a self,
-
     range: R,
   ) -> Self::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
   where
@@ -200,7 +198,6 @@ pub trait DynamicMemtable: Memtable {
   /// Returns an iterator over all the range updates entries in a subset of the memtable.
   fn range_bulk_updates_with_tombstone<'a, Q, R>(
     &'a self,
-
     range: R,
   ) -> Self::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
   where

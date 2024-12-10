@@ -15,6 +15,7 @@ extern crate std;
 extern crate alloc as std;
 
 pub use among;
+pub use builder::Builder;
 pub use dbutils::{
   checksum::{self, Crc32},
   equivalent::{Comparable, ComparableRangeBounds, Equivalent},
@@ -31,6 +32,7 @@ pub use dbutils::checksum::XxHash64;
 pub use options::Options;
 pub use skl::KeySize;
 
+
 const RECORD_FLAG_SIZE: usize = mem::size_of::<types::Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;
@@ -42,16 +44,21 @@ const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + WAL_KIND_SIZE + MAGIC_VERSION_SIZE;
 /// The mvcc version size.
 const VERSION_SIZE: usize = mem::size_of::<u64>();
 
+/// Batch insertions related traits and structs.
+pub mod batch;
+
 /// Error types.
 pub mod error;
 
+mod builder;
+mod log;
 mod options;
 mod types;
 
 /// Dynamic ordered write-ahead log implementation.
 pub mod dynamic;
 
-/// a
+/// Memory table related traits and structs.
 pub mod memtable;
 
 // /// Generic ordered write-ahead log implementation.

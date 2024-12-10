@@ -8,7 +8,7 @@ use triomphe::Arc;
 
 use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  sealed::Pointee, Generic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
+  sealed::Pointee, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
 };
 
 use super::super::Query;
@@ -39,35 +39,30 @@ where
   }
 }
 
+impl<K: ?Sized, C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeComparator<K, C> {
+  fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
+  where
+    T: crate::types::Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+  {
+    unsafe { fetch_raw_range_update_entry::<T>(self.ptr, kp) }
+  }
+
+  fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
+  where
+    T: crate::types::Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+  {
+    unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }
+  }
+}
+
 impl<K, C> MemtableRangeComparator<K, C>
 where
   K: ?Sized,
   C: ?Sized,
 {
-  #[inline]
-  pub fn fetch_range_update<'a, V>(
-    &self,
-    kp: &RecordPointer,
-  ) -> RawRangeUpdateRef<'a, Generic<K, V>>
-  where
-    V: Type + ?Sized,
-    K: Type,
-  {
-    unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
-  }
-
-  #[inline]
-  pub fn fetch_range_deletion<'a, V>(
-    &self,
-    kp: &RecordPointer,
-  ) -> RawRangeDeletionRef<'a, Generic<K, V>>
-  where
-    V: Type + ?Sized,
-    K: Type,
-  {
-    unsafe { fetch_raw_range_deletion_entry(self.ptr, kp) }
-  }
-
   #[inline]
   fn equivalent_start_key<'a, Q>(&self, a: &RecordPointer, b: &Q) -> bool
   where

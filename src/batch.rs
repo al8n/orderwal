@@ -1,11 +1,11 @@
 use core::marker::PhantomData;
 
-use crate::{memtable::Memtable, types::RecordPointer};
-
-use super::{
-  super::types::{EncodedEntryMeta, EntryFlags},
-  types::BufWriter,
+use crate::{
+  memtable::Memtable,
+  types::{EncodedEntryMeta, EntryFlags, RecordPointer},
 };
+
+use super::types::BufWriter;
 
 /// An entry can be inserted into the WALs through [`Batch`].
 pub struct BatchEntry<K, V, M: Memtable> {

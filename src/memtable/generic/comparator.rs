@@ -6,7 +6,7 @@ use skl::generic::{
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, Generic, RawEntryRef, RecordPointer};
+use crate::types::{fetch_entry, fetch_raw_key, Kind, RawEntryRef, RecordPointer};
 
 use super::super::Query;
 
@@ -36,20 +36,23 @@ where
   }
 }
 
+impl<K: ?Sized, C: ?Sized> crate::types::sealed::PointComparator<C> for MemtableComparator<K, C> {
+  #[inline]
+  fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
+  where
+    T: Kind,
+    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+  {
+    unsafe { fetch_entry::<T>(self.ptr, kp) }
+  }
+}
+
 impl<K, C> MemtableComparator<K, C>
 where
   K: ?Sized,
   C: ?Sized,
 {
-  #[inline]
-  pub fn fetch_entry<'a, V>(&self, kp: &RecordPointer) -> RawEntryRef<'a, Generic<K, V>>
-  where
-    V: Type + ?Sized,
-    K: Type,
-  {
-    unsafe { fetch_entry(self.ptr, kp) }
-  }
-
   #[inline]
   fn query_equivalent_key<'a, Q>(&self, a: &RecordPointer, b: &Q) -> bool
   where

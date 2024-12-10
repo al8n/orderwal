@@ -1,7 +1,6 @@
 use core::{marker::PhantomData, mem, ops::Bound, slice};
 
 use dbutils::{
-  buffer::VacantBuffer,
   error::InsufficientBuffer,
   leb128::encoded_u64_varint_len,
   types::{Type, TypeRef},
@@ -9,6 +8,11 @@ use dbutils::{
 use sealed::Pointee;
 
 use super::{utils::merge_lengths, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
+
+pub use dbutils::{
+  buffer::{BufWriter, BufWriterOnce, VacantBuffer},
+  types::*,
+};
 
 const UNBOUNDED: u8 = 0;
 const INCLUDED: u8 = 1;
@@ -485,7 +489,7 @@ pub(crate) mod sealed {
   }
 }
 
-pub(crate) struct RawEntryRef<'a, T: Kind> {
+pub struct RawEntryRef<'a, T: Kind> {
   flag: EntryFlags,
   key: T::Key<'a>,
   value: Option<T::Value<'a>>,

@@ -38,16 +38,6 @@ impl<C: ?Sized> crate::types::sealed::PointComparator<C> for MemtableComparator<
 
 impl<C: ?Sized> MemtableComparator<C> {
   #[inline]
-  pub fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
-  where
-    T: Kind,
-    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-  {
-    unsafe { fetch_entry::<T>(self.ptr, kp) }
-  }
-
-  #[inline]
   fn equivalent_key(&self, a: &RecordPointer, b: &[u8]) -> bool
   where
     C: BytesEquivalentor,

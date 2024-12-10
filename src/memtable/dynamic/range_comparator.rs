@@ -11,7 +11,7 @@ use triomphe::Arc;
 
 use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  Dynamic, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
+  RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
 };
 
 pub struct MemtableRangeComparator<C: ?Sized> {
@@ -48,17 +48,7 @@ impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeCompar
 
 impl<C: ?Sized> MemtableRangeComparator<C> {
   #[inline]
-  pub fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, Dynamic> {
-    unsafe { fetch_raw_range_update_entry::<Dynamic>(self.ptr, kp) }
-  }
-
-  #[inline]
-  pub fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, Dynamic> {
-    unsafe { fetch_raw_range_deletion_entry::<Dynamic>(self.ptr, kp) }
-  }
-
-  #[inline]
-  fn equivalent_start_key<'a>(&self, a: &RecordPointer, b: &[u8]) -> bool
+  fn equivalent_start_key(&self, a: &RecordPointer, b: &[u8]) -> bool
   where
     C: BytesEquivalentor,
   {
@@ -73,7 +63,7 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
   }
 
   #[inline]
-  fn equivalent_in<'a>(&self, a: &RecordPointer, b: &RecordPointer) -> bool
+  fn equivalent_in(&self, a: &RecordPointer, b: &RecordPointer) -> bool
   where
     C: BytesEquivalentor,
   {

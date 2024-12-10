@@ -1,11 +1,8 @@
-use super::{batch::Batch, types::BufWriter};
 use crate::{
+  batch::Batch,
   checksum::{BuildChecksumer, Checksumer},
   error::Error,
-  memtable::{
-    dynamic::{multiple_version, unique},
-    Memtable,
-  },
+  memtable::Memtable,
   options::Options,
   types::{EncodedEntryMeta, EntryFlags, Flags, RecordPointer},
   utils::merge_lengths,
@@ -13,271 +10,69 @@ use crate::{
   WAL_KIND_SIZE,
 };
 use among::Among;
-use skl::Active;
-use core::{
-  borrow::Borrow,
-  ops::{Bound, RangeBounds},
-  ptr::NonNull,
+use core::ptr::NonNull;
+use dbutils::{
+  buffer::{BufWriter, VacantBuffer},
+  leb128::encoded_u64_varint_len,
 };
-use dbutils::{buffer::VacantBuffer, leb128::encoded_u64_varint_len};
 use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
-pub trait WalReader<S> {
-  type Allocator: Allocator;
-  type Memtable;
+pub trait Log: Sized {
+  type Allocator: Allocator + 'static;
+  type Memtable: Memtable;
+  type Checksumer;
+  type Reader;
 
-  fn memtable(&self) -> &Self::Memtable;
-
-  /// Returns the number of entries in the WAL.
-  fn len(&self) -> usize
+  fn allocator<'a>(&'a self) -> &'a Self::Allocator
   where
-    Self::Memtable: Memtable,
-  {
-    self.memtable().len()
+    Self::Allocator: 'a;
+
+  fn new(
+    arena: Self::Allocator,
+    opts: Options,
+    memtable_opts: <Self::Memtable as Memtable>::Options,
+    cks: Self::Checksumer,
+  ) -> Result<Self, Error<Self::Memtable>> {
+    unsafe {
+      let slice = arena.reserved_slice_mut();
+      let mut cursor = 0;
+      slice[0..MAGIC_TEXT_SIZE].copy_from_slice(&MAGIC_TEXT);
+      cursor += MAGIC_TEXT_SIZE;
+      slice[MAGIC_TEXT_SIZE] = <Self::Memtable as Memtable>::mode() as u8;
+      cursor += WAL_KIND_SIZE;
+      slice[cursor..HEADER_SIZE].copy_from_slice(&opts.magic_version().to_le_bytes());
+    }
+
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    let this = arena
+      .flush_range(0, HEADER_SIZE)
+      .map_err(Into::into)
+      .and_then(|_| {
+        Self::Memtable::new(arena.clone(), memtable_opts)
+          .map(|memtable| Self::construct(arena, memtable, opts, cks))
+          .map_err(Error::memtable)
+      });
+
+    #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+    let this = Self::Memtable::new(memtable_opts)
+      .map(|memtable| Self::construct(arena, memtable, opts, cks))
+      .map_err(Error::memtable);
+
+    this
   }
 
-  /// Returns `true` if the WAL is empty.
-  #[inline]
-  fn is_empty(&self) -> bool
-  where
-    Self::Memtable: Memtable,
-  {
-    self.memtable().is_empty()
-  }
-
-  #[inline]
-  fn iter(&self) -> <Self::Memtable as unique::DynamicMemtable>::Iterator<'_>
-  where
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::iter(self.memtable())
-  }
-
-  #[inline]
-  fn range<Q, R>(&self, range: R) -> <Self::Memtable as unique::DynamicMemtable>::Range<'_, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::range(self.memtable(), range)
-  }
-
-  #[inline]
-  fn iter_points(&self) -> <Self::Memtable as unique::DynamicMemtable>::PointsIterator<'_, Active>
-  where
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::iter_points(self.memtable())
-  }
-
-  #[inline]
-  fn range_points<Q, R>(&self, range: R) -> <Self::Memtable as unique::DynamicMemtable>::RangePoints<'_, Active, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::range_points(self.memtable(), range)
-  }
-
-  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
-  #[inline]
-  fn first(&self) -> Option<<Self::Memtable as unique::DynamicMemtable>::Entry<'_>>
-  where
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::first(self.memtable())
-  }
-
-  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  #[inline]
-  fn last(&self) -> Option<<Self::Memtable as unique::DynamicMemtable>::Entry<'_>>
-  where
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::last(self.memtable())
-  }
-
-  /// Returns `true` if the WAL contains the specified key.
-  fn contains_key<Q>(&self, key: &Q) -> bool
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::contains(self.memtable(), key)
-  }
-
-  /// Returns the value associated with the key.
-  #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<<Self::Memtable as unique::DynamicMemtable>::Entry<'_>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::get(self.memtable(), key)
-  }
-
-  #[inline]
-  fn upper_bound<'a, Q>(
-    &'a self,
-    bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as unique::DynamicMemtable>::Entry<'a>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::upper_bound(self.memtable(), bound)
-  }
-
-  #[inline]
-  fn lower_bound<'a, Q>(
-    &'a self,
-    bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as unique::DynamicMemtable>::Entry<'a>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: unique::DynamicMemtable,
-  {
-    unique::DynamicMemtable::lower_bound(self.memtable(), bound)
-  }
-}
-
-pub trait MultipleVersionWalReader<S> {
-  type Allocator: Allocator;
-  type Memtable;
-
-  fn memtable(&self) -> &Self::Memtable;
-
-  #[inline]
-  fn iter(
-    &self,
-    version: u64,
-  ) -> <Self::Memtable as multiple_version::DynamicMemtable>::Iterator<'_>
-  where
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::iter(self.memtable(), version)
-  }
-
-  #[inline]
-  fn range<Q, R>(
-    &self,
-    version: u64,
-    range: R,
-  ) -> <Self::Memtable as multiple_version::DynamicMemtable>::Range<'_, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::range(self.memtable(), version, range)
-  }
-
-  #[inline]
-  fn iter_points(&self, version: u64) -> <Self::Memtable as multiple_version::DynamicMemtable>::PointsIterator<'_, Active>
-  where
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::iter_points(self.memtable(), version)
-  }
-
-  #[inline]
-  fn range_points<Q, R>(&self, version: u64, range: R) -> <Self::Memtable as multiple_version::DynamicMemtable>::RangePoints<'_, Active, Q, R>
-  where
-    R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::range_points(self.memtable(), version, range)
-  }
-
-  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
-  #[inline]
-  fn first(
-    &self,
-    version: u64,
-  ) -> Option<<Self::Memtable as multiple_version::DynamicMemtable>::Entry<'_>>
-  where
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::first(self.memtable(), version)
-  }
-
-  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
-  fn last(
-    &self,
-    version: u64,
-  ) -> Option<<Self::Memtable as multiple_version::DynamicMemtable>::Entry<'_>>
-  where
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::last(self.memtable(), version)
-  }
-
-  /// Returns `true` if the WAL contains the specified key.
-  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::contains(self.memtable(), version, key)
-  }
-
-  /// Returns the entry associated with the key. The returned entry is the latest version of the key.
-  #[inline]
-  fn get<Q>(
-    &self,
-    version: u64,
-    key: &Q,
-  ) -> Option<<Self::Memtable as multiple_version::DynamicMemtable>::Entry<'_>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::get(self.memtable(), version, key)
-  }
-
-  fn upper_bound<'a, Q>(
-    &'a self,
-    version: u64,
-    bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as multiple_version::DynamicMemtable>::Entry<'a>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::upper_bound(self.memtable(), version, bound)
-  }
-
-  fn lower_bound<'a, Q>(
-    &'a self,
-    version: u64,
-    bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as multiple_version::DynamicMemtable>::Entry<'a>>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: multiple_version::DynamicMemtable,
-  {
-    multiple_version::DynamicMemtable::lower_bound(self.memtable(), version, bound)
-  }
-}
-
-pub trait Wal<S> {
-  type Allocator: Allocator;
-  type Memtable;
-
-  fn construct(arena: Self::Allocator, base: Self::Memtable, opts: Options, checksumer: S) -> Self;
-
-  fn allocator(&self) -> &Self::Allocator;
+  fn construct(
+    arena: Self::Allocator,
+    base: Self::Memtable,
+    opts: Options,
+    checksumer: Self::Checksumer,
+  ) -> Self;
 
   fn options(&self) -> &Options;
 
   fn memtable(&self) -> &Self::Memtable;
 
-  fn memtable_mut(&mut self) -> &mut Self::Memtable;
-
-  fn hasher(&self) -> &S;
+  fn hasher(&self) -> &Self::Checksumer;
 
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -433,7 +228,7 @@ pub trait Wal<S> {
   where
     KE: super::types::BufWriterOnce,
     VE: super::types::BufWriterOnce,
-    S: BuildChecksumer,
+    Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
     let flag = if version.is_none() {
@@ -451,7 +246,7 @@ pub trait Wal<S> {
   ) -> Result<(), Either<KE::Error, Error<Self::Memtable>>>
   where
     KE: super::types::BufWriterOnce,
-    S: BuildChecksumer,
+    Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
     struct Noop;
@@ -493,7 +288,7 @@ pub trait Wal<S> {
   where
     KE: super::types::BufWriterOnce,
     VE: super::types::BufWriterOnce,
-    S: BuildChecksumer,
+    Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
     if self.read_only() {
@@ -609,7 +404,7 @@ pub trait Wal<S> {
     })
   }
 
-  fn insert_batch<W, B>(
+  fn insert_batch<B>(
     &self,
     batch: &mut B,
   ) -> Result<
@@ -620,8 +415,7 @@ pub trait Wal<S> {
     B: Batch<Self::Memtable>,
     B::Key: BufWriter,
     B::Value: BufWriter,
-    S: BuildChecksumer,
-    W: Constructable<Wal = Self, Memtable = Self::Memtable>,
+    Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
     if self.read_only() {
@@ -783,91 +577,6 @@ pub trait Wal<S> {
         Among::Right(e)
       })
   }
-}
-
-impl<S, T> WalReader<S> for T
-where
-  T: Wal<S>,
-  T::Memtable: Memtable,
-{
-  type Allocator = T::Allocator;
-
-  type Memtable = T::Memtable;
-
-  #[inline]
-  fn memtable(&self) -> &Self::Memtable {
-    T::memtable(self)
-  }
-}
-
-impl<S, T> MultipleVersionWalReader<S> for T
-where
-  T: Wal<S>,
-  T::Memtable: multiple_version::DynamicMemtable,
-{
-  type Allocator = T::Allocator;
-
-  type Memtable = T::Memtable;
-
-  #[inline]
-  fn memtable(&self) -> &Self::Memtable {
-    T::memtable(self)
-  }
-}
-
-pub trait Constructable: Sized {
-  type Allocator: Allocator + 'static;
-  type Wal: Wal<Self::Checksumer, Allocator = Self::Allocator, Memtable = Self::Memtable> + 'static;
-  type Memtable: Memtable;
-  type Checksumer;
-  type Reader;
-
-  #[inline]
-  fn allocator<'a>(&'a self) -> &'a Self::Allocator
-  where
-    Self::Allocator: 'a,
-    Self::Wal: 'a,
-  {
-    self.as_wal().allocator()
-  }
-
-  fn as_wal(&self) -> &Self::Wal;
-
-  fn new_in(
-    arena: Self::Allocator,
-    opts: Options,
-    memtable_opts: <Self::Memtable as Memtable>::Options,
-    cks: Self::Checksumer,
-  ) -> Result<Self::Wal, Error<Self::Memtable>> {
-    unsafe {
-      let slice = arena.reserved_slice_mut();
-      let mut cursor = 0;
-      slice[0..MAGIC_TEXT_SIZE].copy_from_slice(&MAGIC_TEXT);
-      cursor += MAGIC_TEXT_SIZE;
-      slice[MAGIC_TEXT_SIZE] = <Self::Memtable as Memtable>::mode() as u8;
-      cursor += WAL_KIND_SIZE;
-      slice[cursor..HEADER_SIZE].copy_from_slice(&opts.magic_version().to_le_bytes());
-    }
-
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    let this = arena
-      .flush_range(0, HEADER_SIZE)
-      .map_err(Into::into)
-      .and_then(|_| {
-        Self::Memtable::new(arena.clone(), memtable_opts)
-          .map(|memtable| {
-            <Self::Wal as Wal<Self::Checksumer>>::construct(arena, memtable, opts, cks)
-          })
-          .map_err(Error::memtable)
-      });
-
-    #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
-    let this = Self::Memtable::new(memtable_opts)
-      .map(|memtable| <Self::Wal as Wal<Self::Checksumer>>::construct(arena, memtable, opts, cks))
-      .map_err(Error::memtable);
-
-    this
-  }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -877,7 +586,7 @@ pub trait Constructable: Sized {
     memtable_opts: <Self::Memtable as Memtable>::Options,
     ro: bool,
     checksumer: Self::Checksumer,
-  ) -> Result<Self::Wal, Error<Self::Memtable>>
+  ) -> Result<Self, Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
   {
@@ -904,8 +613,7 @@ pub trait Constructable: Sized {
       return Err(Error::magic_version_mismatch());
     }
 
-    let set = <Self::Wal as Wal<Self::Checksumer>>::Memtable::new(arena.clone(), memtable_opts)
-      .map_err(Error::memtable)?;
+    let set = Self::Memtable::new(arena.clone(), memtable_opts).map_err(Error::memtable)?;
 
     let mut cursor = arena.data_offset();
     let allocated = arena.allocated();
@@ -1128,12 +836,8 @@ pub trait Constructable: Sized {
       }
     }
 
-    Ok(<Self::Wal as Wal<Self::Checksumer>>::construct(
-      arena, set, opts, checksumer,
-    ))
+    Ok(Self::construct(arena, set, opts, checksumer))
   }
-
-  fn from_core(core: Self::Wal) -> Self;
 }
 
 #[inline]

@@ -1,6 +1,6 @@
 use super::{reader::OrderWalReader, wal::OrderCore};
 use crate::{
-  dynamic::sealed::Constructable,
+  log::Log,
   memtable::{
     dynamic::{multiple_version, unique},
     Memtable,
@@ -8,7 +8,7 @@ use crate::{
 };
 use dbutils::checksum::Crc32;
 use rarena_allocator::sync::Arena;
-use std::sync::Arc;
+use triomphe::Arc;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
@@ -30,32 +30,54 @@ unsafe impl<M: Send + Sync, S: Send + Sync> Sync for OrderWal<M, S> {}
 
 impl<P, S> OrderWal<P, S> {
   #[inline]
-  pub(super) const fn construct(core: Arc<OrderCore<P, S>>) -> Self {
+  pub(super) const fn from_core(core: Arc<OrderCore<P, S>>) -> Self {
     Self { core }
   }
 }
 
-impl<M, S> Constructable for OrderWal<M, S>
+impl<M, S> Log for OrderWal<M, S>
 where
   S: 'static,
   M: Memtable + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
   type Reader = OrderWalReader<M, S>;
 
   #[inline]
-  fn as_wal(&self) -> &Self::Wal {
-    &self.core
+  fn allocator<'a>(&'a self) -> &'a Self::Allocator
+  where
+    Self::Allocator: 'a,
+  {
+    &self.core.arena
   }
 
   #[inline]
-  fn from_core(core: Self::Wal) -> Self {
+  fn construct(
+    arena: Self::Allocator,
+    base: Self::Memtable,
+    opts: crate::Options,
+    checksumer: Self::Checksumer,
+  ) -> Self {
     Self {
-      core: Arc::new(core),
+      core: Arc::new(OrderCore::construct(arena, base, opts, checksumer)),
     }
+  }
+
+  #[inline]
+  fn options(&self) -> &crate::Options {
+    &self.core.opts
+  }
+
+  #[inline]
+  fn memtable(&self) -> &Self::Memtable {
+    &self.core.map
+  }
+
+  #[inline]
+  fn hasher(&self) -> &Self::Checksumer {
+    &self.core.cks
   }
 }
 
@@ -80,7 +102,7 @@ where
   #[cfg_attr(docsrs, doc(cfg(all(feature = "std", not(target_family = "wasm")))))]
   #[inline]
   pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
-    self.as_wal().arena.path()
+    self.core.arena.path()
   }
 }
 
@@ -91,7 +113,7 @@ where
 {
   #[inline]
   fn reader(&self) -> Self::Reader {
-    OrderWalReader::new(self.core.clone())
+    OrderWalReader::from_core(self.core.clone())
   }
 }
 
@@ -102,6 +124,6 @@ where
 {
   #[inline]
   fn reader(&self) -> Self::Reader {
-    OrderWalReader::new(self.core.clone())
+    OrderWalReader::from_core(self.core.clone())
   }
 }

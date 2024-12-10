@@ -1,6 +1,8 @@
 use orderwal::{
-  dynamic::{multiple_version::{OrderWal, Reader, Writer}, Builder}
-  // Builder,
+  dynamic::{
+    multiple_version::{OrderWal, Reader, Writer},
+    Builder,
+  }, // Builder,
 };
 
 fn main() {

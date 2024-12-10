@@ -7,16 +7,16 @@ impl<M, S> Builder<M, S>
 where
   M: Memtable,
 {
-  /// Set if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
-  /// When using memory map backed WAL, the meta of the WAL
+  /// Set if lock the meta of the LAL in the memory to prevent OS from swapping out the header of LAL.
+  /// Lhen using memory map backed LAL, the meta of the LAL
   /// is in the header, meta is frequently accessed,
   /// lock (`mlock` on the header) the meta can reduce the page fault,
-  /// but yes, this means that one WAL will have one page are locked in memory,
+  /// but yes, this means that one LAL will have one page are locked in memory,
   /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
   ///
   /// Default is `true`.
   ///
-  /// This configuration has no effect on windows and vec backed WAL.
+  /// This configuration has no effect on windows and vec backed LAL.
   ///
   /// ## Example
   ///
@@ -103,8 +103,8 @@ where
   /// This function doesn't create the file if it doesn't exist. Use the
   /// [`Options::with_create`] method to do so.
   ///
-  /// [`write()`]: std::io::Write::write "io::Write::write"
-  /// [`flush()`]: std::io::Write::flush "io::Write::flush"
+  /// [`write()`]: std::io::Lrite::write "io::Lrite::write"
+  /// [`flush()`]: std::io::Lrite::flush "io::Lrite::flush"
   /// [seek]: std::io::Seek::seek "io::Seek::seek"
   /// [Current]: std::io::SeekFrom::Current "io::SeekFrom::Current"
   ///
@@ -208,7 +208,7 @@ where
 
   /// Configures the anonymous memory map to be suitable for a process or thread stack.
   ///
-  /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Windows.
+  /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Lindows.
   ///
   /// This option has no effect on file-backed memory maps and vec backed `Wal`.
   ///
@@ -229,7 +229,7 @@ where
 
   /// Configures the anonymous memory map to be allocated using huge pages.
   ///
-  /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
+  /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Lindows.
   ///
   /// The size of the requested page can be specified in page bits. If not provided, the system
   /// default is requested. The requested length should be a multiple of this, or the mapping
@@ -256,7 +256,7 @@ where
   ///
   /// For a file mapping, this causes read-ahead on the file. This will help to reduce blocking on page faults later.
   ///
-  /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Windows.
+  /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Lindows.
   ///
   /// This option has no effect on vec backed `Wal`.
   ///
@@ -280,11 +280,11 @@ impl<M, S> Builder<M, S>
 where
   M: Memtable,
 {
-  /// Get if lock the meta of the WAL in the memory to prevent OS from swapping out the header of WAL.
-  /// When using memory map backed WAL, the meta of the WAL
+  /// Get if lock the meta of the LAL in the memory to prevent OS from swapping out the header of LAL.
+  /// Lhen using memory map backed LAL, the meta of the LAL
   /// is in the header, meta is frequently accessed,
   /// lock (`mlock` on the header) the meta can reduce the page fault,
-  /// but yes, this means that one WAL will have one page are locked in memory,
+  /// but yes, this means that one LAL will have one page are locked in memory,
   /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
   ///
   /// ## Example
@@ -474,9 +474,9 @@ where
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon<W>(self) -> Result<W, Error<W::Memtable>>
+  pub fn map_anon<L>(self) -> Result<L, Error<L::Memtable>>
   where
-    W: Constructable<Memtable = M, Checksumer = S>,
+    L: Log<Memtable = M, Checksumer = S>,
   {
     let Self {
       opts,
@@ -487,7 +487,7 @@ where
       .merge(&opts)
       .map_anon()
       .map_err(Into::into)
-      .and_then(|arena| W::new_in(arena, opts, memtable_opts, cks).map(W::from_core))
+      .and_then(|arena| L::new(arena, opts, memtable_opts, cks))
   }
 
   /// Opens a write-ahead log backed by a file backed memory map in read-only mode.
@@ -523,14 +523,14 @@ where
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map<'a, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
+  pub unsafe fn map<L, P>(self, path: P) -> Result<L, Error<L::Memtable>>
   where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<Memtable = M, Checksumer = S> + Immutable,
+    L: Log<Memtable = M, Checksumer = S> + Immutable,
   {
     self
-      .map_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_with_path_builder::<L, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
@@ -566,14 +566,14 @@ where
   /// };
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_with_path_builder<'a, W, PB, E>(
+  pub unsafe fn map_with_path_builder<L, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<W, Either<E, Error<W::Memtable>>>
+  ) -> Result<L, Either<E, Error<L::Memtable>>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
-    W: Constructable<Memtable = M, Checksumer = S> + Immutable,
+    L: Log<Memtable = M, Checksumer = S> + Immutable,
   {
     let Self {
       opts,
@@ -587,9 +587,7 @@ where
       .map_with_path_builder(path_builder)
       .map_err(|e| e.map_right(Into::into))
       .and_then(|arena| {
-        W::replay(arena, Options::new(), memtable_opts, true, cks)
-          .map(Constructable::from_core)
-          .map_err(Either::Right)
+        L::replay(arena, Options::new(), memtable_opts, true, cks).map_err(Either::Right)
       })
   }
 
@@ -623,14 +621,14 @@ where
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_mut<'a, W, P>(self, path: P) -> Result<W, Error<W::Memtable>>
+  pub unsafe fn map_mut<L, P>(self, path: P) -> Result<L, Error<L::Memtable>>
   where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
-    W: Constructable<Memtable = M, Checksumer = S>,
+    L: Log<Memtable = M, Checksumer = S>,
   {
     self
-      .map_mut_with_path_builder::<W, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_mut_with_path_builder::<L, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
@@ -665,14 +663,14 @@ where
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_mut_with_path_builder<'a, W, PB, E>(
+  pub unsafe fn map_mut_with_path_builder<L, PB, E>(
     self,
     path_builder: PB,
-  ) -> Result<W, Either<E, Error<W::Memtable>>>
+  ) -> Result<L, Either<E, Error<L::Memtable>>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
-    W: Constructable<Memtable = M, Checksumer = S>,
+    L: Log<Memtable = M, Checksumer = S>,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
@@ -688,9 +686,9 @@ where
       .map_err(Into::into)
       .and_then(|arena| {
         if !exist {
-          W::new_in(arena, opts, memtable_opts, cks).map(W::from_core)
+          L::new(arena, opts, memtable_opts, cks)
         } else {
-          W::replay(arena, opts, memtable_opts, false, cks).map(W::from_core)
+          L::replay(arena, opts, memtable_opts, false, cks)
         }
       })
       .map_err(Either::Right)
