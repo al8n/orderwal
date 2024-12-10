@@ -2,10 +2,12 @@ use core::{marker::PhantomData, mem, ops::Bound, slice};
 
 use dbutils::{
   error::InsufficientBuffer,
-  leb128::encoded_u64_varint_len,
+  leb128::{decode_u64_varint, encoded_u64_varint_len},
   types::{Type, TypeRef},
 };
 use sealed::Pointee;
+
+use crate::utils::split_lengths;
 
 use super::{utils::merge_lengths, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
 
@@ -249,25 +251,18 @@ impl Mode {
 const U32_SIZE: usize = mem::size_of::<u32>();
 
 /// The pointer to a record in the WAL.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct RecordPointer {
   offset: u32,
-}
-
-impl core::fmt::Debug for RecordPointer {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("RecordPointer")
-      .field("offset", &self.offset)
-      .finish()
-  }
+  len: u32,
 }
 
 impl RecordPointer {
   const SIZE: usize = mem::size_of::<Self>();
 
   #[inline]
-  pub(crate) fn new(offset: u32) -> Self {
-    Self { offset }
+  pub(crate) fn new(offset: u32, len: u32) -> Self {
+    Self { offset, len }
   }
 
   #[inline]
@@ -276,10 +271,8 @@ impl RecordPointer {
   }
 
   #[inline]
-  pub(crate) fn as_array(&self) -> [u8; Self::SIZE] {
-    let mut array = [0; Self::SIZE];
-    array[..4].copy_from_slice(&self.offset.to_le_bytes());
-    array
+  pub const fn len(&self) -> usize {
+    self.len as usize
   }
 }
 
@@ -295,15 +288,19 @@ impl Type for RecordPointer {
 
   #[inline]
   fn encode_to_buffer(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
-    buf.put_slice(&self.as_array())
+    buf
+      .put_u32_le(self.offset)
+      .and_then(|_| buf.put_u32_le(self.len))
+      .map(|_| Self::SIZE)
   }
 }
 
 impl<'a> TypeRef<'a> for RecordPointer {
   #[inline]
   unsafe fn from_slice(src: &'a [u8]) -> Self {
-    let offset = u32::from_le_bytes([src[0], src[1], src[2], src[3]]);
-    Self { offset }
+    let offset = u32::from_le_bytes(src[..U32_SIZE].try_into().unwrap());
+    let len = u32::from_le_bytes(src[U32_SIZE..Self::SIZE].try_into().unwrap());
+    Self { offset, len }
   }
 }
 
@@ -408,7 +405,7 @@ pub(crate) mod sealed {
 
   pub trait Pointee<'a> {
     type Input;
-    type Output: Copy;
+    type Output: Copy + core::fmt::Debug;
 
     fn from_input(input: Self::Input) -> Self;
 
@@ -657,51 +654,58 @@ where
   }
 }
 
-/// Read the actual key from either the data pointer (if nested) or the key pointer.
-/// And return how many bytes were read from the `key_ptr`.
-#[inline]
-const unsafe fn read_key_slice<'a>(
-  data_ptr: *const u8,
-  key_ptr: *const u8,
-  flag: EntryFlags,
-) -> (usize, &'a [u8]) {
-  read_slice(data_ptr, key_ptr, flag, EntryFlags::KEY_POINTER)
+pub(crate) struct BoundedKey {
+  bound: Bound<()>,
+  pointer: bool,
 }
 
-/// Read the actual value from either the data pointer (if nested) or the value pointer.
-/// And return how many bytes were read from the `val_ptr`.
-#[inline]
-const unsafe fn read_value_slice<'a>(
-  data_ptr: *const u8,
-  val_ptr: *const u8,
-  flag: EntryFlags,
-) -> (usize, &'a [u8]) {
-  read_slice(data_ptr, val_ptr, flag, EntryFlags::VALUE_POINTER)
-}
+impl BoundedKey {
+  #[inline]
+  pub const fn new(bound: Bound<()>, pointer: bool) -> Self {
+    Self { bound, pointer }
+  }
 
-/// Read the a slice from either the data pointer (if nested) or the key pointer.
-/// And return how many bytes were read from the `key_ptr`.
-#[inline]
-const unsafe fn read_slice<'a>(
-  data_ptr: *const u8,
-  ptr: *const u8,
-  flags: EntryFlags,
-  pointer_flag: EntryFlags,
-) -> (usize, &'a [u8]) {
-  const LEN_SIZE: usize = mem::size_of::<u32>();
+  /// Decode a `u8` into a `BoundedKey`.
+  #[inline]
+  pub const fn decode(src: u8) -> Self {
+    let bound_bits = src & 0b11; // Extract the first 2 bits for `Bound`
+    let pointer_bit = (src & 0b100) != 0; // Extract the 3rd bit for `pointer`
 
-  if flags.contains(pointer_flag) {
-    let pbuf = slice::from_raw_parts(ptr, Pointer::SIZE);
-    let pointer = Pointer::from_slice(pbuf);
-    let val = slice::from_raw_parts(
-      data_ptr.add(pointer.offset() as usize),
-      pointer.len() as usize,
-    );
-    (Pointer::SIZE, val)
-  } else {
-    let len = u32::from_le_bytes(*ptr.cast::<[u8; LEN_SIZE]>()) as usize;
-    let val = slice::from_raw_parts(ptr.add(LEN_SIZE), len);
-    (LEN_SIZE + len, val)
+    let bound = match bound_bits {
+      0b00 => Bound::Unbounded,
+      0b01 => Bound::Included(()),
+      0b10 => Bound::Excluded(()),
+      _ => panic!("Invalid bound encoding"),
+    };
+
+    Self {
+      bound,
+      pointer: pointer_bit,
+    }
+  }
+
+  /// Encode the `BoundedKey` into a `u8`.
+  #[inline]
+  pub const fn encode(&self) -> u8 {
+    let bound_bits = match self.bound {
+      Bound::Unbounded => 0b00,
+      Bound::Included(()) => 0b01,
+      Bound::Excluded(()) => 0b10,
+    };
+
+    let pointer_bit = if self.pointer { 0b100 } else { 0 };
+
+    bound_bits | pointer_bit
+  }
+
+  #[inline]
+  pub const fn pointer(&self) -> bool {
+    self.pointer
+  }
+
+  #[inline]
+  pub const fn bound(&self) -> Bound<()> {
+    self.bound
   }
 }
 
@@ -709,9 +713,9 @@ const unsafe fn read_slice<'a>(
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to key which is stored in the data_ptr.
 #[inline]
-pub(crate) const unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) -> &'a [u8] {
-  let record_ptr = data_ptr.add(kp.offset());
-  let flag = EntryFlags::from_bits_retain(*record_ptr);
+pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) -> &'a [u8] {
+  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
+  let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   debug_assert!(
     !(flag.contains(EntryFlags::RANGE_SET)
@@ -720,13 +724,26 @@ pub(crate) const unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPoi
     "unexpected range key"
   );
 
-  let ko = if flag.contains(EntryFlags::VERSIONED) {
-    record_ptr.add(VERSION_SIZE)
+  let mut cursor = if flag.contains(EntryFlags::VERSIONED) {
+    1 + VERSION_SIZE
   } else {
-    record_ptr
+    1
   };
 
-  read_key_slice(data_ptr, ko, flag).1
+  let (readed, kvlen) = decode_u64_varint(&entry_buf[cursor..]).expect("");
+  cursor += readed;
+  let (klen, _) = split_lengths(kvlen);
+  let k = &entry_buf[cursor..cursor + klen as usize];
+
+  if !flag.contains(EntryFlags::KEY_POINTER) {
+    return k;
+  }
+
+  let pointer = Pointer::from_slice(k);
+  slice::from_raw_parts(
+    data_ptr.add(pointer.offset() as usize),
+    pointer.len() as usize,
+  )
 }
 
 #[inline]
@@ -739,43 +756,60 @@ where
   T::Key<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: sealed::Pointee<'a, Input = &'a [u8]>,
 {
-  let record_ptr = data_ptr.add(p.offset());
-  let flag = EntryFlags::from_bits_retain(*record_ptr);
-  let mut cursor = 1;
+  let entry_buf = slice::from_raw_parts(data_ptr.add(p.offset()), p.len());
+  let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   debug_assert!(
     !(flag.contains(EntryFlags::RANGE_SET)
       | flag.contains(EntryFlags::RANGE_DELETION)
       | flag.contains(EntryFlags::RANGE_UNSET)),
-    "unexpected range key"
+    "unexpected range entry"
   );
 
-  let (ko, version) = if flag.contains(EntryFlags::VERSIONED) {
-    cursor += VERSION_SIZE;
-    let version = u64::from_le_bytes(*record_ptr.add(1).cast::<[u8; VERSION_SIZE]>());
-    (
-      record_ptr.add(EntryFlags::SIZE + VERSION_SIZE),
-      Some(version),
-    )
+  let (mut cursor, version) = if flag.contains(EntryFlags::VERSIONED) {
+    let version = u64::from_le_bytes(
+      entry_buf[EntryFlags::SIZE..EntryFlags::SIZE + VERSION_SIZE]
+        .try_into()
+        .unwrap(),
+    );
+    (EntryFlags::SIZE + VERSION_SIZE, Some(version))
   } else {
-    (record_ptr.add(EntryFlags::SIZE), None)
+    (EntryFlags::SIZE, None)
   };
 
-  let (klen, raw_key) = read_key_slice(data_ptr, ko, flag);
-  cursor += klen;
+  let (readed, kvlen) = decode_u64_varint(&entry_buf[cursor..]).expect("");
+  cursor += readed;
+  let (klen, vlen) = split_lengths(kvlen);
+  let k = if !flag.contains(EntryFlags::KEY_POINTER) {
+    &entry_buf[cursor..cursor + klen as usize]
+  } else {
+    let pointer = Pointer::from_slice(&entry_buf[cursor..cursor + klen as usize]);
+    slice::from_raw_parts(
+      data_ptr.add(pointer.offset() as usize),
+      pointer.len() as usize,
+    )
+  };
+  cursor += klen as usize;
 
-  let value = if flag.contains(EntryFlags::REMOVED) {
-    let vo = record_ptr.add(cursor);
-    let (_, raw_value) = read_value_slice(data_ptr, vo, flag);
-    Some(<T::Value<'a> as sealed::Pointee<'a>>::from_input(raw_value))
+  let v = if flag.contains(EntryFlags::REMOVED) {
+    let vo = &entry_buf[cursor..cursor + vlen as usize];
+    if !flag.contains(EntryFlags::VALUE_POINTER) {
+      Some(&vo[..vlen as usize])
+    } else {
+      let pointer = Pointer::from_slice(vo);
+      Some(slice::from_raw_parts(
+        data_ptr.add(pointer.offset() as usize),
+        pointer.len() as usize,
+      ))
+    }
   } else {
     None
   };
 
   RawEntryRef {
     flag,
-    key: <T::Key<'a> as sealed::Pointee<'a>>::from_input(raw_key),
-    value,
+    key: <T::Key<'a> as sealed::Pointee<'a>>::from_input(k),
+    value: v.map(<T::Value<'a> as sealed::Pointee<'a>>::from_input),
     version,
   }
 }
@@ -791,8 +825,8 @@ pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a, T>(
 where
   T: sealed::Pointee<'a, Input = &'a [u8]>,
 {
-  let record_ptr = data_ptr.add(kp.offset());
-  let flag = EntryFlags::from_bits_retain(*record_ptr);
+  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
+  let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   debug_assert!(
     flag.contains(EntryFlags::RANGE_SET)
@@ -801,34 +835,46 @@ where
     "unexpected point key"
   );
 
-  let ko = if flag.contains(EntryFlags::VERSIONED) {
-    record_ptr.add(EntryFlags::SIZE + VERSION_SIZE)
+  let mut cursor = if flag.contains(EntryFlags::VERSIONED) {
+    EntryFlags::SIZE + VERSION_SIZE
   } else {
-    record_ptr.add(EntryFlags::SIZE)
+    EntryFlags::SIZE
   };
 
-  let bound = *ko;
-  match bound {
-    UNBOUNDED => Bound::Unbounded,
-    INCLUDED => Bound::Included({
-      let k = read_key_slice(data_ptr, ko, flag).1;
-      T::from_input(k)
-    }),
-    EXCLUDED => Bound::Excluded({
-      let k = read_key_slice(data_ptr, ko, flag).1;
-      T::from_input(k)
-    }),
-    _ => panic!("unexpected bound tag"),
-  }
+  let (readed, kvlen) =
+    decode_u64_varint(&entry_buf[cursor..]).expect("kvlen should be decoded without error");
+  cursor += readed;
+  let (klen, _) = split_lengths(kvlen);
+
+  let mut range_key_buf = &entry_buf[cursor..cursor + klen as usize];
+
+  let (readed, range_key_len) =
+    decode_u64_varint(range_key_buf).expect("range key len should be decoded without error");
+  range_key_buf = &range_key_buf[readed..];
+  let (start_key_len, _) = split_lengths(range_key_len);
+  let start_key_buf = &range_key_buf[..start_key_len as usize];
+
+  let start_bound = BoundedKey::decode(start_key_buf[0]);
+  let raw_start_key = &start_key_buf[1..];
+  let start_key = if start_bound.pointer() {
+    let pointer = Pointer::from_slice(raw_start_key);
+    let key = slice::from_raw_parts(
+      data_ptr.add(pointer.offset() as usize),
+      pointer.len() as usize,
+    );
+    T::from_input(key)
+  } else {
+    T::from_input(raw_start_key)
+  };
+  start_bound.bound().map(|_| start_key)
 }
 
 struct FetchRangeKey<'a, T: Pointee<'a>> {
   flag: EntryFlags,
   start_bound: Bound<T>,
   end_bound: Bound<T>,
-  readed: usize,
   version: Option<u64>,
-  ptr: *const u8,
+  value: Option<Pointer>,
   _m: PhantomData<&'a ()>,
 }
 
@@ -844,63 +890,78 @@ unsafe fn fetch_raw_range_key_helper<'a, T>(
 where
   T: sealed::Pointee<'a, Input = &'a [u8]>,
 {
-  let record_ptr = data_ptr.add(kp.offset());
-  let flag = EntryFlags::from_bits_retain(*record_ptr);
-  let mut cursor = 1;
+  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
+  let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   #[cfg(debug_assertions)]
   f(&flag);
 
-  let (ko, version) = if flag.contains(EntryFlags::VERSIONED) {
-    cursor += VERSION_SIZE;
-    let version = u64::from_le_bytes(*record_ptr.add(1).cast::<[u8; VERSION_SIZE]>());
-    (
-      record_ptr.add(EntryFlags::SIZE + VERSION_SIZE),
-      Some(version),
-    )
+  let (mut cursor, version) = if flag.contains(EntryFlags::VERSIONED) {
+    let version = u64::from_le_bytes(
+      entry_buf[EntryFlags::SIZE..EntryFlags::SIZE + VERSION_SIZE]
+        .try_into()
+        .unwrap(),
+    );
+    (EntryFlags::SIZE + VERSION_SIZE, Some(version))
   } else {
-    (record_ptr.add(EntryFlags::SIZE), None)
+    (EntryFlags::SIZE, None)
   };
 
-  let start_bound = *ko;
-  cursor += 1;
-  let start_bound = match start_bound {
-    UNBOUNDED => Bound::Unbounded,
-    INCLUDED => Bound::Included({
-      let (len, key) = read_key_slice(data_ptr, ko, flag);
-      cursor += len;
-      T::from_input(key)
-    }),
-    EXCLUDED => Bound::Excluded({
-      let (len, key) = read_key_slice(data_ptr, ko, flag);
-      cursor += len;
-      T::from_input(key)
-    }),
-    _ => panic!("unexpected bound tag"),
-  };
+  let (readed, kvlen) =
+    decode_u64_varint(&entry_buf[cursor..]).expect("kvlen should be decoded without error");
+  cursor += readed;
+  let (klen, vlen) = split_lengths(kvlen);
 
-  let end_bound = *record_ptr.add(cursor);
-  let end_bound = match end_bound {
-    UNBOUNDED => Bound::Unbounded,
-    INCLUDED => Bound::Included({
-      let (len, key) = read_key_slice(data_ptr, record_ptr.add(cursor + 1), flag);
-      cursor += len;
-      T::from_input(key)
-    }),
-    EXCLUDED => Bound::Excluded({
-      let (len, key) = read_key_slice(data_ptr, record_ptr.add(cursor + 1), flag);
-      cursor += len;
-      T::from_input(key)
-    }),
-    _ => panic!("unexpected bound tag"),
+  let mut range_key_buf = &entry_buf[cursor..cursor + klen as usize];
+  cursor += klen as usize;
+
+  let (readed, range_key_len) =
+    decode_u64_varint(range_key_buf).expect("range key len should be decoded without error");
+  range_key_buf = &range_key_buf[readed..];
+  let (start_key_len, end_key_len) = split_lengths(range_key_len);
+  let start_key_buf = &range_key_buf[..start_key_len as usize];
+  let end_key_buf =
+    &range_key_buf[start_key_len as usize..start_key_len as usize + end_key_len as usize];
+
+  let start_bound = BoundedKey::decode(start_key_buf[0]);
+  let raw_start_key = &start_key_buf[1..];
+  let start_key = if start_bound.pointer() {
+    let pointer = Pointer::from_slice(raw_start_key);
+    let key = slice::from_raw_parts(
+      data_ptr.add(pointer.offset() as usize),
+      pointer.len() as usize,
+    );
+    T::from_input(key)
+  } else {
+    T::from_input(raw_start_key)
+  };
+  let start_bound = start_bound.bound().map(|_| start_key);
+
+  let end_bound = BoundedKey::decode(end_key_buf[0]);
+  let raw_end_key = &end_key_buf[1..];
+  let end_key = if end_bound.pointer() {
+    let pointer = Pointer::from_slice(raw_end_key);
+    let key = slice::from_raw_parts(
+      data_ptr.add(pointer.offset() as usize),
+      pointer.len() as usize,
+    );
+    T::from_input(key)
+  } else {
+    T::from_input(raw_end_key)
+  };
+  let end_bound = end_bound.bound().map(|_| end_key);
+
+  let value = if flag.contains(EntryFlags::RANGE_SET) {
+    Some(Pointer::new(kp.offset + cursor as u32, vlen))
+  } else {
+    None
   };
 
   FetchRangeKey {
     flag,
     start_bound,
     end_bound,
-    readed: cursor,
-    ptr: record_ptr.add(cursor),
+    value,
     version,
     _m: PhantomData,
   }
@@ -982,7 +1043,7 @@ where
     version,
     start_bound,
     end_bound,
-    ptr,
+    value,
     ..
   } = fetch_raw_range_key_helper(data_ptr, kp, |flag| {
     debug_assert!(
@@ -991,12 +1052,18 @@ where
     )
   });
 
-  let value = if flag.contains(EntryFlags::RANGE_UNSET) {
-    let (_, raw_value) = read_value_slice(data_ptr, ptr, flag);
-    Some(<T::Value<'a> as sealed::Pointee<'a>>::from_input(raw_value))
-  } else {
-    None
-  };
+  let value = value.map(|pointer| {
+    let v = slice::from_raw_parts(data_ptr.add(pointer.offset()), pointer.len());
+    if !flag.contains(EntryFlags::VALUE_POINTER) {
+      let pointer = Pointer::from_slice(v);
+      T::Value::from_input(slice::from_raw_parts(
+        data_ptr.add(pointer.offset() as usize),
+        pointer.len() as usize,
+      ))
+    } else {
+      T::Value::from_input(v)
+    }
+  });
 
   RawRangeUpdateRef {
     flag,

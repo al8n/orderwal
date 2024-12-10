@@ -3,10 +3,14 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
-use skl::{dynamic::BytesRangeComparator, Active};
+use skl::{
+  dynamic::{BytesComparator, BytesRangeComparator},
+  generic::unique::Map as _,
+  Active,
+};
 
 use crate::{
-  memtable::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
+  memtable::{bounded::unique, MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
   types::Dynamic,
   State,
 };
@@ -25,9 +29,10 @@ mod point;
 mod range_deletion;
 mod range_update;
 
-dynamic_memtable!(unique());
+/// Dynamic unique version memtable implementation based on ARNEA based [`SkipMap`](skl::generic::unique::sync::SkipMap)s.
+pub type Table<C> = unique::Table<C, Dynamic>;
 
-impl<C> DynamicMemtable for Table<C, Dynamic>
+impl<C> DynamicMemtable for Table<C>
 where
   C: BytesComparator + 'static,
 {
@@ -236,7 +241,7 @@ where
   }
 }
 
-impl<'a, C> Table<C, Dynamic>
+impl<'a, C> Table<C>
 where
   C: BytesComparator + 'static,
 {
@@ -252,7 +257,7 @@ where
 
     let shadow = self.range_deletions_skl.range(..=key).any(|ent| {
       let ent = RangeDeletionEntry::<Active, C, Dynamic>::new(ent);
-      self.cmp.compare_contains(&ent.range::<[u8]>(), key)
+      self.cmp.compare_contains(&ent.range(), key)
     });
 
     if shadow {
@@ -263,7 +268,7 @@ where
     let range_ent = self.range_updates_skl.range(..=key).find_map(|ent| {
       let ent = RangeUpdateEntry::<Active, C, Dynamic>::new(ent);
 
-      if self.cmp.compare_contains(&ent.range::<[u8]>(), key) {
+      if self.cmp.compare_contains(&ent.range(), key) {
         Some(ent)
       } else {
         None

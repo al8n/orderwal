@@ -3,7 +3,7 @@ use core::ops::{Bound, RangeBounds};
 use crate::types::{Mode, RecordPointer};
 
 #[macro_use]
-mod bounded;
+pub(crate) mod bounded;
 
 /// Memtables for dynamic(bytes) key-value order WALs.
 pub mod dynamic;
@@ -33,10 +33,10 @@ where
   fn value(&self) -> Self::Value;
 
   /// Returns the next entry in the memory table.
-  fn next(&mut self) -> Option<Self>;
+  fn next(&self) -> Option<Self>;
 
   /// Returns the previous entry in the memory table.
-  fn prev(&mut self) -> Option<Self>;
+  fn prev(&self) -> Option<Self>;
 }
 
 /// An range entry which is stored in the memory table.
@@ -54,7 +54,7 @@ where
   fn end_bound(&self) -> Bound<Self::Key>;
 
   /// Returns the range of the entry.
-  fn range<Q: ?Sized>(&self) -> impl RangeBounds<Self::Key> + 'a {
+  fn range(&self) -> impl RangeBounds<Self::Key> + 'a {
     (self.start_bound(), self.end_bound())
   }
 

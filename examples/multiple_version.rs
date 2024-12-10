@@ -1,8 +1,7 @@
 use orderwal::{
-  dynamic::{
-    multiple_version::{OrderWal, Reader, Writer},
-    Builder,
-  }, // Builder,
+  dynamic::multiple_version::{OrderWal, Reader, Writer},
+  memtable::MemtableEntry as _,
+  Builder, WithVersion,
 };
 
 fn main() {
@@ -19,20 +18,25 @@ fn main() {
       .unwrap()
   };
 
+  println!("{:?} {:?}", b"a", b"a1");
+  for point in wal.iter_points(3) {
+    println!("{} {:?} {:?}", point.version(), point.key(), point.value());
+  }
+
   wal.insert(1, b"a", b"a1".as_slice()).unwrap();
-  wal.insert(3, b"a", b"a3".as_slice()).unwrap();
-  wal.insert(1, b"c", b"c1".as_slice()).unwrap();
-  wal.insert(3, b"c", b"c3".as_slice()).unwrap();
+  // wal.insert(3, b"a", b"a3".as_slice()).unwrap();
+  // wal.insert(1, b"c", b"c1".as_slice()).unwrap();
+  // wal.insert(3, b"c", b"c3".as_slice()).unwrap();
 
   let a = wal.get(2, b"a").unwrap();
-  let c = wal.get(2, b"c").unwrap();
+  // let c = wal.get(2, b"c").unwrap();
 
-  assert_eq!(a.value(), b"a1");
-  assert_eq!(c.value(), b"c1");
+  // assert_eq!(a.value(), b"a1");
+  // assert_eq!(c.value(), b"c1");
 
-  let a = wal.get(3, b"a").unwrap();
-  let c = wal.get(3, b"c").unwrap();
+  // let a = wal.get(3, b"a").unwrap();
+  // let c = wal.get(3, b"c").unwrap();
 
-  assert_eq!(a.value(), b"a3");
-  assert_eq!(c.value(), b"c3");
+  // assert_eq!(a.value(), b"a3");
+  // assert_eq!(c.value(), b"c3");
 }

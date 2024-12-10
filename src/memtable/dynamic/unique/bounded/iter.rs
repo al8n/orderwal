@@ -12,7 +12,7 @@ pub struct Iter<'a, C>
 where
   C: 'static,
 {
-  table: &'a Table<C, Dynamic>,
+  table: &'a Table<C>,
   iter: IterPoints<'a, Active, C, Dynamic>,
 }
 
@@ -20,7 +20,7 @@ impl<'a, C> Iter<'a, C>
 where
   C: 'static,
 {
-  pub(super) fn new(table: &'a Table<C, Dynamic>) -> Self {
+  pub(super) fn new(table: &'a Table<C>) -> Self {
     Self {
       iter: IterPoints::new(table.skl.iter()),
       table,
@@ -68,7 +68,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
 {
-  table: &'a Table<C, Dynamic>,
+  table: &'a Table<C>,
   iter: RangePoints<'a, Active, Q, R, C, Dynamic>,
 }
 
@@ -78,7 +78,7 @@ where
   R: RangeBounds<Q> + 'a,
   Q: ?Sized + Borrow<[u8]>,
 {
-  pub(super) fn new(table: &'a Table<C, Dynamic>, r: R) -> Self {
+  pub(super) fn new(table: &'a Table<C>, r: R) -> Self {
     Self {
       iter: RangePoints::new(table.skl.range(r)),
       table,

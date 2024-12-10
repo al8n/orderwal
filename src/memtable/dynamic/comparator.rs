@@ -109,6 +109,26 @@ where
   }
 }
 
+impl<C> Equivalentor<&[u8]> for MemtableComparator<C>
+where
+  C: BytesEquivalentor + ?Sized,
+{
+  #[inline]
+  fn equivalent(&self, a: &&[u8], b: &&[u8]) -> bool {
+    self.cmp.equivalent(a, b)
+  }
+}
+
+impl<C> Comparator<&[u8]> for MemtableComparator<C>
+where
+  C: BytesComparator + ?Sized,
+{
+  #[inline]
+  fn compare(&self, a: &&[u8], b: &&[u8]) -> cmp::Ordering {
+    self.cmp.compare(a, b)
+  }
+}
+
 impl<C> Equivalentor<RecordPointer> for MemtableComparator<C>
 where
   C: BytesEquivalentor + ?Sized,

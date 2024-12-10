@@ -21,14 +21,9 @@ pub mod unique {
 
   pub use skl::dynamic::{Ascend, Descend};
 
-  use {
-    super::{reader, writer},
-    crate::memtable::{
-      // alternative::Table as BaseAlternativeTable,
-      dynamic::unique,
-    },
-    dbutils::checksum::Crc32,
-  };
+  use super::{reader, writer};
+  use crate::memtable::bounded;
+  use dbutils::checksum::Crc32;
 
   pub use crate::{
     dynamic::{
@@ -52,7 +47,7 @@ pub mod unique {
 
   /// The default memory table used by [`OrderWal`] or [`OrderWalReader`].
   // #[cfg(not(feature = "std"))]
-  pub type DefaultMemtable = unique::bounded::Table<Ascend, Dynamic>;
+  pub type DefaultMemtable = bounded::unique::Table<Ascend, Dynamic>;
 
   /// A dynamic ordered write-ahead log implementation for multiple threads environments.
   pub type OrderWal<M = DefaultMemtable, S = Crc32> = writer::OrderWal<M, S>;
@@ -68,14 +63,9 @@ pub mod multiple_version {
 
   pub use skl::dynamic::{Ascend, Descend};
 
-  use {
-    super::{reader, writer},
-    crate::memtable::dynamic::{
-      // alternative::MultipleVersionTable as BaseAlternativeTable,
-      multiple_version,
-    },
-    dbutils::checksum::Crc32,
-  };
+  use super::{reader, writer};
+  use crate::memtable::bounded;
+  use dbutils::checksum::Crc32;
 
   pub use crate::{
     dynamic::{
@@ -99,7 +89,7 @@ pub mod multiple_version {
 
   /// The default memory table used by [`OrderWal`] or [`OrderWalReader`].
   // #[cfg(not(feature = "std"))]
-  pub type DefaultMemtable = multiple_version::bounded::Table<Ascend, Dynamic>;
+  pub type DefaultMemtable = bounded::multiple_version::Table<Ascend, Dynamic>;
 
   /// A multiple versioned dynamic ordered write-ahead log implementation for multiple threads environments.
   pub type OrderWal<M = DefaultMemtable, S = Crc32> = writer::OrderWal<M, S>;

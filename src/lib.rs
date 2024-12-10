@@ -32,7 +32,6 @@ pub use dbutils::checksum::XxHash64;
 pub use options::Options;
 pub use skl::KeySize;
 
-
 const RECORD_FLAG_SIZE: usize = mem::size_of::<types::Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;

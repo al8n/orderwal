@@ -23,12 +23,7 @@ where
   M: Memtable,
 {
   #[inline]
-  pub fn construct(
-    arena: Arena,
-    set: M,
-    opts: Options,
-    checksumer: S,
-  ) -> Self {
+  pub fn construct(arena: Arena, set: M, opts: Options, checksumer: S) -> Self {
     Self {
       arena,
       map: set,

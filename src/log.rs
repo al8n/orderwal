@@ -325,7 +325,6 @@ pub trait Log: Sized {
 
             cks.update(&[flag]);
 
-            buf.put_u8_unchecked(Flags::empty().bits());
             buf.put_slice_unchecked(&[Flags::empty().bits(), entry_flag.bits()]);
 
             if entry_flag.contains(EntryFlags::VERSIONED) {
@@ -387,7 +386,7 @@ pub trait Log: Sized {
             buf.detach();
             let eoffset = buf.offset();
             let offset = eoffset + encoded_entry_meta.entry_flag_offset();
-            let p = RecordPointer::new(offset as u32);
+            let p = RecordPointer::new(offset as u32, (buf.len() - RECORD_FLAG_SIZE) as u32);
             Ok((buf.buffer_offset(), p, entry_flag))
           }
         }
@@ -529,7 +528,7 @@ pub trait Log: Sized {
         }
 
         let entry_size = meta.entry_size as usize;
-        ent.set_pointer(RecordPointer::new(entry_offset as u32));
+        ent.set_pointer(RecordPointer::new(entry_offset as u32, meta.entry_size));
         cursor += entry_size;
       }
 
@@ -705,7 +704,7 @@ pub trait Log: Sized {
             break;
           }
 
-          let pointer = RecordPointer::new(entry_offset as u32);
+          let pointer = RecordPointer::new(entry_offset as u32, sub_cursor as u32);
 
           match () {
             _ if entry_flag.contains(EntryFlags::REMOVED) => {
@@ -801,8 +800,9 @@ pub trait Log: Sized {
             let vlen = vlen as usize;
 
             let entry_offset = cursor + RECORD_FLAG_SIZE + readed + sub_cursor;
-
-            let pointer = RecordPointer::new(entry_offset as u32);
+            entry_cursor += kvlen + klen + vlen;
+            sub_cursor += entry_cursor;
+            let pointer = RecordPointer::new(entry_offset as u32, entry_cursor as u32);
 
             match () {
               _ if entry_flag.contains(EntryFlags::REMOVED) => {
@@ -820,8 +820,6 @@ pub trait Log: Sized {
               _ => set.insert(version, pointer).map_err(Error::memtable)?,
             }
 
-            entry_cursor += kvlen + klen + vlen;
-            sub_cursor += entry_cursor;
             batch_data_buf = &batch_data_buf[entry_cursor..];
           }
 

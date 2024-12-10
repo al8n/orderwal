@@ -39,7 +39,9 @@ where
   }
 }
 
-impl<K: ?Sized, C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeComparator<K, C> {
+impl<K: ?Sized, C: ?Sized> crate::types::sealed::RangeComparator<C>
+  for MemtableRangeComparator<K, C>
+{
   fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
   where
     T: crate::types::Kind,

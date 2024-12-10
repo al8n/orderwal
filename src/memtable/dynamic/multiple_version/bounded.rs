@@ -3,33 +3,28 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
-use skl::{dynamic::BytesRangeComparator, Active, MaybeTombstone};
+use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active};
 
-use crate::{
-  memtable::{MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
-  types::Dynamic,
-  State, WithVersion as _,
-};
+use crate::{memtable::bounded::multiple_version::*, types::Dynamic, State, WithVersion};
 
 use super::DynamicMemtable;
 
-pub use entry::*;
-pub use iter::*;
-pub use point::*;
-pub use range_deletion::*;
-pub use range_update::*;
+// pub use entry::*;
+// pub use iter::*;
+// pub use point::*;
+// pub use range_deletion::*;
+// pub use range_update::*;
 
-mod entry;
-mod iter;
-mod point;
-mod range_deletion;
-mod range_update;
-
-dynamic_memtable!(multiple_version(version));
+// mod entry;
+// mod iter;
+// mod point;
+// mod range_deletion;
+// mod range_update;
 
 impl<C> DynamicMemtable for Table<C, Dynamic>
 where
   C: BytesComparator + 'static,
+  for<'a> PointEntry<'a, Active, C, Dynamic>: WithVersion,
 {
   type Entry<'a>
     = Entry<'a, Active, C, Dynamic>
@@ -55,12 +50,12 @@ where
     S: State<'a>;
 
   type Iterator<'a>
-    = Iter<'a, C>
+    = Iter<'a, C, Dynamic>
   where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, Q, R, C>
+    = Range<'a, Q, R, C, Dynamic>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
@@ -270,86 +265,5 @@ where
     Q: ?Sized + Borrow<[u8]>,
   {
     RangeBulkUpdates::new(self.range_updates_skl.range_all(version, range))
-  }
-}
-
-impl<C> Table<C, Dynamic>
-where
-  C: BytesComparator + 'static,
-{
-  fn validate<'a>(
-    &'a self,
-    query_version: u64,
-    ent: PointEntry<'a, Active, C, Dynamic>,
-  ) -> ControlFlow<Option<Entry<'a, Active, C, Dynamic>>, PointEntry<'a, Active, C, Dynamic>> {
-    let key = ent.key();
-    let version = ent.version();
-
-    // check if the next entry is visible.
-    // As the range_del_skl is sorted by the end key, we can use the lower_bound to find the first
-    // deletion range that may cover the next entry.
-
-    let shadow = self
-      .range_deletions_skl
-      .range(query_version, ..=key)
-      .any(|ent| {
-        let del_ent_version = ent.version();
-        if !(version <= del_ent_version && del_ent_version <= query_version) {
-          return false;
-        }
-
-        let ent = RangeDeletionEntry::<Active, C, Dynamic>::new(ent);
-        BytesRangeComparator::compare_contains(&self.cmp, &ent.range::<[u8]>(), key)
-      });
-
-    if shadow {
-      return ControlFlow::Continue(ent);
-    }
-
-    // find the range key entry with maximum version that shadow the next entry.
-    let range_ent = self
-      .range_updates_skl
-      .range_all(query_version, ..=key)
-      .filter_map(|ent| {
-        let range_ent_version = ent.version();
-        if !(version <= range_ent_version && range_ent_version <= query_version) {
-          return None;
-        }
-
-        let ent = RangeUpdateEntry::<MaybeTombstone, C, Dynamic>::new(ent);
-        if BytesRangeComparator::compare_contains(&self.cmp, &ent.range::<[u8]>(), key) {
-          Some(ent)
-        } else {
-          None
-        }
-      })
-      .max_by_key(|e| e.version());
-
-    // check if the next entry's value should be shadowed by the range key entries.
-    if let Some(range_ent) = range_ent {
-      if let Some(val) = range_ent.value() {
-        return ControlFlow::Break(Some(Entry::new(
-          self,
-          query_version,
-          ent,
-          key,
-          val,
-          range_ent.version(),
-        )));
-      }
-
-      // if value is None, the such range is unset, so we should return the value of the point entry.
-    }
-
-    let val = ent.value();
-    let version = ent.version();
-    ControlFlow::Break(Some(Entry::new(
-      self,
-      query_version,
-      ent,
-      key,
-      val,
-      version,
-    )))
   }
 }
