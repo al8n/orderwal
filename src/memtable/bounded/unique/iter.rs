@@ -1,6 +1,6 @@
 use core::ops::{ControlFlow, RangeBounds};
 
-use skl::{generic::multiple_version::Map as _, Active};
+use skl::Active;
 
 use crate::types::TypeMode;
 
@@ -14,7 +14,6 @@ where
 {
   table: &'a Table<C, T>,
   iter: IterPoints<'a, Active, C, T>,
-  query_version: u64,
 }
 
 impl<'a, C, T> Iter<'a, C, T>
@@ -23,10 +22,9 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
 {
-  pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>) -> Self {
+  pub(in crate::memtable) fn new(table: &'a Table<C, T>) -> Self {
     Self {
-      iter: IterPoints::new(table.skl.iter(version)),
-      query_version: version,
+      iter: IterPoints::new(table.skl.iter()),
       table,
     }
   }
@@ -51,7 +49,7 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Pointee<'a>>::Output>>
+  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <T::Value<'a> as Pointee<'a>>::Output>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   type Item = Entry<'a, Active, C, T>;
@@ -60,7 +58,7 @@ where
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       let next = self.iter.next()?;
-      match self.table.validate(self.query_version, next) {
+      match self.table.validate(next) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }
@@ -87,14 +85,14 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Pointee<'a>>::Output>>
+  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <T::Value<'a> as Pointee<'a>>::Output>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     loop {
       let prev = self.iter.next_back()?;
-      match self.table.validate(self.query_version, prev) {
+      match self.table.validate(prev) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }
@@ -112,7 +110,6 @@ where
 {
   table: &'a Table<C, T>,
   iter: RangePoints<'a, Active, Q, R, C, T>,
-  query_version: u64,
 }
 
 impl<'a, Q, R, C, T> Range<'a, Q, R, C, T>
@@ -123,10 +120,9 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
 {
-  pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>, r: R) -> Self {
+  pub(in crate::memtable) fn new(table: &'a Table<C, T>, r: R) -> Self {
     Self {
-      iter: RangePoints::new(table.skl.range(version, r)),
-      query_version: version,
+      iter: RangePoints::new(table.skl.range(r)),
       table,
     }
   }
@@ -153,7 +149,7 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Pointee<'a>>::Output>>
+  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <T::Value<'a> as Pointee<'a>>::Output>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   type Item = Entry<'a, Active, C, T>;
@@ -162,7 +158,7 @@ where
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       let next = self.iter.next()?;
-      match self.table.validate(self.query_version, next) {
+      match self.table.validate(next) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }
@@ -191,14 +187,14 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Pointee<'a>>::Output>>
+  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <T::Value<'a> as Pointee<'a>>::Output>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     loop {
       let prev = self.iter.next_back()?;
-      match self.table.validate(self.query_version, prev) {
+      match self.table.validate(prev) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }

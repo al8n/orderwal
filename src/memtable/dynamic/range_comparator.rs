@@ -30,7 +30,7 @@ impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableRange
 impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeComparator<C> {
   fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
   where
-    T: crate::types::Kind,
+    T: crate::types::TypeMode,
     T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
     T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {
@@ -39,7 +39,7 @@ impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeCompar
 
   fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
   where
-    T: crate::types::Kind,
+    T: crate::types::TypeMode,
     T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {
     unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }

@@ -13,8 +13,8 @@ use crate::{
     RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
-    sealed::{PointComparator, Pointee, RangeComparator, Sealed},
-    Kind,
+    sealed::{PointComparator, Pointee, RangeComparator},
+    TypeMode,
   },
   State, WithVersion,
 };
@@ -34,7 +34,7 @@ mod range_update;
 impl<'a, C, T> Table<C, T>
 where
   C: 'static,
-  T: Kind,
+  T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
@@ -44,7 +44,7 @@ where
     + Comparator<<T::Key<'a> as Pointee<'a>>::Output>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, <<T as Sealed>::Key<'a> as Pointee<'a>>::Output>
+    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:

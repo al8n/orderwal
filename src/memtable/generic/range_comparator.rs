@@ -44,7 +44,7 @@ impl<K: ?Sized, C: ?Sized> crate::types::sealed::RangeComparator<C>
 {
   fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
   where
-    T: crate::types::Kind,
+    T: crate::types::TypeMode,
     T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
     T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {
@@ -53,7 +53,7 @@ impl<K: ?Sized, C: ?Sized> crate::types::sealed::RangeComparator<C>
 
   fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
   where
-    T: crate::types::Kind,
+    T: crate::types::TypeMode,
     T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {
     unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }

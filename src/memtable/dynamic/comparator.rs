@@ -9,7 +9,7 @@ use skl::{
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, Kind, RawEntryRef, RecordPointer};
+use crate::types::{fetch_entry, fetch_raw_key, TypeMode, RawEntryRef, RecordPointer};
 
 pub struct MemtableComparator<C: ?Sized> {
   /// The start pointer of the parent ARENA.
@@ -28,7 +28,7 @@ impl<C: ?Sized> crate::types::sealed::PointComparator<C> for MemtableComparator<
   #[inline]
   fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
   where
-    T: Kind,
+    T: TypeMode,
     T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
     T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
   {

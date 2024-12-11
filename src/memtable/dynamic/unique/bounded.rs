@@ -3,31 +3,11 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
-use skl::{
-  dynamic::{BytesComparator, BytesRangeComparator},
-  generic::unique::Map as _,
-  Active,
-};
+use skl::{dynamic::BytesComparator, generic::unique::Map as _, Active};
 
-use crate::{
-  memtable::{bounded::unique, MemtableEntry as _, RangeEntry as _, RangeUpdateEntry as _},
-  types::Dynamic,
-  State,
-};
+use crate::{memtable::bounded::unique::{self, *}, types::Dynamic, State};
 
 use super::DynamicMemtable;
-
-pub use entry::*;
-pub use iter::*;
-pub use point::*;
-pub use range_deletion::*;
-pub use range_update::*;
-
-mod entry;
-mod iter;
-mod point;
-mod range_deletion;
-mod range_update;
 
 /// Dynamic unique version memtable implementation based on ARNEA based [`SkipMap`](skl::generic::unique::sync::SkipMap)s.
 pub type Table<C> = unique::Table<C, Dynamic>;
@@ -60,12 +40,12 @@ where
     S: State<'a>;
 
   type Iterator<'a>
-    = Iter<'a, C>
+    = Iter<'a, C, Dynamic>
   where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, Q, R, C>
+    = Range<'a, Q, R, C, Dynamic>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
@@ -238,52 +218,5 @@ where
     Q: ?Sized + Borrow<[u8]>,
   {
     RangeBulkUpdates::new(self.range_updates_skl.range_with_tombstone(range))
-  }
-}
-
-impl<'a, C> Table<C>
-where
-  C: BytesComparator + 'static,
-{
-  fn validate(
-    &'a self,
-    ent: PointEntry<'a, Active, C, Dynamic>,
-  ) -> ControlFlow<Option<Entry<'a, Active, C, Dynamic>>, PointEntry<'a, Active, C, Dynamic>> {
-    let key = ent.key();
-
-    // check if the next entry is visible.
-    // As the range_del_skl is sorted by the end key, we can use the lower_bound to find the first
-    // deletion range that may cover the next entry.
-
-    let shadow = self.range_deletions_skl.range(..=key).any(|ent| {
-      let ent = RangeDeletionEntry::<Active, C, Dynamic>::new(ent);
-      self.cmp.compare_contains(&ent.range(), key)
-    });
-
-    if shadow {
-      return ControlFlow::Continue(ent);
-    }
-
-    // find the range key entry with maximum version that shadow the next entry.
-    let range_ent = self.range_updates_skl.range(..=key).find_map(|ent| {
-      let ent = RangeUpdateEntry::<Active, C, Dynamic>::new(ent);
-
-      if self.cmp.compare_contains(&ent.range(), key) {
-        Some(ent)
-      } else {
-        None
-      }
-    });
-
-    // check if the next entry's value should be shadowed by the range key entries.
-    if let Some(range_ent) = range_ent {
-      let val = range_ent.value();
-      return ControlFlow::Break(Some(Entry::new(self, ent, key, val)));
-
-      // if value is None, the such range is unset, so we should return the value of the point entry.
-    }
-
-    let val = ent.value();
-    ControlFlow::Break(Some(Entry::new(self, ent, key, val)))
   }
 }

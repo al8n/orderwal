@@ -72,7 +72,7 @@ macro_rules! memtable {
       /// A memory table implementation based on ARENA [`SkipMap`](skl).
       pub struct Table<C, T>
       where
-        T: $crate::types::Kind,
+        T: $crate::types::TypeMode,
       {
         pub(in crate::memtable) cmp: Arc<C>,
         pub(in crate::memtable) skl: SkipMap<RecordPointer, (), T::Comparator<C>>,
@@ -84,7 +84,7 @@ macro_rules! memtable {
       impl<C, T> Memtable for Table<C, T>
       where
         C: 'static,
-        T: $crate::types::Kind,
+        T: $crate::types::TypeMode,
         T::Comparator<C>: for<'a> dbutils::equivalentor::TypeRefComparator<'a, RecordPointer> + 'static,
         T::RangeComparator<C>: for<'a> dbutils::equivalentor::TypeRefComparator<'a, RecordPointer> + 'static,
       {
@@ -169,7 +169,7 @@ macro_rules! point_entry_wrapper {
     pub struct $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind
+      T: $crate::types::TypeMode
     {
       pub(in crate::memtable) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>,
       data: core::cell::OnceCell<$crate::types::RawEntryRef<'a, T>>,
@@ -178,7 +178,7 @@ macro_rules! point_entry_wrapper {
     impl<'a, S, C, T> core::fmt::Debug for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Comparator<C>: $crate::types::sealed::PointComparator<C>,
@@ -189,13 +189,13 @@ macro_rules! point_entry_wrapper {
         self.data.get_or_init(|| {
           self.ent.comparator().fetch_entry(self.ent.key())
         }).write_fmt(stringify!($ent), f)
-      } 
-    }    
+      }
+    }
 
     impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Value<'a>: Clone,
       T::Key<'a>: Clone,
     {
@@ -211,7 +211,7 @@ macro_rules! point_entry_wrapper {
     impl<'a, S, C, T> $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       #[inline]
       pub(in crate::memtable) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>) -> Self {
@@ -225,7 +225,7 @@ macro_rules! point_entry_wrapper {
     impl<'a, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, $crate::Active, C, T>
     where
       C: 'static,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>,
@@ -271,7 +271,7 @@ macro_rules! point_entry_wrapper {
     impl<'a, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, $crate::MaybeTombstone, C, T>
     where
       C: 'static,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>,
@@ -319,7 +319,7 @@ macro_rules! point_entry_wrapper {
       where
         C: 'static,
         S: $crate::State<'a>,
-        T: $crate::types::Kind,
+        T: $crate::types::TypeMode,
       {
         #[inline]
         fn $version(&self) -> u64 {
@@ -339,16 +339,38 @@ macro_rules! range_entry_wrapper {
     pub struct $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       pub(crate) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>,
       data: core::cell::OnceCell<$crate::types::$raw<'a, T>>,
     }
 
+    impl<'a, S, C, T> core::fmt::Debug for $ent<'a, S, C, T>
+    where
+      C: 'static,
+      S: $crate::State<'a>,
+      T: $crate::types::TypeMode,
+      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
+      <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
+      <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
+      T::RangeComparator<C>:
+        dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>
+        + $crate::types::sealed::RangeComparator<C>,
+    {
+      fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use crate::types::sealed::RangeComparator;
+
+        self.data.get_or_init(|| {
+          self.ent.comparator().$fetch(self.ent.key())
+        }).write_fmt(stringify!($ent), f)
+      }
+    }
+  
     impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Value<'a>: Clone,
       T::Key<'a>: Clone,
     {
@@ -364,7 +386,7 @@ macro_rules! range_entry_wrapper {
     impl<'a, S, C, T> $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       pub(in crate::memtable) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>) -> Self {
         Self {
@@ -378,7 +400,7 @@ macro_rules! range_entry_wrapper {
     where
       C: 'static,
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
@@ -425,7 +447,7 @@ macro_rules! range_entry_wrapper {
       where
         C: 'static,
         S: $crate::State<'a>,
-        T: $crate::types::Kind,
+        T: $crate::types::TypeMode,
       {
         #[inline]
         fn $version(&self) -> u64 {
@@ -451,7 +473,7 @@ macro_rules! range_deletion_wrapper {
     where
       C: 'static,
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
@@ -478,7 +500,7 @@ macro_rules! range_update_wrapper {
       for $ent<'a, $crate::MaybeTombstone, C, T>
     where
       C: 'static,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
@@ -504,7 +526,7 @@ macro_rules! range_update_wrapper {
       for $ent<'a, $crate::Active, C, T>
     where
       C: 'static,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
@@ -537,7 +559,7 @@ macro_rules! iter_wrapper {
     pub struct $iter<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>,
     }
@@ -545,7 +567,7 @@ macro_rules! iter_wrapper {
     impl<'a, S, C, T> $iter<'a, S, C, T>
     where
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       #[inline]
       pub(in crate::memtable) const fn new(iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>) -> Self {
@@ -557,7 +579,7 @@ macro_rules! iter_wrapper {
     where
       C: 'static,
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, $crate::types::RecordPointer> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
@@ -572,7 +594,7 @@ macro_rules! iter_wrapper {
     where
       C: 'static,
       S: $crate::State<'a>,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, $crate::types::RecordPointer> + 'a,
     {
       #[inline]
@@ -593,7 +615,7 @@ macro_rules! range_wrapper {
     where
       S: $crate::State<'a>,
       Q: ?Sized,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, T::$cmp<C>>,
     }
@@ -602,7 +624,7 @@ macro_rules! range_wrapper {
     where
       S: $crate::State<'a>,
       Q: ?Sized,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
     {
       #[inline]
       pub(in crate::memtable) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, T::$cmp<C>>) -> Self {
@@ -616,7 +638,7 @@ macro_rules! range_wrapper {
       S: $crate::State<'a>,
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
@@ -633,7 +655,7 @@ macro_rules! range_wrapper {
       S: $crate::State<'a>,
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
-      T: $crate::types::Kind,
+      T: $crate::types::TypeMode,
       T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
     {
       #[inline]

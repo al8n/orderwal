@@ -1,22 +1,12 @@
-use core::ops::ControlFlow;
-
-use skl::{dynamic::BytesComparator, Active};
-
-use crate::{
-  memtable::MemtableEntry,
-  types::{sealed::Pointee, Dynamic, Kind},
-  State,
-};
-
-use super::PointEntry;
+use super::*;
 
 /// Entry in the memtable.
 pub struct Entry<'a, S, C, T>
 where
   S: State<'a>,
-  T: Kind,
+  T: TypeMode,
 {
-  table: &'a super::Table<C>,
+  table: &'a Table<C, T>,
   point_ent: PointEntry<'a, S, C, T>,
   key: <T::Key<'a> as Pointee<'a>>::Output,
   val: <T::Value<'a> as Pointee<'a>>::Output,
@@ -25,9 +15,8 @@ where
 impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
 where
   S: State<'a>,
-  S::BytesValueOutput: core::fmt::Debug,
-  C: BytesComparator,
-  T: Kind,
+  C: 'static,
+  T: TypeMode,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
   <T::Value<'a> as Pointee<'a>>::Output: core::fmt::Debug,
 {
@@ -42,7 +31,7 @@ where
 impl<'a, S, C, T> Clone for Entry<'a, S, C, T>
 where
   S: State<'a>,
-  T: Kind,
+  T: TypeMode,
   T::Key<'a>: Clone,
   T::Value<'a>: Clone,
 {
@@ -57,13 +46,31 @@ where
   }
 }
 
-impl<'a, C> MemtableEntry<'a> for Entry<'a, Active, C, Dynamic>
+impl<'a, C, T> MemtableEntry<'a> for Entry<'a, Active, C, T>
 where
-  C: BytesComparator + 'static,
+  C: 'static,
+  T: TypeMode,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
+  <T::Key<'a> as Pointee<'a>>::Output: 'a,
+  <T::Value<'a> as Pointee<'a>>::Output: 'a,
+  T::Comparator<C>: PointComparator<C>
+    + TypeRefComparator<'a, RecordPointer>
+    + Comparator<<T::Key<'a> as Pointee<'a>>::Output>
+    + 'static,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+    + RangeComparator<C>
+    + 'static,
+  RangeDeletionEntry<'a, Active, C, T>:
+    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <T::Value<'a> as Pointee<'a>>::Output>
+    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
-  type Key = &'a [u8];
+  type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
-  type Value = &'a [u8];
+  type Value = <T::Value<'a> as Pointee<'a>>::Output;
 
   #[inline]
   fn key(&self) -> Self::Key {
@@ -103,11 +110,11 @@ where
 impl<'a, S, C, T> Entry<'a, S, C, T>
 where
   S: State<'a>,
-  T: Kind,
+  T: TypeMode,
 {
   #[inline]
   pub(crate) fn new(
-    table: &'a super::Table<C>,
+    table: &'a Table<C, T>,
     point_ent: PointEntry<'a, S, C, T>,
     key: <T::Key<'a> as Pointee<'a>>::Output,
     val: <T::Value<'a> as Pointee<'a>>::Output,

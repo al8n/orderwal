@@ -5,23 +5,14 @@ use core::{
 
 use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active};
 
-use crate::{memtable::bounded::multiple_version::*, types::Dynamic, State, WithVersion};
+use crate::{memtable::bounded::multiple_version::{self, *}, types::Dynamic, State, WithVersion};
 
 use super::DynamicMemtable;
 
-// pub use entry::*;
-// pub use iter::*;
-// pub use point::*;
-// pub use range_deletion::*;
-// pub use range_update::*;
+/// Dynamic multiple version memtable implementation based on ARNEA based [`SkipMap`](skl::generic::unique::sync::SkipMap)s.
+pub type Table<C> = multiple_version::Table<C, Dynamic>;
 
-// mod entry;
-// mod iter;
-// mod point;
-// mod range_deletion;
-// mod range_update;
-
-impl<C> DynamicMemtable for Table<C, Dynamic>
+impl<C> DynamicMemtable for Table<C>
 where
   C: BytesComparator + 'static,
   for<'a> PointEntry<'a, Active, C, Dynamic>: WithVersion,
