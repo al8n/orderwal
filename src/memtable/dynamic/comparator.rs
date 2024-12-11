@@ -9,7 +9,7 @@ use skl::{
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, TypeMode, RawEntryRef, RecordPointer};
+use crate::types::{fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, TypeMode};
 
 pub struct MemtableComparator<C: ?Sized> {
   /// The start pointer of the parent ARENA.
@@ -109,23 +109,23 @@ where
   }
 }
 
-impl<C> Equivalentor<&[u8]> for MemtableComparator<C>
+impl<C> Equivalentor<Query<&[u8]>> for MemtableComparator<C>
 where
   C: BytesEquivalentor + ?Sized,
 {
   #[inline]
-  fn equivalent(&self, a: &&[u8], b: &&[u8]) -> bool {
-    self.cmp.equivalent(a, b)
+  fn equivalent(&self, a: &Query<&[u8]>, b: &Query<&[u8]>) -> bool {
+    self.cmp.equivalent(&a.0, &b.0)
   }
 }
 
-impl<C> Comparator<&[u8]> for MemtableComparator<C>
+impl<C> Comparator<Query<&[u8]>> for MemtableComparator<C>
 where
   C: BytesComparator + ?Sized,
 {
   #[inline]
-  fn compare(&self, a: &&[u8], b: &&[u8]) -> cmp::Ordering {
-    self.cmp.compare(a, b)
+  fn compare(&self, a: &Query<&[u8]>, b: &Query<&[u8]>) -> cmp::Ordering {
+    self.cmp.compare(&a.0, &b.0)
   }
 }
 

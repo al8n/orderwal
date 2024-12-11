@@ -1,6 +1,3 @@
-#[macro_use]
-mod bounded;
-
 /// Memtables which only support unique keys.
 pub mod unique;
 

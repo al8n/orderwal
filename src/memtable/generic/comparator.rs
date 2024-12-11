@@ -6,9 +6,7 @@ use skl::generic::{
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, TypeMode, RawEntryRef, RecordPointer};
-
-use super::super::Query;
+use crate::types::{fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, RefQuery, TypeMode};
 
 pub struct MemtableComparator<K, C>
 where
@@ -176,6 +174,27 @@ where
   #[inline]
   fn compare(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering {
     self.compare_in(a, b)
+  }
+}
+
+impl<'a, K, C> Equivalentor<Query<K::Ref<'a>>> for MemtableComparator<K, C>
+where
+  C: TypeRefEquivalentor<'a, K> + ?Sized,
+  K: Type + ?Sized,
+{
+  fn equivalent(&self, a: &Query<K::Ref<'a>>, b: &Query<K::Ref<'a>>) -> bool {
+    self.cmp.equivalent_refs(&a.0, &b.0)
+  }
+}
+
+impl<'a, K, C> Comparator<Query<K::Ref<'a>>> for MemtableComparator<K, C>
+where
+  C: TypeRefComparator<'a, K> + ?Sized,
+  K: Type + ?Sized,
+{
+  #[inline]
+  fn compare(&self, a: &Query<K::Ref<'a>>, b: &Query<K::Ref<'a>>) -> cmp::Ordering {
+    self.cmp.compare_refs(&a.0, &b.0)
   }
 }
 

@@ -9,12 +9,10 @@ use skl::{
 
 use crate::{
   memtable::{
-    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
-    RangeUpdateEntry as RangeUpdateEntryTrait,
+    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry, RangeEntryExt as _, RangeUpdateEntry as RangeUpdateEntryTrait
   },
   types::{
-    sealed::{PointComparator, Pointee, RangeComparator},
-    TypeMode,
+    sealed::{PointComparator, Pointee, RangeComparator}, Query, TypeMode
   },
   State,
 };
@@ -41,7 +39,7 @@ where
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
-    + Comparator<<T::Key<'a> as Pointee<'a>>::Output>
+    + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
     + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
@@ -65,7 +63,7 @@ where
 
     let shadow = self.range_deletions_skl.range(..=key).any(|ent| {
       let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
-      dbutils::equivalentor::RangeComparator::contains(cmp, &ent.range(), &key)
+      dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key))
     });
 
     if shadow {
@@ -76,7 +74,7 @@ where
     let range_ent = self.range_updates_skl.range(..=key).find_map(|ent| {
       let ent = RangeUpdateEntry::<Active, C, T>::new(ent);
 
-      if dbutils::equivalentor::RangeComparator::contains(cmp, &ent.range(), &key) {
+      if dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key)) {
         Some(ent)
       } else {
         None

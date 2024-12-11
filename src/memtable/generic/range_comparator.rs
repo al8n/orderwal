@@ -8,10 +8,9 @@ use triomphe::Arc;
 
 use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  sealed::Pointee, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
+  sealed::Pointee, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, Query,
 };
 
-use super::super::Query;
 
 pub struct MemtableRangeComparator<K, C>
 where

@@ -639,7 +639,7 @@ macro_rules! range_wrapper {
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, T::Query<Q>> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -656,7 +656,7 @@ macro_rules! range_wrapper {
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, T::Query<Q>> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {

@@ -1,4 +1,4 @@
-use core::mem;
+use core::{marker::PhantomData, mem};
 
 use dbutils::{
   error::InsufficientBuffer,
@@ -21,6 +21,24 @@ mod raw;
 pub use mode::{Dynamic, Generic, TypeMode};
 pub(crate) use mode::sealed;
 pub(crate) use raw::*;
+
+
+#[doc(hidden)]
+#[derive(ref_cast::RefCast)]
+#[repr(transparent)]
+pub struct Query<Q: ?Sized>(pub(crate) Q);
+
+#[doc(hidden)]
+#[derive(ref_cast::RefCast)]
+#[repr(transparent)]
+pub struct RefQuery<K, Q>
+where 
+  K: Type + ?Sized,
+  Q: ?Sized,
+{
+  _k: PhantomData<K>,
+  pub(crate) query: Q,
+}
 
 
 bitflags::bitflags! {

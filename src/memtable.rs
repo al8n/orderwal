@@ -1,6 +1,6 @@
 use core::ops::{Bound, RangeBounds};
 
-use crate::types::{Mode, RecordPointer};
+use crate::types::{Mode, Query, RecordPointer};
 
 #[macro_use]
 pub(crate) mod bounded;
@@ -10,10 +10,6 @@ pub mod dynamic;
 
 /// Memtables for generic(structured) key-value order WALs.
 pub mod generic;
-
-#[derive(ref_cast::RefCast)]
-#[repr(transparent)]
-struct Query<Q: ?Sized>(Q);
 
 /// An entry which is stored in the memory table.
 pub trait MemtableEntry<'a>
@@ -64,6 +60,33 @@ where
   /// Returns the previous entry in the memory table.
   fn prev(&mut self) -> Option<Self>;
 }
+
+trait RangeEntryExt<'a>: RangeEntry<'a> {
+  /// Returns the start bound of the range entry.
+  fn query_start_bound(&self) -> Bound<Query<Self::Key>> {
+    match self.start_bound() {
+      Bound::Included(key) => Bound::Included(Query(key)),
+      Bound::Excluded(key) => Bound::Excluded(Query(key)),
+      Bound::Unbounded => Bound::Unbounded,
+    }
+  }
+
+  /// Returns the end bound of the range entry.
+  fn query_end_bound(&self) -> Bound<Query<Self::Key>> {
+    match self.end_bound() {
+      Bound::Included(key) => Bound::Included(Query(key)),
+      Bound::Excluded(key) => Bound::Excluded(Query(key)),
+      Bound::Unbounded => Bound::Unbounded,
+    }
+  }
+
+  /// Returns the range of the entry.
+  fn query_range(&self) -> impl RangeBounds<Query<Self::Key>> + 'a {
+    (self.query_start_bound(), self.query_end_bound())
+  }
+}
+
+impl<'a, T> RangeEntryExt<'a> for T where T: RangeEntry<'a> {}
 
 /// An entry which is stored in the memory table.
 pub trait RangeDeletionEntry<'a>: RangeEntry<'a> {}
