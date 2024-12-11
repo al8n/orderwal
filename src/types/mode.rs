@@ -28,7 +28,8 @@ pub(crate) mod sealed {
   use skl::generic::{LazyRef, Type};
 
   use super::{
-    Dynamic, Generic, TypeMode, super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
+    super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
+    Dynamic, Generic, TypeMode,
   };
 
   pub trait ComparatorConstructor<C: ?Sized>: Sized {

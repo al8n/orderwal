@@ -9,10 +9,12 @@ use skl::{
 
 use crate::{
   memtable::{
-    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry, RangeEntryExt as _, RangeUpdateEntry as RangeUpdateEntryTrait
+    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry, RangeEntryExt as _,
+    RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
-    sealed::{PointComparator, Pointee, RangeComparator}, Query, TypeMode
+    sealed::{PointComparator, Pointee, RangeComparator},
+    Query, TypeMode,
   },
   State, WithVersion,
 };

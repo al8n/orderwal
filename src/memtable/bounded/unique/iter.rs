@@ -39,8 +39,7 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, RecordPointer>
+    + TypeRefComparator<'a, RecordPointer> 
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
@@ -76,7 +75,6 @@ where
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
@@ -140,7 +138,7 @@ where
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, T::Query<Q>>
+    + TypeRefQueryComparator<'a, RecordPointer, Q>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
@@ -178,7 +176,7 @@ where
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, T::Query<Q>>
+    + TypeRefQueryComparator<'a, RecordPointer, Q>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>

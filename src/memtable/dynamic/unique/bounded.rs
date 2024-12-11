@@ -5,7 +5,11 @@ use core::{
 
 use skl::{dynamic::BytesComparator, generic::unique::Map as _, Active};
 
-use crate::{memtable::bounded::unique::{self, *}, types::Dynamic, State};
+use crate::{
+  memtable::bounded::unique::{self, *},
+  types::Dynamic,
+  State,
+};
 
 use super::DynamicMemtable;
 

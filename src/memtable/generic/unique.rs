@@ -1,9 +1,9 @@
-use core::{
-  borrow::Borrow,
-  ops::{Bound, RangeBounds},
-};
+use core::ops::{Bound, RangeBounds};
 
-use skl::{Active, MaybeTombstone};
+use skl::{
+  generic::{Comparable, Type, TypeRefQueryComparator},
+  Active, MaybeTombstone,
+};
 
 use crate::{memtable::Memtable, State};
 
@@ -17,6 +17,9 @@ where
   K: ?Sized,
   V: ?Sized,
 {
+  /// The comparator used for key comparison.
+  type Comparator;
+
   /// The item returned by the iterator or query methods.
   type Entry<'a>
   where
@@ -49,6 +52,7 @@ where
   type Range<'a, Q, R>: DoubleEndedIterator<Item = Self::Entry<'a>>
   where
     Self: 'a,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -98,6 +102,8 @@ where
   fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
   where
     Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.range::<Q, _>((Bound::Unbounded, bound)).next_back()
   }
@@ -106,6 +112,8 @@ where
   fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
   where
     Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.range::<Q, _>((bound, Bound::Unbounded)).next()
   }
@@ -121,14 +129,18 @@ where
   }
 
   /// Returns the pointer associated with the key.
-  fn get<Q>(&self, key: &Q) -> Option<Self::Entry<'_>>
-  where
-    Q: ?Sized;
-
-  /// Returns `true` if the memtable contains the specified pointer.
-  fn contains<Q>(&self, key: &Q) -> bool
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<Self::Entry<'a>>
   where
     Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
+
+  /// Returns `true` if the memtable contains the specified pointer.
+  fn contains<'a, Q>(&'a self, key: &Q) -> bool
+  where
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.get(key).is_some()
   }
@@ -140,7 +152,9 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over point entries in the memtable.
   fn iter_points(&self) -> Self::PointsIterator<'_, Active>;
@@ -152,17 +166,19 @@ where
   fn range_points<'a, Q, R>(&'a self, range: R) -> Self::RangePoints<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
+
     Q: ?Sized;
 
   /// Returns an iterator over all the point entries in a subset of the memtable.
   fn range_points_with_tombstone<'a, Q, R>(
     &'a self,
-
     range: R,
   ) -> Self::RangePoints<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over range deletions entries in the memtable.
   fn iter_bulk_deletions(&self) -> Self::BulkDeletionsIterator<'_, Active>;
@@ -177,7 +193,9 @@ where
   ) -> Self::BulkDeletionsRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over all the range deletions entries in a subset of the memtable.
   fn range_bulk_deletions_with_tombstone<'a, Q, R>(
@@ -186,7 +204,9 @@ where
   ) -> Self::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,;
 
   /// Returns an iterator over range updates entries in the memtable.
   fn iter_bulk_updates(&self) -> Self::BulkUpdatesIterator<'_, Active>;
@@ -198,7 +218,9 @@ where
   fn range_bulk_updates<'a, Q, R>(&'a self, range: R) -> Self::BulkUpdatesRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over all the range updates entries in a subset of the memtable.
   fn range_bulk_updates_with_tombstone<'a, Q, R>(
@@ -207,5 +229,7 @@ where
   ) -> Self::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized,
+    K: Type,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 }

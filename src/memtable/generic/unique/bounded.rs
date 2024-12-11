@@ -4,9 +4,17 @@ use core::{
 };
 
 use ref_cast::RefCast as _;
-use skl::{dynamic::BytesComparator, generic::{unique::Map as _, Type, TypeRefComparator}, Active};
+use skl::{
+  dynamic::BytesComparator,
+  generic::{unique::Map as _, Comparable, Type, TypeRefComparator, TypeRefQueryComparator},
+  Active,
+};
 
-use crate::{memtable::bounded::unique::{self, *}, types::{Generic, Query}, State};
+use crate::{
+  memtable::bounded::unique::{self, *},
+  types::{Generic, Query},
+  State,
+};
 
 use super::GenericMemtable;
 
@@ -15,10 +23,12 @@ pub type Table<K: ?Sized, V: ?Sized, C> = unique::Table<C, Generic<K, V>>;
 
 impl<K, V, C> GenericMemtable<K, V> for Table<K, V, C>
 where
-  for<'a> C: TypeRefComparator<'a, K> + 'static,
+  C: 'static,
   K: Type + ?Sized + 'static,
   V: Type + ?Sized + 'static,
 {
+  type Comparator = C;
+
   type Entry<'a>
     = Entry<'a, Active, C, Generic<K, V>>
   where
@@ -51,6 +61,7 @@ where
     = Range<'a, Q, R, C, Generic<K, V>>
   where
     Self: 'a,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -96,7 +107,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
-  fn get<Q>(&self, key: &Q) -> Option<Self::Entry<'_>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<Self::Entry<'a>>
   where
     Q: ?Sized,
   {
@@ -116,6 +127,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
+
     Q: ?Sized,
   {
     Range::new(self, range)
@@ -135,6 +147,7 @@ where
   fn range_points<'a, Q, R>(&'a self, range: R) -> Self::RangePoints<'a, skl::Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
+
     Q: ?Sized,
   {
     RangePoints::new(self.skl.range(range))
@@ -143,7 +156,6 @@ where
   #[inline]
   fn range_points_with_tombstone<'a, Q, R>(
     &'a self,
-
     range: R,
   ) -> Self::RangePoints<'a, skl::MaybeTombstone, Q, R>
   where

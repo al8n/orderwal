@@ -6,7 +6,9 @@ use skl::generic::{
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, RefQuery, TypeMode};
+use crate::types::{
+  fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, RefQuery, TypeMode,
+};
 
 pub struct MemtableComparator<K, C>
 where
@@ -214,48 +216,60 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>> for MemtableComparator<K, C>
-where
-  C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
-  Q: ?Sized,
-  K: Type + ?Sized,
-{
-  #[inline]
-  fn query_equivalent_ref(&self, a: &RecordPointer, b: &Query<Q>) -> bool {
-    self.query_equivalent_key(a, &b.0)
-  }
-}
+// impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>> for MemtableComparator<K, C>
+// where
+//   C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
+//   Q: ?Sized,
+//   K: Type + ?Sized,
+// {
+//   #[inline]
+//   fn query_equivalent_ref(&self, a: &RecordPointer, b: &Query<Q>) -> bool {
+//     self.query_equivalent_key(a, &b.0)
+//   }
+// }
 
-impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>> for MemtableComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Q> for MemtableComparator<K, C>
 where
   C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
   K: Type + ?Sized,
   Q: ?Sized,
 {
   #[inline]
-  fn query_compare_ref(&self, a: &RecordPointer, b: &Query<Q>) -> cmp::Ordering {
-    self.compare_key(a, &b.0)
+  fn query_equivalent_ref(&self, a: &RecordPointer, b: &Q) -> bool {
+    self.query_equivalent_key(a, b)
   }
 }
 
-impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer>
-  for MemtableComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Q> for MemtableComparator<K, C>
 where
-  C: TypeRefEquivalentor<'a, K> + ?Sized,
+  C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
   K: Type + ?Sized,
-{
-  fn query_equivalent_ref(&self, a: &RecordPointer, b: &RecordPointer) -> bool {
-    self.equivalent_in(a, b)
-  }
-}
-
-impl<'a, K, C> TypeRefQueryComparator<'a, RecordPointer, RecordPointer> for MemtableComparator<K, C>
-where
-  C: TypeRefComparator<'a, K> + ?Sized,
-  K: Type + ?Sized,
+  Q: ?Sized,
 {
   #[inline]
-  fn query_compare_ref(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering {
-    self.compare_in(a, b)
+  fn query_compare_ref(&self, a: &RecordPointer, b: &Q) -> cmp::Ordering {
+    self.compare_key(a, &b)
   }
 }
+
+// impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer>
+//   for MemtableComparator<K, C>
+// where
+//   C: TypeRefEquivalentor<'a, K> + ?Sized,
+//   K: Type + ?Sized,
+// {
+//   fn query_equivalent_ref(&self, a: &RecordPointer, b: &RecordPointer) -> bool {
+//     self.equivalent_in(a, b)
+//   }
+// }
+
+// impl<'a, K, C> TypeRefQueryComparator<'a, RecordPointer, RecordPointer> for MemtableComparator<K, C>
+// where
+//   C: TypeRefComparator<'a, K> + ?Sized,
+//   K: Type + ?Sized,
+// {
+//   #[inline]
+//   fn query_compare_ref(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering {
+//     self.compare_in(a, b)
+//   }
+// }

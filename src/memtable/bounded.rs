@@ -366,7 +366,7 @@ macro_rules! range_entry_wrapper {
         }).write_fmt(stringify!($ent), f)
       }
     }
-  
+
     impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
       S: $crate::State<'a>,
@@ -580,7 +580,7 @@ macro_rules! iter_wrapper {
       C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, $crate::types::RecordPointer> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -595,7 +595,7 @@ macro_rules! iter_wrapper {
       C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, $crate::types::RecordPointer> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {
@@ -639,7 +639,7 @@ macro_rules! range_wrapper {
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, T::Query<Q>> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -656,7 +656,7 @@ macro_rules! range_wrapper {
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, T::Query<Q>> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {

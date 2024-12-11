@@ -4,7 +4,7 @@ use dbutils::leb128::decode_u64_varint;
 
 use crate::VERSION_SIZE;
 
-use super::{split_lengths, Pointee, Pointer, RecordPointer, TypeMode, EntryFlags};
+use super::{split_lengths, EntryFlags, Pointee, Pointer, RecordPointer, TypeMode};
 
 pub struct RawEntryRef<'a, T: TypeMode> {
   flag: EntryFlags,
@@ -18,7 +18,11 @@ where
   T: TypeMode,
 {
   #[inline]
-  pub(crate) fn write_fmt(&self, wrapper_name: &'static str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+  pub(crate) fn write_fmt(
+    &self,
+    wrapper_name: &'static str,
+    f: &mut core::fmt::Formatter<'_>,
+  ) -> core::fmt::Result {
     let mut debugger = f.debug_struct(wrapper_name);
     debugger
       .field("flags", &self.flag)
@@ -87,7 +91,11 @@ where
   T: TypeMode,
 {
   #[inline]
-  pub(crate) fn write_fmt(&self, wrapper_name: &'static str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+  pub(crate) fn write_fmt(
+    &self,
+    wrapper_name: &'static str,
+    f: &mut core::fmt::Formatter<'_>,
+  ) -> core::fmt::Result {
     let mut debugger = f.debug_struct(wrapper_name);
     debugger
       .field("flags", &self.flag)
@@ -188,7 +196,11 @@ where
   T: TypeMode,
 {
   #[inline]
-  pub(crate) fn write_fmt(&self, wrapper_name: &'static str, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+  pub(crate) fn write_fmt(
+    &self,
+    wrapper_name: &'static str,
+    f: &mut core::fmt::Formatter<'_>,
+  ) -> core::fmt::Result {
     let mut debugger = f.debug_struct(wrapper_name);
     debugger
       .field("flags", &self.flag)

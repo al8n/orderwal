@@ -115,7 +115,7 @@ where
 {
   #[inline]
   fn equivalent(&self, a: &Query<&[u8]>, b: &Query<&[u8]>) -> bool {
-    self.cmp.equivalent(&a.0, &b.0)
+    self.cmp.equivalent(a.0, b.0)
   }
 }
 
@@ -125,7 +125,7 @@ where
 {
   #[inline]
   fn compare(&self, a: &Query<&[u8]>, b: &Query<&[u8]>) -> cmp::Ordering {
-    self.cmp.compare(&a.0, &b.0)
+    self.cmp.compare(a.0, b.0)
   }
 }
 
@@ -201,21 +201,3 @@ where
   }
 }
 
-impl<C> TypeRefQueryEquivalentor<'_, RecordPointer, RecordPointer> for MemtableComparator<C>
-where
-  C: BytesComparator + ?Sized,
-{
-  fn query_equivalent_ref(&self, a: &RecordPointer, b: &RecordPointer) -> bool {
-    self.equivalent_in(a, b)
-  }
-}
-
-impl<C> TypeRefQueryComparator<'_, RecordPointer, RecordPointer> for MemtableComparator<C>
-where
-  C: BytesComparator + ?Sized,
-{
-  #[inline]
-  fn query_compare_ref(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering {
-    self.compare_in(a, b)
-  }
-}

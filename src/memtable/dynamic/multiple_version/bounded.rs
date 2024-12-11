@@ -5,7 +5,11 @@ use core::{
 
 use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active};
 
-use crate::{memtable::bounded::multiple_version::{self, *}, types::Dynamic, State, WithVersion};
+use crate::{
+  memtable::bounded::multiple_version::{self, *},
+  types::Dynamic,
+  State, WithVersion,
+};
 
 use super::DynamicMemtable;
 

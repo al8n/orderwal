@@ -18,10 +18,9 @@ pub use dbutils::{
 
 mod mode;
 mod raw;
-pub use mode::{Dynamic, Generic, TypeMode};
 pub(crate) use mode::sealed;
+pub use mode::{Dynamic, Generic, TypeMode};
 pub(crate) use raw::*;
-
 
 #[doc(hidden)]
 #[derive(ref_cast::RefCast)]
@@ -32,14 +31,13 @@ pub struct Query<Q: ?Sized>(pub(crate) Q);
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
 pub struct RefQuery<K, Q>
-where 
+where
   K: Type + ?Sized,
   Q: ?Sized,
 {
   _k: PhantomData<K>,
   pub(crate) query: Q,
 }
-
 
 bitflags::bitflags! {
   /// The flags for each atomic write.
@@ -365,6 +363,3 @@ impl Pointer {
     Self { offset, len }
   }
 }
-
-
-
