@@ -6,9 +6,7 @@ use skl::generic::{
 };
 use triomphe::Arc;
 
-use crate::types::{
-  fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, TypeMode,
-};
+use crate::types::{fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, TypeMode};
 
 pub struct MemtableComparator<K, C>
 where

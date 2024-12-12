@@ -65,7 +65,7 @@ where
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:

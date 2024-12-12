@@ -151,10 +151,7 @@ where
       let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
       match &ak {
         Bound::Included(k) => self.cmp.compare_refs(k, b),
-        Bound::Excluded(k) => self
-          .cmp
-          .compare_refs(k, b)
-          .then(cmp::Ordering::Greater),
+        Bound::Excluded(k) => self.cmp.compare_refs(k, b).then(cmp::Ordering::Greater),
         Bound::Unbounded => cmp::Ordering::Less,
       }
     }
@@ -292,7 +289,8 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefQueryEquivalentor<RecordPointer, RefQuery<K::Ref<'a>>> for MemtableRangeComparator<K, C>
+impl<'a, K, C> TypeRefQueryEquivalentor<RecordPointer, RefQuery<K::Ref<'a>>>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefEquivalentor<K> + ?Sized,
   K: Type + ?Sized,
@@ -303,13 +301,18 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefQueryComparator<RecordPointer, RefQuery<K::Ref<'a>>> for MemtableRangeComparator<K, C>
+impl<'a, K, C> TypeRefQueryComparator<RecordPointer, RefQuery<K::Ref<'a>>>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefComparator<K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
-  fn query_compare_ref(&self, a: &<RecordPointer as Type>::Ref<'_>, b: &RefQuery<K::Ref<'a>>) -> cmp::Ordering {
+  fn query_compare_ref(
+    &self,
+    a: &<RecordPointer as Type>::Ref<'_>,
+    b: &RefQuery<K::Ref<'a>>,
+  ) -> cmp::Ordering {
     self.compare_start_key_with_ref(a, &b.query)
   }
 }

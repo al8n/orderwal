@@ -1,9 +1,9 @@
-use core::{
-  borrow::Borrow,
-  ops::{Bound, RangeBounds},
-};
+use core::ops::{Bound, RangeBounds};
 
-use skl::{Active, MaybeTombstone};
+use skl::{
+  generic::{Type, TypeRefComparator, TypeRefQueryComparator},
+  Active, MaybeTombstone,
+};
 
 use crate::{memtable::Memtable, State};
 
@@ -11,7 +11,15 @@ use crate::{memtable::Memtable, State};
 pub mod bounded;
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait DynamicMemtable: Memtable {
+pub trait GenericMemtable<K, V>
+where
+  Self: Memtable,
+  K: Type + ?Sized,
+  V: ?Sized,
+{
+  /// The comparator used for key comparison.
+  type Comparator: TypeRefComparator<K>;
+
   /// The item returned by the iterator or query methods.
   type Entry<'a>
   where
@@ -44,8 +52,9 @@ pub trait DynamicMemtable: Memtable {
   type Range<'a, Q, R>: DoubleEndedIterator<Item = Self::Entry<'a>>
   where
     Self: 'a,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized;
 
   /// The iterator over point entries.
   type PointsIterator<'a, S>: DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
@@ -57,9 +66,10 @@ pub trait DynamicMemtable: Memtable {
   type RangePoints<'a, S, Q, R>: DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
   where
     Self: 'a,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
     S: State<'a>,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized;
 
   /// The iterator over range deletions entries.
   type BulkDeletionsIterator<'a, S>: DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
@@ -71,9 +81,10 @@ pub trait DynamicMemtable: Memtable {
   type BulkDeletionsRange<'a, S, Q, R>: DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
   where
     Self: 'a,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
     S: State<'a>,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized;
 
   /// The iterator over range updates entries.
   type BulkUpdatesIterator<'a, S>: DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
@@ -85,9 +96,10 @@ pub trait DynamicMemtable: Memtable {
   type BulkUpdatesRange<'a, S, Q, R>: DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
   where
     Self: 'a,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
     S: State<'a>,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized;
 
   /// Returns the maximum version of the memtable.
   fn maximum_version(&self) -> u64;
@@ -101,7 +113,8 @@ pub trait DynamicMemtable: Memtable {
   /// Returns the upper bound of the memtable.
   fn upper_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>,
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self
       .range::<Q, _>(version, (Bound::Unbounded, bound))
@@ -111,7 +124,8 @@ pub trait DynamicMemtable: Memtable {
   /// Returns the lower bound of the memtable.
   fn lower_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>,
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self
       .range::<Q, _>(version, (bound, Bound::Unbounded))
@@ -129,14 +143,16 @@ pub trait DynamicMemtable: Memtable {
   }
 
   /// Returns the pointer associated with the key.
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_>>
+  fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<Self::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
   /// Returns `true` if the memtable contains the specified pointer.
   fn contains<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Borrow<[u8]>,
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.get(version, key).is_some()
   }
@@ -148,12 +164,13 @@ pub trait DynamicMemtable: Memtable {
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
   /// Returns an iterator over point entries in the memtable.
   fn iter_points(&self, version: u64) -> Self::PointsIterator<'_, Active>;
 
-  /// Returns an iterator over all(including all versions and tombstones) the point entries in the memtable.
+  /// Returns an iterator over all the point entries in the memtable.
   fn iter_all_points(&self, version: u64) -> Self::PointsIterator<'_, MaybeTombstone>;
 
   /// Returns an iterator over a subset of point entries in the memtable.
@@ -164,9 +181,10 @@ pub trait DynamicMemtable: Memtable {
   ) -> Self::RangePoints<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
-  /// Returns an iterator over all(including all versions and tombstones) the point entries in a subset of the memtable.
+  /// Returns an iterator over all the point entries in a subset of the memtable.
   fn range_all_points<'a, Q, R>(
     &'a self,
     version: u64,
@@ -174,12 +192,13 @@ pub trait DynamicMemtable: Memtable {
   ) -> Self::RangePoints<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
   /// Returns an iterator over range deletions entries in the memtable.
   fn iter_bulk_deletions(&self, version: u64) -> Self::BulkDeletionsIterator<'_, Active>;
 
-  /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in the memtable.
+  /// Returns an iterator over all the range deletions entries in the memtable.
   fn iter_all_bulk_deletions(
     &self,
     version: u64,
@@ -193,9 +212,10 @@ pub trait DynamicMemtable: Memtable {
   ) -> Self::BulkDeletionsRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
-  /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in a subset of the memtable.
+  /// Returns an iterator over all the range deletions entries in a subset of the memtable.
   fn range_all_bulk_deletions<'a, Q, R>(
     &'a self,
     version: u64,
@@ -203,12 +223,13 @@ pub trait DynamicMemtable: Memtable {
   ) -> Self::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
   /// Returns an iterator over range updates entries in the memtable.
   fn iter_bulk_updates(&self, version: u64) -> Self::BulkUpdatesIterator<'_, Active>;
 
-  /// Returns an iterator over all(including all versions and tombstones) the range updates entries in the memtable.
+  /// Returns an iterator over all the range updates entries in the memtable.
   fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkUpdatesIterator<'_, MaybeTombstone>;
 
   /// Returns an iterator over a subset of range updates entries in the memtable.
@@ -219,9 +240,10 @@ pub trait DynamicMemtable: Memtable {
   ) -> Self::BulkUpdatesRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 
-  /// Returns an iterator over all(including all versions and tombstones) the range updates entries in a subset of the memtable.
+  /// Returns an iterator over all the range updates entries in a subset of the memtable.
   fn range_all_bulk_updates<'a, Q, R>(
     &'a self,
     version: u64,
@@ -229,5 +251,6 @@ pub trait DynamicMemtable: Memtable {
   ) -> Self::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
 }

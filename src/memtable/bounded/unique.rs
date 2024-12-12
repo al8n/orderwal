@@ -2,6 +2,7 @@ memtable!(unique());
 
 use core::ops::ControlFlow;
 
+use ref_cast::RefCast as _;
 use skl::{
   generic::{Comparator, TypeRefComparator, TypeRefQueryComparator},
   Active,
@@ -13,7 +14,8 @@ use crate::{
     RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
-    sealed::{PointComparator, Pointee, RangeComparator}, Query, RefQuery, TypeMode
+    sealed::{PointComparator, Pointee, RangeComparator},
+    Query, RefQuery, TypeMode,
   },
   State,
 };
@@ -65,7 +67,11 @@ where
 
     let shadow = self.range_deletions_skl.range(..=&query).any(|ent| {
       let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
-      dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key))
+      dbutils::equivalentor::RangeComparator::contains(
+        cmp,
+        &ent.query_range(),
+        Query::ref_cast(&query.query),
+      )
     });
 
     if shadow {
@@ -76,7 +82,11 @@ where
     let range_ent = self.range_updates_skl.range(..=&query).find_map(|ent| {
       let ent = RangeUpdateEntry::<Active, C, T>::new(ent);
 
-      if dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key)) {
+      if dbutils::equivalentor::RangeComparator::contains(
+        cmp,
+        &ent.query_range(),
+        Query::ref_cast(&query.query),
+      ) {
         Some(ent)
       } else {
         None

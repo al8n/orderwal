@@ -2,6 +2,7 @@ memtable!(multiple_version(version));
 
 use core::ops::ControlFlow;
 
+use ref_cast::RefCast;
 use skl::{
   generic::{Comparator, TypeRefComparator, TypeRefQueryComparator},
   Active, MaybeTombstone,
@@ -14,7 +15,7 @@ use crate::{
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
-    Query, TypeMode,
+    Query, RefQuery, TypeMode,
   },
   State, WithVersion,
 };
@@ -44,7 +45,7 @@ where
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
@@ -60,6 +61,7 @@ where
     let key = ent.key();
     let cmp = ent.ent.comparator();
     let version = ent.ent.version();
+    let query = RefQuery::new(key);
 
     // check if the next entry is visible.
     // As the range_del_skl is sorted by the start key, we can use the lower_bound to find the first
@@ -67,7 +69,7 @@ where
 
     let shadow = self
       .range_deletions_skl
-      .range(query_version, ..=key)
+      .range(query_version, ..=&query)
       .any(|ent| {
         let del_ent_version = ent.version();
         if !(version <= del_ent_version && del_ent_version <= query_version) {
@@ -75,7 +77,11 @@ where
         }
 
         let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
-        dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key))
+        dbutils::equivalentor::RangeComparator::contains(
+          cmp,
+          &ent.query_range(),
+          Query::ref_cast(&query.query),
+        )
       });
 
     if shadow {
@@ -85,7 +91,7 @@ where
     // find the range key entry with maximum version that shadow the next entry.
     let range_ent = self
       .range_updates_skl
-      .range_all(query_version, ..=key)
+      .range_all(query_version, ..=&query)
       .filter_map(|ent| {
         let range_ent_version = ent.version();
         if !(version <= range_ent_version && range_ent_version <= query_version) {
@@ -93,7 +99,11 @@ where
         }
 
         let ent = RangeUpdateEntry::<MaybeTombstone, C, T>::new(ent);
-        if dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key)) {
+        if dbutils::equivalentor::RangeComparator::contains(
+          cmp,
+          &ent.query_range(),
+          Query::ref_cast(&query.query),
+        ) {
           Some(ent)
         } else {
           None

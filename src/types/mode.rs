@@ -29,7 +29,7 @@ pub(crate) mod sealed {
 
   use crate::types::RefQuery;
 
-use super::{
+  use super::{
     super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
     Dynamic, Generic, TypeMode,
   };

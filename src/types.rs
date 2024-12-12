@@ -1,4 +1,8 @@
-use core::{marker::PhantomData, mem, ops::{Bound, RangeBounds}};
+use core::{
+  marker::PhantomData,
+  mem,
+  ops::{Bound, RangeBounds},
+};
 
 use dbutils::{
   error::InsufficientBuffer,
@@ -56,7 +60,6 @@ where
     self.r.end_bound().map(Query::ref_cast)
   }
 }
-
 
 #[doc(hidden)]
 #[derive(ref_cast::RefCast)]

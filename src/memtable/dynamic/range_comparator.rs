@@ -10,7 +10,8 @@ use skl::{
 use triomphe::Arc;
 
 use crate::types::{
-  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry, Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, RefQuery
+  fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
+  Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, RefQuery,
 };
 
 pub struct MemtableRangeComparator<C: ?Sized> {
@@ -260,7 +261,8 @@ where
   }
 }
 
-impl<'a, C> TypeRefQueryEquivalentor<RecordPointer, RefQuery<&'a [u8]>> for MemtableRangeComparator<C>
+impl<'a, C> TypeRefQueryEquivalentor<RecordPointer, RefQuery<&'a [u8]>>
+  for MemtableRangeComparator<C>
 where
   C: BytesEquivalentor + ?Sized,
 {
