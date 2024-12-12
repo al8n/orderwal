@@ -52,6 +52,7 @@ pub mod error;
 mod builder;
 mod log;
 mod options;
+mod swmr;
 mod types;
 
 /// Dynamic ordered write-ahead log implementation.
@@ -60,8 +61,8 @@ pub mod dynamic;
 /// Memory table related traits and structs.
 pub mod memtable;
 
-// /// Generic ordered write-ahead log implementation.
-// pub mod generic;
+/// Generic ordered write-ahead log implementation.
+pub mod generic;
 
 /// The utilities functions.
 pub mod utils;

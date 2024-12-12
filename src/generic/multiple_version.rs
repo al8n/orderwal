@@ -1,25 +1,26 @@
-use core::{
-  borrow::Borrow,
-  ops::{Bound, RangeBounds},
-};
+use core::ops::{Bound, RangeBounds};
 
 use among::Among;
 use dbutils::{buffer::VacantBuffer, checksum::BuildChecksumer};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::{either::Either, Active, MaybeTombstone};
+use skl::{either::Either, generic::{Type, TypeRefQueryComparator}, Active, MaybeTombstone};
 
 use crate::{
   batch::Batch,
-  dynamic::types::BufWriter,
   error::Error,
   log::Log,
-  memtable::dynamic::multiple_version::DynamicMemtable,
-  types::{KeyBuilder, ValueBuilder},
+  memtable::generic::multiple_version::GenericMemtable,
+  types::{KeyBuilder, ValueBuilder, BufWriter},
 };
 
 /// An abstract layer for the immutable write-ahead log.
-pub trait Reader: Log {
+pub trait Reader<K, V>
+where
+  Self: Log,
+  K: ?Sized,
+  V: ?Sized,
+{
   /// Returns the reserved space in the WAL.
   ///
   /// ## Safety
@@ -54,7 +55,9 @@ pub trait Reader: Log {
   #[inline]
   fn maximum_version(&self) -> u64
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().maximum_version()
   }
@@ -63,7 +66,9 @@ pub trait Reader: Log {
   #[inline]
   fn minimum_version(&self) -> u64
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().minimum_version()
   }
@@ -72,7 +77,9 @@ pub trait Reader: Log {
   #[inline]
   fn may_contain_version(&self, version: u64) -> bool
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().may_contain_version(version)
   }
@@ -91,9 +98,11 @@ pub trait Reader: Log {
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  fn iter(&self, version: u64) -> <Self::Memtable as DynamicMemtable>::Iterator<'_>
+  fn iter(&self, version: u64) -> <Self::Memtable as GenericMemtable<K, V>>::Iterator<'_>
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter(version)
   }
@@ -104,11 +113,14 @@ pub trait Reader: Log {
     &self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::Range<'_, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range(version, range)
   }
@@ -118,9 +130,11 @@ pub trait Reader: Log {
   fn iter_points(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::PointsIterator<'_, Active>
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter_points(version)
   }
@@ -130,9 +144,11 @@ pub trait Reader: Log {
   fn iter_all_points(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::PointsIterator<'_, MaybeTombstone>
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter_all_points(version)
   }
@@ -143,11 +159,14 @@ pub trait Reader: Log {
     &self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::RangePoints<'_, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::RangePoints<'_, Active, Q, R>
   where
     R: RangeBounds<Q>,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range_points(version, range)
   }
@@ -158,11 +177,14 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::RangePoints<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::RangePoints<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range_all_points(version, range)
   }
@@ -172,9 +194,11 @@ pub trait Reader: Log {
   fn iter_bulk_deletions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsIterator<'_, Active>
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter_bulk_deletions(version)
   }
@@ -184,9 +208,11 @@ pub trait Reader: Log {
   fn iter_all_bulk_deletions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsIterator<'_, MaybeTombstone>
   where
-    Self::Memtable: DynamicMemtable + 'static,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter_all_bulk_deletions(version)
   }
@@ -197,11 +223,14 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range_bulk_deletions(version, range)
   }
@@ -212,11 +241,14 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range_all_bulk_deletions(version, range)
   }
@@ -226,9 +258,11 @@ pub trait Reader: Log {
   fn iter_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesIterator<'_, Active>
   where
-    Self::Memtable: DynamicMemtable,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter_bulk_updates(version)
   }
@@ -238,9 +272,11 @@ pub trait Reader: Log {
   fn iter_all_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesIterator<'_, MaybeTombstone>
   where
-    Self::Memtable: DynamicMemtable,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().iter_all_bulk_updates(version)
   }
@@ -251,11 +287,14 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range_bulk_updates(version, range)
   }
@@ -266,29 +305,36 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().range_all_bulk_updates(version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
+  fn first(&self, version: u64) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_>>
   where
-    Self::Memtable: DynamicMemtable,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().first(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
+  fn last(&self, version: u64) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_>>
   where
-    Self::Memtable: DynamicMemtable,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().last(version)
   }
@@ -297,8 +343,11 @@ pub trait Reader: Log {
   #[inline]
   fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
   where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().contains(version, key)
   }
@@ -309,10 +358,13 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     key: &Q,
-  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().get(version, key)
   }
@@ -324,10 +376,13 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().upper_bound(version, bound)
   }
@@ -339,26 +394,34 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-    Self::Memtable: DynamicMemtable,
+    Q: ?Sized,
+    K: Type + 'static,
+    V: Type + 'static,
+    Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
   {
     self.memtable().lower_bound(version, bound)
   }
 }
 
-impl<T> Reader for T
+impl<K, V, T> Reader<K, V> for T
 where
   T: Log,
-  T::Memtable: DynamicMemtable,
+  T::Memtable: GenericMemtable<K, V>,
+  K: Type + ?Sized + 'static,
+  V: Type + ?Sized + 'static,
 {
 }
 
 /// An abstract layer for the write-ahead log.
-pub trait Writer: Reader
+pub trait Writer<K, V>: Reader<K, V>
 where
-  Self::Reader: Reader<Memtable = Self::Memtable>,
+  Self::Reader: Reader<K, V, Memtable = Self::Memtable>,
+  Self::Memtable: GenericMemtable<K, V>,
+  K: Type + ?Sized + 'static,
+  V: Type + ?Sized + 'static,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -411,7 +474,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert::<_, &[u8]>(self, Some(version), kb, value).map_err(Among::into_left_right)
   }
@@ -429,7 +492,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable + 'a,
+    Self::Memtable: GenericMemtable<K, V> + 'a,
   {
     Log::insert::<&[u8], _>(self, Some(version), key, vb).map_err(Among::into_middle_right)
   }
@@ -445,7 +508,7 @@ where
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert(self, Some(version), kb, vb)
   }
@@ -455,7 +518,7 @@ where
   fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert(self, Some(version), key, value).map_err(Among::unwrap_right)
   }
@@ -470,7 +533,7 @@ where
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::remove(self, Some(version), kb)
   }
@@ -480,7 +543,7 @@ where
   fn remove(&mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::remove(self, Some(version), key).map_err(Either::unwrap_right)
   }
@@ -493,7 +556,7 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert_batch(self, batch).map_err(Among::unwrap_right)
   }
@@ -509,7 +572,7 @@ where
     B::Key: BufWriter,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert_batch::<B>(self, batch).map_err(Among::into_left_right)
   }
@@ -525,7 +588,7 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert_batch::<B>(self, batch).map_err(Among::into_middle_right)
   }
@@ -541,7 +604,7 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert_batch::<B>(self, batch)
   }

@@ -1,12 +1,11 @@
 use super::{reader::OrderWalReader, wal::OrderCore};
 use crate::{
   log::Log,
-  memtable::{
-    dynamic::{multiple_version, unique},
-    Memtable,
-  },
+  memtable::Memtable,
+  dynamic,
+  generic,
 };
-use dbutils::checksum::Crc32;
+use dbutils::{checksum::Crc32, types::Type};
 use rarena_allocator::sync::Arena;
 use triomphe::Arc;
 
@@ -106,9 +105,9 @@ where
   }
 }
 
-impl<M, S> crate::dynamic::wal::unique::Writer for OrderWal<M, S>
+impl<M, S> dynamic::unique::Writer for OrderWal<M, S>
 where
-  M: unique::DynamicMemtable + 'static,
+  M: crate::memtable::dynamic::unique::DynamicMemtable + 'static,
   S: 'static,
 {
   #[inline]
@@ -117,9 +116,35 @@ where
   }
 }
 
-impl<M, S> crate::dynamic::wal::multiple_version::Writer for OrderWal<M, S>
+impl<M, S> dynamic::multiple_version::Writer for OrderWal<M, S>
 where
-  M: multiple_version::DynamicMemtable + 'static,
+  M: crate::memtable::dynamic::multiple_version::DynamicMemtable + 'static,
+  S: 'static,
+{
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    OrderWalReader::from_core(self.core.clone())
+  }
+}
+
+impl<K, V, M, S> generic::unique::Writer<K, V> for OrderWal<M, S>
+where
+  M: crate::memtable::generic::unique::GenericMemtable<K, V> + 'static,
+  K: Type + ?Sized + 'static,
+  V: Type + ?Sized + 'static,
+  S: 'static,
+{
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    OrderWalReader::from_core(self.core.clone())
+  }
+}
+
+impl<K, V, M, S> generic::multiple_version::Writer<K, V> for OrderWal<M, S>
+where
+  M: crate::memtable::generic::multiple_version::GenericMemtable<K, V> + 'static,
+  K: Type + ?Sized + 'static,
+  V: Type + ?Sized + 'static,
   S: 'static,
 {
   #[inline]

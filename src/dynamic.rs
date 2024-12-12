@@ -1,7 +1,2 @@
-pub use swmr::*;
-
-/// Types
-pub mod types;
-
-mod swmr;
-mod wal;
+pub(crate) mod multiple_version;
+pub(crate) mod unique;

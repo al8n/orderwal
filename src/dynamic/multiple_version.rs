@@ -11,11 +11,10 @@ use skl::{either::Either, Active, MaybeTombstone};
 
 use crate::{
   batch::Batch,
-  dynamic::types::BufWriter,
   error::Error,
   log::Log,
-  memtable::{dynamic::unique::DynamicMemtable, Memtable},
-  types::{KeyBuilder, ValueBuilder},
+  memtable::dynamic::multiple_version::DynamicMemtable,
+  types::{KeyBuilder, ValueBuilder, BufWriter},
 };
 
 /// An abstract layer for the immutable write-ahead log.
@@ -38,24 +37,6 @@ pub trait Reader: Log {
     self.allocator().path()
   }
 
-  /// Returns the number of entries in the WAL.
-  #[inline]
-  fn len(&self) -> usize
-  where
-    Self::Memtable: Memtable,
-  {
-    self.memtable().len()
-  }
-
-  /// Returns `true` if the WAL is empty.
-  #[inline]
-  fn is_empty(&self) -> bool
-  where
-    Self::Memtable: Memtable,
-  {
-    self.memtable().is_empty()
-  }
-
   /// Returns the maximum key size allowed in the WAL.
   #[inline]
   fn maximum_key_size(&self) -> u32 {
@@ -66,6 +47,33 @@ pub trait Reader: Log {
   #[inline]
   fn maximum_value_size(&self) -> u32 {
     self.options().maximum_value_size()
+  }
+
+  /// Returns the maximum version in the WAL.
+  #[inline]
+  fn maximum_version(&self) -> u64
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().maximum_version()
+  }
+
+  /// Returns the minimum version in the WAL.
+  #[inline]
+  fn minimum_version(&self) -> u64
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().minimum_version()
+  }
+
+  /// Returns `true` if the WAL may contain an entry whose version is less or equal to the given version.
+  #[inline]
+  fn may_contain_version(&self, version: u64) -> bool
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().may_contain_version(version)
   }
 
   /// Returns the remaining capacity of the WAL.
@@ -82,48 +90,57 @@ pub trait Reader: Log {
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  fn iter(&self) -> <Self::Memtable as DynamicMemtable>::Iterator<'_>
+  fn iter(&self, version: u64) -> <Self::Memtable as DynamicMemtable>::Iterator<'_>
   where
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + 'static,
   {
-    self.memtable().iter()
+    self.memtable().iter(version)
   }
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range<Q, R>(&self, range: R) -> <Self::Memtable as DynamicMemtable>::Range<'_, Q, R>
+  fn range<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::Range<'_, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range(range)
+    self.memtable().range(version, range)
   }
 
   /// Returns an iterator over point entries in the memtable.
   #[inline]
-  fn iter_points(&self) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, Active>
+  fn iter_points(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, Active>
   where
     Self::Memtable: DynamicMemtable + 'static,
   {
-    self.memtable().iter_points()
+    self.memtable().iter_points(version)
   }
 
-  /// Returns an iterator over all the point entries in the memtable.
+  /// Returns an iterator over all(including all versions and tombstones) the point entries in the memtable.
   #[inline]
-  fn iter_points_with_tombstone(
+  fn iter_all_points(
     &self,
+    version: u64,
   ) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, MaybeTombstone>
   where
     Self::Memtable: DynamicMemtable + 'static,
   {
-    self.memtable().iter_points_with_tombstone()
+    self.memtable().iter_all_points(version)
   }
 
   /// Returns an iterator over a subset of point entries in the memtable.
   #[inline]
   fn range_points<Q, R>(
     &self,
+    version: u64,
     range: R,
   ) -> <Self::Memtable as DynamicMemtable>::RangePoints<'_, Active, Q, R>
   where
@@ -131,13 +148,14 @@ pub trait Reader: Log {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range_points(range)
+    self.memtable().range_points(version, range)
   }
 
-  /// Returns an iterator over all the point entries in a subset of the memtable.
+  /// Returns an iterator over all(including all versions and tombstones) the point entries in a subset of the memtable.
   #[inline]
-  fn range_points_with_tombstone<'a, Q, R>(
+  fn range_all_points<'a, Q, R>(
     &'a self,
+    version: u64,
     range: R,
   ) -> <Self::Memtable as DynamicMemtable>::RangePoints<'a, MaybeTombstone, Q, R>
   where
@@ -145,35 +163,38 @@ pub trait Reader: Log {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range_points_with_tombstone(range)
+    self.memtable().range_all_points(version, range)
   }
 
   /// Returns an iterator over range deletions entries in the memtable.
   #[inline]
   fn iter_bulk_deletions(
     &self,
+    version: u64,
   ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsIterator<'_, Active>
   where
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + 'static,
   {
-    self.memtable().iter_bulk_deletions()
+    self.memtable().iter_bulk_deletions(version)
   }
 
-  /// Returns an iterator over all the range deletions entries in the memtable.
+  /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in the memtable.
   #[inline]
-  fn iter_bulk_deletions_with_tombstone(
+  fn iter_all_bulk_deletions(
     &self,
+    version: u64,
   ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsIterator<'_, MaybeTombstone>
   where
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + 'static,
   {
-    self.memtable().iter_bulk_deletions_with_tombstone()
+    self.memtable().iter_all_bulk_deletions(version)
   }
 
   /// Returns an iterator over a subset of range deletions entries in the memtable.
   #[inline]
   fn range_bulk_deletions<'a, Q, R>(
     &'a self,
+    version: u64,
     range: R,
   ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsRange<'a, Active, Q, R>
   where
@@ -181,13 +202,14 @@ pub trait Reader: Log {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range_bulk_deletions(range)
+    self.memtable().range_bulk_deletions(version, range)
   }
 
-  /// Returns an iterator over all the range deletions entries in a subset of the memtable.
+  /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in a subset of the memtable.
   #[inline]
-  fn range_bulk_deletions_with_tombstone<'a, Q, R>(
+  fn range_all_bulk_deletions<'a, Q, R>(
     &'a self,
+    version: u64,
     range: R,
   ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
   where
@@ -195,35 +217,38 @@ pub trait Reader: Log {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range_bulk_deletions_with_tombstone(range)
+    self.memtable().range_all_bulk_deletions(version, range)
   }
 
   /// Returns an iterator over range updates entries in the memtable.
   #[inline]
   fn iter_bulk_updates(
     &self,
+    version: u64,
   ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesIterator<'_, Active>
   where
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().iter_bulk_updates()
+    self.memtable().iter_bulk_updates(version)
   }
 
-  /// Returns an iterator over all the range updates entries in the memtable.
+  /// Returns an iterator over all(including all versions and tombstones) the range updates entries in the memtable.
   #[inline]
-  fn iter_bulk_updates_with_tombstone(
+  fn iter_all_bulk_updates(
     &self,
+    version: u64,
   ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesIterator<'_, MaybeTombstone>
   where
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().iter_bulk_updates_with_tombstone()
+    self.memtable().iter_all_bulk_updates(version)
   }
 
   /// Returns an iterator over a subset of range updates entries in the memtable.
   #[inline]
   fn range_bulk_updates<'a, Q, R>(
     &'a self,
+    version: u64,
     range: R,
   ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesRange<'a, Active, Q, R>
   where
@@ -231,13 +256,14 @@ pub trait Reader: Log {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range_bulk_updates(range)
+    self.memtable().range_bulk_updates(version, range)
   }
 
-  /// Returns an iterator over all the range updates entries in a subset of the memtable.
+  /// Returns an iterator over all(including all versions and tombstones) the range updates entries in a subset of the memtable.
   #[inline]
-  fn range_bulk_updates_with_tombstone<'a, Q, R>(
+  fn range_all_bulk_updates<'a, Q, R>(
     &'a self,
+    version: u64,
     range: R,
   ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
   where
@@ -245,45 +271,49 @@ pub trait Reader: Log {
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().range_bulk_updates_with_tombstone(range)
+    self.memtable().range_all_bulk_updates(version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
+  fn first(&self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
   where
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().first()
+    self.memtable().first(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
+  fn last(&self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
   where
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().last()
+    self.memtable().last(version)
   }
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key<Q>(&self, key: &Q) -> bool
+  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().contains(key)
+    self.memtable().contains(version, key)
   }
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  fn get<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().get(key)
+    self.memtable().get(version, key)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -291,13 +321,14 @@ pub trait Reader: Log {
   #[inline]
   fn upper_bound<'a, Q>(
     &'a self,
+    version: u64,
     bound: Bound<&'a Q>,
   ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().upper_bound(bound)
+    self.memtable().upper_bound(version, bound)
   }
 
   /// Returns a value associated to the lowest element whose key is above the given bound.
@@ -305,13 +336,14 @@ pub trait Reader: Log {
   #[inline]
   fn lower_bound<'a, Q>(
     &'a self,
+    version: u64,
     bound: Bound<&'a Q>,
   ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
   {
-    self.memtable().lower_bound(bound)
+    self.memtable().lower_bound(version, bound)
   }
 }
 
@@ -326,7 +358,6 @@ where
 pub trait Writer: Reader
 where
   Self::Reader: Reader<Memtable = Self::Memtable>,
-  Self::Memtable: DynamicMemtable,
 {
   /// Returns `true` if this WAL instance is read-only.
   #[inline]
@@ -348,17 +379,17 @@ where
   }
 
   /// Flushes the to disk.
-  #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
   fn flush(&self) -> Result<(), Error<Self::Memtable>> {
     self.allocator().flush().map_err(Into::into)
   }
 
   /// Flushes the to disk.
-  #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
   fn flush_async(&self) -> Result<(), Error<Self::Memtable>> {
     self.allocator().flush_async().map_err(Into::into)
   }
@@ -373,6 +404,7 @@ where
   #[inline]
   fn insert_with_key_builder<E>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
     value: &[u8],
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
@@ -380,7 +412,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert(self, None, kb, value).map_err(Among::into_left_right)
+    Log::insert::<_, &[u8]>(self, Some(version), kb, value).map_err(Among::into_left_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -388,16 +420,17 @@ where
   ///
   /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
-  fn insert_with_value_builder<E>(
+  fn insert_with_value_builder<'a, E>(
     &mut self,
+    version: u64,
     key: &[u8],
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + 'a,
   {
-    Log::insert(self, None, key, vb).map_err(Among::into_middle_right)
+    Log::insert::<&[u8], _>(self, Some(version), key, vb).map_err(Among::into_middle_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -405,6 +438,7 @@ where
   #[inline]
   fn insert_with_builders<KE, VE>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, VE>>,
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
@@ -412,17 +446,17 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert(self, None, kb, vb)
+    Log::insert(self, Some(version), kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
   #[inline]
-  fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
+  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert(self, None, key, value).map_err(Among::unwrap_right)
+    Log::insert(self, Some(version), key, value).map_err(Among::unwrap_right)
   }
 
   /// Removes a key-value pair from the WAL. This method
@@ -430,23 +464,24 @@ where
   #[inline]
   fn remove_with_builder<KE>(
     &mut self,
+    version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::remove(self, None, kb)
+    Log::remove(self, Some(version), kb)
   }
 
   /// Removes a key-value pair from the WAL.
   #[inline]
-  fn remove(&mut self, key: &[u8]) -> Result<(), Error<Self::Memtable>>
+  fn remove(&mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::remove(self, None, key).map_err(Either::unwrap_right)
+    Log::remove(self, Some(version), key).map_err(Either::unwrap_right)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -475,7 +510,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch(self, batch).map_err(Among::into_left_right)
+    Log::insert_batch::<B>(self, batch).map_err(Among::into_left_right)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -491,7 +526,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch(self, batch).map_err(Among::into_middle_right)
+    Log::insert_batch::<B>(self, batch).map_err(Among::into_middle_right)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
@@ -507,6 +542,6 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch(self, batch)
+    Log::insert_batch::<B>(self, batch)
   }
 }
