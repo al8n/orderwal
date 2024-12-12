@@ -1,8 +1,8 @@
-// /// Memtables which only support unique keys.
-// pub mod unique;
+/// Memtables which only support unique keys.
+pub mod unique;
 
-// /// Memtables which support multiple versions.
-// pub mod multiple_version;
+/// Memtables which support multiple versions.
+pub mod multiple_version;
 
 mod comparator;
 mod range_comparator;

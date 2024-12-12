@@ -13,8 +13,7 @@ use crate::{
     RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
-    sealed::{PointComparator, Pointee, RangeComparator},
-    Query, TypeMode,
+    sealed::{PointComparator, Pointee, RangeComparator}, Query, RefQuery, TypeMode
   },
   State,
 };
@@ -40,11 +39,11 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
+    + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
@@ -58,12 +57,13 @@ where
   ) -> ControlFlow<Option<Entry<'a, Active, C, T>>, PointEntry<'a, Active, C, T>> {
     let key = ent.key();
     let cmp = ent.ent.comparator();
+    let query = RefQuery::new(key);
 
     // check if the next entry is visible.
     // As the range_del_skl is sorted by the end key, we can use the lower_bound to find the first
     // deletion range that may cover the next entry.
 
-    let shadow = self.range_deletions_skl.range(..=key).any(|ent| {
+    let shadow = self.range_deletions_skl.range(..=&query).any(|ent| {
       let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
       dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key))
     });
@@ -73,7 +73,7 @@ where
     }
 
     // find the range key entry with maximum version that shadow the next entry.
-    let range_ent = self.range_updates_skl.range(..=key).find_map(|ent| {
+    let range_ent = self.range_updates_skl.range(..=&query).find_map(|ent| {
       let ent = RangeUpdateEntry::<Active, C, T>::new(ent);
 
       if dbutils::equivalentor::RangeComparator::contains(cmp, &ent.query_range(), &Query(key)) {

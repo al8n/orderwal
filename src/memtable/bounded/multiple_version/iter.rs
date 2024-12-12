@@ -41,11 +41,11 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
+    + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
@@ -76,12 +76,11 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
-    
+    + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
@@ -124,7 +123,7 @@ where
 {
   pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>, r: R) -> Self {
     Self {
-      iter: RangePoints::new(table.skl.range(version, r)),
+      iter: RangePoints::new(table.skl.range(version, r.into())),
       query_version: version,
       table,
     }
@@ -142,12 +141,12 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, Q>
+    + TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, Query<Q>>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
@@ -180,12 +179,12 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, Q>
+    + TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, Query<Q>>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, <T::Key<'a> as Pointee<'a>>::Output>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:

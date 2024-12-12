@@ -85,8 +85,8 @@ macro_rules! memtable {
       where
         C: 'static,
         T: $crate::types::TypeMode,
-        T::Comparator<C>: for<'a> dbutils::equivalentor::TypeRefComparator<'a, RecordPointer> + 'static,
-        T::RangeComparator<C>: for<'a> dbutils::equivalentor::TypeRefComparator<'a, RecordPointer> + 'static,
+        T::Comparator<C>: dbutils::equivalentor::TypeRefComparator<RecordPointer> + 'static,
+        T::RangeComparator<C>: dbutils::equivalentor::TypeRefComparator<RecordPointer> + 'static,
       {
         type Options = TableOptions<C>;
 
@@ -228,7 +228,7 @@ macro_rules! point_entry_wrapper {
       T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>,
+      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>,
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
     {
@@ -274,7 +274,7 @@ macro_rules! point_entry_wrapper {
       T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>,
+      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>,
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
     {
@@ -355,7 +355,7 @@ macro_rules! range_entry_wrapper {
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>
+        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
         + $crate::types::sealed::RangeComparator<C>,
     {
       fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -406,7 +406,7 @@ macro_rules! range_entry_wrapper {
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>
+        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
         + $crate::types::sealed::RangeComparator<C>,
     {
       type Key = <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output;
@@ -479,7 +479,7 @@ macro_rules! range_deletion_wrapper {
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>
+        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
         + $crate::types::sealed::RangeComparator<C>,
     {
     }
@@ -506,7 +506,7 @@ macro_rules! range_update_wrapper {
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>
+        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
         + $crate::types::sealed::RangeComparator<C>,
     {
       type Value = Option<<T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output>;
@@ -532,7 +532,7 @@ macro_rules! range_update_wrapper {
       <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output: 'a,
       T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer>
+        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
         + $crate::types::sealed::RangeComparator<C>,
     {
       type Value = <T::Value<'a> as $crate::types::sealed::Pointee<'a>>::Output;
@@ -580,7 +580,7 @@ macro_rules! iter_wrapper {
       C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -595,7 +595,7 @@ macro_rules! iter_wrapper {
       C: 'static,
       S: $crate::State<'a>,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<'a, $crate::types::RecordPointer> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {
@@ -617,7 +617,7 @@ macro_rules! range_wrapper {
       Q: ?Sized,
       T: $crate::types::TypeMode,
     {
-      range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, T::$cmp<C>>,
+      range: $inner<'a, $crate::types::RecordPointer, (), S, $crate::types::Query<Q>, $crate::types::QueryRange<Q, R>, T::$cmp<C>>,
     }
 
     impl<'a, S, Q, R, C, T> $iter<'a, S, Q, R, C, T>
@@ -627,7 +627,7 @@ macro_rules! range_wrapper {
       T: $crate::types::TypeMode,
     {
       #[inline]
-      pub(in crate::memtable) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, Q, R, T::$cmp<C>>) -> Self {
+      pub(in crate::memtable) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, $crate::types::Query<Q>, $crate::types::QueryRange<Q, R>, T::$cmp<C>>) -> Self {
         Self { range }
       }
     }
@@ -639,7 +639,7 @@ macro_rules! range_wrapper {
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<$crate::types::RecordPointer, $crate::types::Query<Q>> + 'a,
     {
       type Item = $ent<'a, S, C, T>;
 
@@ -656,7 +656,7 @@ macro_rules! range_wrapper {
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<'a, $crate::types::RecordPointer, Q> + 'a,
+      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<$crate::types::RecordPointer, $crate::types::Query<Q>> + 'a,
     {
       #[inline]
       fn next_back(&mut self) -> Option<Self::Item> {

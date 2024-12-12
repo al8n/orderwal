@@ -1,20 +1,18 @@
-use core::{marker::PhantomData, mem};
+use core::{marker::PhantomData, mem, ops::{Bound, RangeBounds}};
 
 use dbutils::{
   error::InsufficientBuffer,
   leb128::encoded_u64_varint_len,
   types::{Type, TypeRef},
 };
+use ref_cast::RefCast as _;
 use sealed::Pointee;
 
 use crate::utils::split_lengths;
 
 use super::{utils::merge_lengths, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
 
-pub use dbutils::{
-  buffer::{BufWriter, BufWriterOnce, VacantBuffer},
-  types::*,
-};
+pub use dbutils::buffer::{BufWriter, BufWriterOnce, VacantBuffer};
 
 mod mode;
 mod raw;
@@ -27,16 +25,51 @@ pub(crate) use raw::*;
 #[repr(transparent)]
 pub struct Query<Q: ?Sized>(pub(crate) Q);
 
+pub struct QueryRange<Q: ?Sized, R> {
+  r: R,
+  _m: PhantomData<Q>,
+}
+
+impl<Q, R> From<R> for QueryRange<Q, R>
+where
+  R: RangeBounds<Q>,
+  Q: ?Sized,
+{
+  #[inline]
+  fn from(r: R) -> Self {
+    Self { r, _m: PhantomData }
+  }
+}
+
+impl<Q, R> core::ops::RangeBounds<Query<Q>> for QueryRange<Q, R>
+where
+  R: RangeBounds<Q>,
+  Q: ?Sized,
+{
+  #[inline]
+  fn start_bound(&self) -> Bound<&Query<Q>> {
+    self.r.start_bound().map(Query::ref_cast)
+  }
+
+  #[inline]
+  fn end_bound(&self) -> Bound<&Query<Q>> {
+    self.r.end_bound().map(Query::ref_cast)
+  }
+}
+
+
 #[doc(hidden)]
 #[derive(ref_cast::RefCast)]
 #[repr(transparent)]
-pub struct RefQuery<K, Q>
-where
-  K: Type + ?Sized,
-  Q: ?Sized,
-{
-  _k: PhantomData<K>,
+pub struct RefQuery<Q> {
   pub(crate) query: Q,
+}
+
+impl<Q> RefQuery<Q> {
+  #[inline]
+  pub const fn new(query: Q) -> Self {
+    Self { query }
+  }
 }
 
 bitflags::bitflags! {

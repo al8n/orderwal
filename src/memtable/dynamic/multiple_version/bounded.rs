@@ -3,11 +3,12 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
+use ref_cast::RefCast as _;
 use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active};
 
 use crate::{
   memtable::bounded::multiple_version::{self, *},
-  types::Dynamic,
+  types::{Dynamic, Query},
   State, WithVersion,
 };
 
@@ -127,7 +128,7 @@ where
   where
     Q: ?Sized + Borrow<[u8]>,
   {
-    let ent = self.skl.get(version, key)?;
+    let ent = self.skl.get(version, Query::ref_cast(key))?;
     match self.validate(version, PointEntry::new(ent)) {
       ControlFlow::Break(entry) => entry,
       ControlFlow::Continue(_) => None,
@@ -168,7 +169,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangePoints::new(self.skl.range(version, range))
+    RangePoints::new(self.skl.range(version, range.into()))
   }
 
   #[inline]
@@ -181,7 +182,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangePoints::new(self.skl.range_all(version, range))
+    RangePoints::new(self.skl.range_all(version, range.into()))
   }
 
   #[inline]
@@ -207,7 +208,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkDeletions::new(self.range_deletions_skl.range(version, range))
+    RangeBulkDeletions::new(self.range_deletions_skl.range(version, range.into()))
   }
 
   #[inline]
@@ -220,7 +221,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkDeletions::new(self.range_deletions_skl.range_all(version, range))
+    RangeBulkDeletions::new(self.range_deletions_skl.range_all(version, range.into()))
   }
 
   #[inline]
@@ -246,7 +247,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkUpdates::new(self.range_updates_skl.range(version, range))
+    RangeBulkUpdates::new(self.range_updates_skl.range(version, range.into()))
   }
 
   #[inline]
@@ -259,6 +260,6 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkUpdates::new(self.range_updates_skl.range_all(version, range))
+    RangeBulkUpdates::new(self.range_updates_skl.range_all(version, range.into()))
   }
 }

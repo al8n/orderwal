@@ -3,11 +3,12 @@ use core::{
   ops::{ControlFlow, RangeBounds},
 };
 
+use ref_cast::RefCast as _;
 use skl::{dynamic::BytesComparator, generic::unique::Map as _, Active};
 
 use crate::{
   memtable::bounded::unique::{self, *},
-  types::Dynamic,
+  types::{Dynamic, Query},
   State,
 };
 
@@ -101,7 +102,7 @@ where
   where
     Q: ?Sized + Borrow<[u8]>,
   {
-    let ent = self.skl.get(key)?;
+    let ent = self.skl.get(Query::ref_cast(key))?;
     match self.validate(PointEntry::new(ent)) {
       ControlFlow::Break(entry) => entry,
       ControlFlow::Continue(_) => None,
@@ -138,7 +139,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangePoints::new(self.skl.range(range))
+    RangePoints::new(self.skl.range(range.into()))
   }
 
   #[inline]
@@ -151,7 +152,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangePoints::new(self.skl.range_with_tombstone(range))
+    RangePoints::new(self.skl.range_with_tombstone(range.into()))
   }
 
   #[inline]
@@ -175,7 +176,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkDeletions::new(self.range_deletions_skl.range(range))
+    RangeBulkDeletions::new(self.range_deletions_skl.range(range.into()))
   }
 
   #[inline]
@@ -187,7 +188,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkDeletions::new(self.range_deletions_skl.range_with_tombstone(range))
+    RangeBulkDeletions::new(self.range_deletions_skl.range_with_tombstone(range.into()))
   }
 
   #[inline]
@@ -209,7 +210,7 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkUpdates::new(self.range_updates_skl.range(range))
+    RangeBulkUpdates::new(self.range_updates_skl.range(range.into()))
   }
 
   #[inline]
@@ -221,6 +222,6 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
   {
-    RangeBulkUpdates::new(self.range_updates_skl.range_with_tombstone(range))
+    RangeBulkUpdates::new(self.range_updates_skl.range_with_tombstone(range.into()))
   }
 }

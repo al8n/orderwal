@@ -1,7 +1,6 @@
 use orderwal::{
   dynamic::multiple_version::{OrderWal, Reader, Writer},
-  memtable::MemtableEntry as _,
-  Builder, WithVersion,
+  Builder,
 };
 
 fn main() {

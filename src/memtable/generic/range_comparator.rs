@@ -8,7 +8,7 @@ use triomphe::Arc;
 
 use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  sealed::Pointee, Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer,
+  sealed::Pointee, Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, RefQuery,
 };
 
 pub struct MemtableRangeComparator<K, C>
@@ -64,9 +64,9 @@ where
   C: ?Sized,
 {
   #[inline]
-  fn equivalent_start_key<'a, Q>(&self, a: &RecordPointer, b: &Q) -> bool
+  fn equivalent_start_key<Q>(&self, a: &RecordPointer, b: &Q) -> bool
   where
-    C: TypeRefQueryEquivalentor<'a, K, Q>,
+    C: TypeRefQueryEquivalentor<K, Q>,
     K: Type,
     Q: ?Sized,
   {
@@ -81,9 +81,25 @@ where
   }
 
   #[inline]
-  fn equivalent_in<'a>(&self, a: &RecordPointer, b: &RecordPointer) -> bool
+  fn equivalent_start_key_with_ref(&self, a: &RecordPointer, b: &K::Ref<'_>) -> bool
   where
-    C: TypeRefEquivalentor<'a, K>,
+    C: TypeRefEquivalentor<K>,
+    K: Type,
+  {
+    unsafe {
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
+      match &ak {
+        Bound::Included(k) => self.cmp.equivalent_refs(k, b),
+        Bound::Excluded(k) => self.cmp.equivalent_refs(k, b),
+        Bound::Unbounded => false,
+      }
+    }
+  }
+
+  #[inline]
+  fn equivalent_in(&self, a: &RecordPointer, b: &RecordPointer) -> bool
+  where
+    C: TypeRefEquivalentor<K>,
     K: Type,
   {
     unsafe {
@@ -106,9 +122,9 @@ where
   }
 
   #[inline]
-  fn compare_start_key<'a, Q>(&self, a: &RecordPointer, b: &Q) -> cmp::Ordering
+  fn compare_start_key<Q>(&self, a: &RecordPointer, b: &Q) -> cmp::Ordering
   where
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
     K: Type,
     Q: ?Sized,
   {
@@ -126,9 +142,28 @@ where
   }
 
   #[inline]
-  fn compare_in<'a>(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering
+  fn compare_start_key_with_ref(&self, a: &RecordPointer, b: &K::Ref<'_>) -> cmp::Ordering
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
+    K: Type,
+  {
+    unsafe {
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
+      match &ak {
+        Bound::Included(k) => self.cmp.compare_refs(k, b),
+        Bound::Excluded(k) => self
+          .cmp
+          .compare_refs(k, b)
+          .then(cmp::Ordering::Greater),
+        Bound::Unbounded => cmp::Ordering::Less,
+      }
+    }
+  }
+
+  #[inline]
+  fn compare_in(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering
+  where
+    C: TypeRefComparator<K>,
     K: Type,
   {
     unsafe {
@@ -180,9 +215,9 @@ where
   }
 }
 
-impl<'a, K, C> Equivalentor<RecordPointer> for MemtableRangeComparator<K, C>
+impl<K, C> Equivalentor<RecordPointer> for MemtableRangeComparator<K, C>
 where
-  C: TypeRefEquivalentor<'a, K> + ?Sized,
+  C: TypeRefEquivalentor<K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -191,9 +226,9 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefEquivalentor<'a, RecordPointer> for MemtableRangeComparator<K, C>
+impl<K, C> TypeRefEquivalentor<RecordPointer> for MemtableRangeComparator<K, C>
 where
-  C: TypeRefEquivalentor<'a, K> + ?Sized,
+  C: TypeRefEquivalentor<K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -207,22 +242,9 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>>
-  for MemtableRangeComparator<K, C>
+impl<K, C> Comparator<RecordPointer> for MemtableRangeComparator<K, C>
 where
-  C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
-  Q: ?Sized,
-  K: Type + ?Sized,
-{
-  #[inline]
-  fn query_equivalent_ref(&self, a: &RecordPointer, b: &Query<Q>) -> bool {
-    self.equivalent_start_key(a, &b.0)
-  }
-}
-
-impl<'a, K, C> Comparator<RecordPointer> for MemtableRangeComparator<K, C>
-where
-  C: TypeRefComparator<'a, K> + ?Sized,
+  C: TypeRefComparator<K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -231,9 +253,9 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefComparator<'a, RecordPointer> for MemtableRangeComparator<K, C>
+impl<K, C> TypeRefComparator<RecordPointer> for MemtableRangeComparator<K, C>
 where
-  C: TypeRefComparator<'a, K> + ?Sized,
+  C: TypeRefComparator<K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -246,10 +268,21 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
-  for MemtableRangeComparator<K, C>
+impl<K, Q, C> TypeRefQueryEquivalentor<RecordPointer, Query<Q>> for MemtableRangeComparator<K, C>
 where
-  C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
+  C: TypeRefQueryEquivalentor<K, Q> + ?Sized,
+  Q: ?Sized,
+  K: Type + ?Sized,
+{
+  #[inline]
+  fn query_equivalent_ref(&self, a: &RecordPointer, b: &Query<Q>) -> bool {
+    self.equivalent_start_key(a, &b.0)
+  }
+}
+
+impl<K, Q, C> TypeRefQueryComparator<RecordPointer, Query<Q>> for MemtableRangeComparator<K, C>
+where
+  C: TypeRefQueryComparator<K, Q> + ?Sized,
   Q: ?Sized,
   K: Type + ?Sized,
 {
@@ -259,25 +292,24 @@ where
   }
 }
 
-impl<'a, K, C> TypeRefQueryEquivalentor<'a, RecordPointer, RecordPointer>
-  for MemtableRangeComparator<K, C>
+impl<'a, K, C> TypeRefQueryEquivalentor<RecordPointer, RefQuery<K::Ref<'a>>> for MemtableRangeComparator<K, C>
 where
-  C: TypeRefComparator<'a, K> + ?Sized,
-  K: Type + ?Sized,
-{
-  fn query_equivalent_ref(&self, a: &RecordPointer, b: &RecordPointer) -> bool {
-    self.equivalent_in(a, b)
-  }
-}
-
-impl<'a, K, C> TypeRefQueryComparator<'a, RecordPointer, RecordPointer>
-  for MemtableRangeComparator<K, C>
-where
-  C: TypeRefComparator<'a, K> + ?Sized,
+  C: TypeRefEquivalentor<K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
-  fn query_compare_ref(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering {
-    self.compare_in(a, b)
+  fn query_equivalent_ref(&self, a: &RecordPointer, b: &RefQuery<K::Ref<'a>>) -> bool {
+    self.equivalent_start_key_with_ref(a, &b.query)
+  }
+}
+
+impl<'a, K, C> TypeRefQueryComparator<RecordPointer, RefQuery<K::Ref<'a>>> for MemtableRangeComparator<K, C>
+where
+  C: TypeRefComparator<K> + ?Sized,
+  K: Type + ?Sized,
+{
+  #[inline]
+  fn query_compare_ref(&self, a: &<RecordPointer as Type>::Ref<'_>, b: &RefQuery<K::Ref<'a>>) -> cmp::Ordering {
+    self.compare_start_key_with_ref(a, &b.query)
   }
 }

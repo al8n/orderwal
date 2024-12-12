@@ -27,7 +27,9 @@ where
 pub(crate) mod sealed {
   use skl::generic::{LazyRef, Type};
 
-  use super::{
+  use crate::types::RefQuery;
+
+use super::{
     super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
     Dynamic, Generic, TypeMode,
   };
@@ -115,6 +117,7 @@ pub(crate) mod sealed {
     type Key<'a>: Pointee<'a>;
     type Value<'a>: Pointee<'a>;
     type Query<Q: ?Sized>: ?Sized;
+    type RefQuery<'a>;
 
     type Comparator<C>: ComparatorConstructor<C>;
     type RangeComparator<C>: ComparatorConstructor<C>;
@@ -126,6 +129,7 @@ pub(crate) mod sealed {
     type Key<'a> = &'a [u8];
     type Value<'a> = &'a [u8];
     type Query<Q: ?Sized> = Q;
+    type RefQuery<'a> = RefQuery<&'a [u8]>;
     type Comparator<C> = crate::memtable::dynamic::MemtableComparator<C>;
     type RangeComparator<C> = crate::memtable::dynamic::MemtableRangeComparator<C>;
   }
@@ -138,6 +142,7 @@ pub(crate) mod sealed {
     type Key<'a> = LazyRef<'a, K>;
     type Value<'a> = LazyRef<'a, V>;
     type Query<Q: ?Sized> = crate::types::Query<Q>;
+    type RefQuery<'a> = RefQuery<K::Ref<'a>>;
     type Comparator<C> = crate::memtable::generic::MemtableComparator<K, C>;
     type RangeComparator<C> = crate::memtable::generic::MemtableRangeComparator<K, C>;
   }
