@@ -49,10 +49,11 @@ pub mod batch;
 /// Error types.
 pub mod error;
 
+pub(crate) mod swmr;
+
 mod builder;
 mod log;
 mod options;
-mod swmr;
 mod types;
 
 /// Dynamic ordered write-ahead log implementation.

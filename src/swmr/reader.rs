@@ -4,7 +4,7 @@ use rarena_allocator::sync::Arena;
 use triomphe::Arc;
 
 /// An [`OrderWal`] reader.
-pub struct OrderWalReader<P, S>(OrderWal<P, S>);
+pub struct OrderWalReader<M, S>(pub(crate) OrderWal<M, S>);
 
 impl<M, S> core::fmt::Debug for OrderWalReader<M, S> {
   #[inline]
@@ -18,7 +18,7 @@ impl<P, S> Immutable for OrderWalReader<P, S> {}
 impl<P, S> OrderWalReader<P, S> {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn from_core(wal: Arc<OrderCore<P, S>>) -> Self {
+  pub(crate) fn from_core(wal: Arc<OrderCore<P, S>>) -> Self {
     Self(OrderWal::from_core(wal))
   }
 }

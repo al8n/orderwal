@@ -7,15 +7,51 @@ use skl::{
 };
 
 use crate::{
-  memtable::bounded::unique::{self, *},
+  memtable::bounded::unique,
   types::{Generic, Query},
   State,
 };
 
 use super::GenericMemtable;
 
-/// Dynamic unique version memtable implementation based on ARNEA based [`SkipMap`](skl::generic::unique::sync::SkipMap)s.
+/// Generic unique version memtable implementation based on ARNEA based [`SkipMap`](skl::generic::unique::sync::SkipMap)s.
 pub type Table<K, V, C> = unique::Table<C, Generic<K, V>>;
+
+/// Entry of the [`Table`].
+pub type Entry<'a, K, V, C> = unique::Entry<'a, Active, C, Generic<K, V>>;
+
+/// Point entry of the [`Table`].
+pub type PointEntry<'a, K, V, S, C> = unique::PointEntry<'a, S, C, Generic<K, V>>;
+
+/// Range deletion entry of the [`Table`].
+pub type RangeDeletionEntry<'a, K, V, S, C> = unique::RangeDeletionEntry<'a, S, C, Generic<K, V>>;
+
+/// Range update entry of the [`Table`].
+pub type RangeUpdateEntry<'a, K, V, S, C> = unique::RangeUpdateEntry<'a, S, C, Generic<K, V>>;
+
+/// Iterator of the [`Table`].
+pub type Iter<'a, K, V, C> = unique::Iter<'a, C, Generic<K, V>>;
+
+/// Range iterator of the [`Table`].
+pub type Range<'a, K, V, Q, R, C> = unique::Range<'a, Q, R, C, Generic<K, V>>;
+
+/// Point iterator of the [`Table`].
+pub type IterPoints<'a, K, V, S, C> = unique::IterPoints<'a, S, C, Generic<K, V>>;
+
+/// Range point iterator of the [`Table`].
+pub type RangePoints<'a, K, V, S, Q, R, C> = unique::RangePoints<'a, S, Q, R, C, Generic<K, V>>;
+
+/// Bulk deletions iterator of the [`Table`].
+pub type IterBulkDeletions<'a, K, V, S, C> = unique::IterBulkDeletions<'a, S, C, Generic<K, V>>;
+
+/// Bulk deletions range iterator of the [`Table`].
+pub type RangeBulkDeletions<'a, K, V, S, Q, R, C> = unique::RangeBulkDeletions<'a, S, Q, R, C, Generic<K, V>>;
+
+/// Bulk updates iterator of the [`Table`].
+pub type IterBulkUpdates<'a, K, V, S, C> = unique::IterBulkUpdates<'a, S, C, Generic<K, V>>;
+
+/// Bulk updates range iterator of the [`Table`].
+pub type RangeBulkUpdates<'a, K, V, S, Q, R, C> = unique::RangeBulkUpdates<'a, S, Q, R, C, Generic<K, V>>;
 
 impl<K, V, C> GenericMemtable<K, V> for Table<K, V, C>
 where
@@ -26,35 +62,35 @@ where
   type Comparator = C;
 
   type Entry<'a>
-    = Entry<'a, Active, C, Generic<K, V>>
+    = Entry<'a, K, V, C>
   where
     Self: 'a;
 
   type PointEntry<'a, S>
-    = PointEntry<'a, S, C, Generic<K, V>>
+    = PointEntry<'a, K, V, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangeDeletionEntry<'a, S>
-    = RangeDeletionEntry<'a, S, C, Generic<K, V>>
+    = RangeDeletionEntry<'a, K, V, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangeUpdateEntry<'a, S>
-    = RangeUpdateEntry<'a, S, C, Generic<K, V>>
+    = RangeUpdateEntry<'a, K, V, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type Iterator<'a>
-    = Iter<'a, C, Generic<K, V>>
+    = Iter<'a, K, V, C>
   where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, Q, R, C, Generic<K, V>>
+    = Range<'a, K, V, Q, R, C>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
@@ -62,13 +98,13 @@ where
     Q: ?Sized;
 
   type PointsIterator<'a, S>
-    = IterPoints<'a, S, C, Generic<K, V>>
+    = IterPoints<'a, K, V, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangePoints<'a, S, Q, R>
-    = RangePoints<'a, S, Q, R, C, Generic<K, V>>
+    = RangePoints<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
@@ -77,13 +113,13 @@ where
     Q: ?Sized;
 
   type BulkDeletionsIterator<'a, S>
-    = IterBulkDeletions<'a, S, C, Generic<K, V>>
+    = IterBulkDeletions<'a, K, V, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type BulkDeletionsRange<'a, S, Q, R>
-    = RangeBulkDeletions<'a, S, Q, R, C, Generic<K, V>>
+    = RangeBulkDeletions<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
@@ -92,13 +128,13 @@ where
     Q: ?Sized;
 
   type BulkUpdatesIterator<'a, S>
-    = IterBulkUpdates<'a, S, C, Generic<K, V>>
+    = IterBulkUpdates<'a, K, V, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type BulkUpdatesRange<'a, S, Q, R>
-    = RangeBulkUpdates<'a, S, Q, R, C, Generic<K, V>>
+    = RangeBulkUpdates<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,

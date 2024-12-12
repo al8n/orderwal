@@ -108,6 +108,9 @@ macro_rules! memtable {
 
         #[inline]
         fn insert(&self, [< _ $($version)? >]: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+          $(
+            println!("inserting version {:?}", [< _ $version >]);
+          )?
           self
             .skl
             .insert($([< _ $version >].unwrap(),)? &pointer, &())

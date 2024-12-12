@@ -1,11 +1,6 @@
 use super::{reader::OrderWalReader, wal::OrderCore};
-use crate::{
-  log::Log,
-  memtable::Memtable,
-  dynamic,
-  generic,
-};
-use dbutils::{checksum::Crc32, types::Type};
+use crate::{log::Log, memtable::Memtable};
+use dbutils::checksum::Crc32;
 use rarena_allocator::sync::Arena;
 use triomphe::Arc;
 
@@ -14,7 +9,7 @@ use rarena_allocator::Allocator;
 
 /// A ordered write-ahead log implementation for concurrent thread environments.
 pub struct OrderWal<M, S = Crc32> {
-  pub(super) core: Arc<OrderCore<M, S>>,
+  pub(crate) core: Arc<OrderCore<M, S>>,
 }
 
 impl<M, S> core::fmt::Debug for OrderWal<M, S> {
@@ -102,53 +97,5 @@ where
   #[inline]
   pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
     self.core.arena.path()
-  }
-}
-
-impl<M, S> dynamic::unique::Writer for OrderWal<M, S>
-where
-  M: crate::memtable::dynamic::unique::DynamicMemtable + 'static,
-  S: 'static,
-{
-  #[inline]
-  fn reader(&self) -> Self::Reader {
-    OrderWalReader::from_core(self.core.clone())
-  }
-}
-
-impl<M, S> dynamic::multiple_version::Writer for OrderWal<M, S>
-where
-  M: crate::memtable::dynamic::multiple_version::DynamicMemtable + 'static,
-  S: 'static,
-{
-  #[inline]
-  fn reader(&self) -> Self::Reader {
-    OrderWalReader::from_core(self.core.clone())
-  }
-}
-
-impl<K, V, M, S> generic::unique::Writer<K, V> for OrderWal<M, S>
-where
-  M: crate::memtable::generic::unique::GenericMemtable<K, V> + 'static,
-  K: Type + ?Sized + 'static,
-  V: Type + ?Sized + 'static,
-  S: 'static,
-{
-  #[inline]
-  fn reader(&self) -> Self::Reader {
-    OrderWalReader::from_core(self.core.clone())
-  }
-}
-
-impl<K, V, M, S> generic::multiple_version::Writer<K, V> for OrderWal<M, S>
-where
-  M: crate::memtable::generic::multiple_version::GenericMemtable<K, V> + 'static,
-  K: Type + ?Sized + 'static,
-  V: Type + ?Sized + 'static,
-  S: 'static,
-{
-  #[inline]
-  fn reader(&self) -> Self::Reader {
-    OrderWalReader::from_core(self.core.clone())
   }
 }

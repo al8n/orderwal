@@ -342,7 +342,7 @@ impl BoundedKey {
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to key which is stored in the data_ptr.
 #[inline]
-pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) -> &'a [u8] {
+pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) -> (Option<u64>, &'a [u8]) {
   let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
@@ -353,10 +353,15 @@ pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) 
     "unexpected range key"
   );
 
-  let mut cursor = if flag.contains(EntryFlags::VERSIONED) {
-    1 + VERSION_SIZE
+  let (mut cursor, version) = if flag.contains(EntryFlags::VERSIONED) {
+    let version = u64::from_le_bytes(
+      entry_buf[EntryFlags::SIZE..EntryFlags::SIZE + VERSION_SIZE]
+        .try_into()
+        .unwrap(),
+    );
+    (1 + VERSION_SIZE, Some(version))
   } else {
-    1
+    (1, None)
   };
 
   let (readed, kvlen) = decode_u64_varint(&entry_buf[cursor..]).expect("");
@@ -365,14 +370,15 @@ pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) 
   let k = &entry_buf[cursor..cursor + klen as usize];
 
   if !flag.contains(EntryFlags::KEY_POINTER) {
-    return k;
+    return (version, k);
   }
 
   let pointer = Pointer::from_slice(k);
-  slice::from_raw_parts(
+  let k = slice::from_raw_parts(
     data_ptr.add(pointer.offset() as usize),
     pointer.len() as usize,
-  )
+  );
+  (version, k)
 }
 
 #[inline]

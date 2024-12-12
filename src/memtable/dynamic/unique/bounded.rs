@@ -7,7 +7,7 @@ use ref_cast::RefCast as _;
 use skl::{dynamic::BytesComparator, generic::unique::Map as _, Active};
 
 use crate::{
-  memtable::bounded::unique::{self, *},
+  memtable::bounded::unique,
   types::{Dynamic, Query},
   State,
 };
@@ -17,53 +17,90 @@ use super::DynamicMemtable;
 /// Dynamic unique version memtable implementation based on ARNEA based [`SkipMap`](skl::generic::unique::sync::SkipMap)s.
 pub type Table<C> = unique::Table<C, Dynamic>;
 
+/// Entry of the [`Table`].
+pub type Entry<'a, C> = unique::Entry<'a, Active, C, Dynamic>;
+
+/// Point entry of the [`Table`].
+pub type PointEntry<'a, S, C> = unique::PointEntry<'a, S, C, Dynamic>;
+
+/// Range deletion entry of the [`Table`].
+pub type RangeDeletionEntry<'a, S, C> = unique::RangeDeletionEntry<'a, S, C, Dynamic>;
+
+/// Range update entry of the [`Table`].
+pub type RangeUpdateEntry<'a, S, C> = unique::RangeUpdateEntry<'a, S, C, Dynamic>;
+
+/// Iterator of the [`Table`].
+pub type Iter<'a, C> = unique::Iter<'a, C, Dynamic>;
+
+/// Range iterator of the [`Table`].
+pub type Range<'a, Q, R, C> = unique::Range<'a, Q, R, C, Dynamic>;
+
+/// Point iterator of the [`Table`].
+pub type IterPoints<'a, S, C> = unique::IterPoints<'a, S, C, Dynamic>;
+
+/// Range point iterator of the [`Table`].
+pub type RangePoints<'a, S, Q, R, C> = unique::RangePoints<'a, S, Q, R, C, Dynamic>;
+
+/// Bulk deletions iterator of the [`Table`].
+pub type IterBulkDeletions<'a, S, C> = unique::IterBulkDeletions<'a, S, C, Dynamic>;
+
+/// Bulk deletions range iterator of the [`Table`].
+pub type RangeBulkDeletions<'a, S, Q, R, C> = unique::RangeBulkDeletions<'a, S, Q, R, C, Dynamic>;
+
+/// Bulk updates iterator of the [`Table`].
+pub type IterBulkUpdates<'a, S, C> = unique::IterBulkUpdates<'a, S, C, Dynamic>;
+
+/// Bulk updates range iterator of the [`Table`].
+pub type RangeBulkUpdates<'a, S, Q, R, C> = unique::RangeBulkUpdates<'a, S, Q, R, C, Dynamic>;
+
+
 impl<C> DynamicMemtable for Table<C>
 where
   C: BytesComparator + 'static,
 {
   type Entry<'a>
-    = Entry<'a, Active, C, Dynamic>
+    = Entry<'a, C>
   where
     Self: 'a;
 
   type PointEntry<'a, S>
-    = PointEntry<'a, S, C, Dynamic>
+    = PointEntry<'a, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangeDeletionEntry<'a, S>
-    = RangeDeletionEntry<'a, S, C, Dynamic>
+    = RangeDeletionEntry<'a, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangeUpdateEntry<'a, S>
-    = RangeUpdateEntry<'a, S, C, Dynamic>
+    = RangeUpdateEntry<'a, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type Iterator<'a>
-    = Iter<'a, C, Dynamic>
+    = Iter<'a, C>
   where
     Self: 'a;
 
   type Range<'a, Q, R>
-    = Range<'a, Q, R, C, Dynamic>
+    = Range<'a, Q, R, C>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
   type PointsIterator<'a, S>
-    = IterPoints<'a, S, C, Dynamic>
+    = IterPoints<'a, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type RangePoints<'a, S, Q, R>
-    = RangePoints<'a, S, Q, R, C, Dynamic>
+    = RangePoints<'a, S, Q, R, C>
   where
     Self: 'a,
     S: State<'a>,
@@ -71,13 +108,13 @@ where
     Q: ?Sized + Borrow<[u8]>;
 
   type BulkDeletionsIterator<'a, S>
-    = IterBulkDeletions<'a, S, C, Dynamic>
+    = IterBulkDeletions<'a, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type BulkDeletionsRange<'a, S, Q, R>
-    = RangeBulkDeletions<'a, S, Q, R, C, Dynamic>
+    = RangeBulkDeletions<'a, S, Q, R, C>
   where
     Self: 'a,
     S: State<'a>,
@@ -85,13 +122,13 @@ where
     Q: ?Sized + Borrow<[u8]>;
 
   type BulkUpdatesIterator<'a, S>
-    = IterBulkUpdates<'a, S, C, Dynamic>
+    = IterBulkUpdates<'a, S, C>
   where
     Self: 'a,
     S: State<'a>;
 
   type BulkUpdatesRange<'a, S, Q, R>
-    = RangeBulkUpdates<'a, S, Q, R, C, Dynamic>
+    = RangeBulkUpdates<'a, S, Q, R, C>
   where
     Self: 'a,
     S: State<'a>,

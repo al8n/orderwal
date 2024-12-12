@@ -4,18 +4,33 @@ use core::{
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, checksum::BuildChecksumer};
+use dbutils::{buffer::VacantBuffer, checksum::{BuildChecksumer, Crc32}};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::{either::Either, Active, MaybeTombstone};
+use skl::{either::Either, generic::Ascend, Active, MaybeTombstone};
 
 use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::{dynamic::unique::DynamicMemtable, Memtable},
-  types::{KeyBuilder, ValueBuilder, BufWriter},
+  memtable::{dynamic::unique::bounded, Memtable},
+  swmr,
+  types::{BufWriter, KeyBuilder, ValueBuilder},
 };
+
+pub use crate::memtable::dynamic::unique::DynamicMemtable;
+
+/// A unique versions ordered write-ahead log implementation for concurrent thread environments.
+pub type OrderWal<M = DefaultTable, S = Crc32> = swmr::OrderWal<M, S>;
+
+/// The read-only view for the ordered write-ahead log [`OrderWal`].
+pub type OrderWalReader<M = DefaultTable, S = Crc32> = swmr::OrderWalReader<M, S>;
+
+/// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+pub type ArenaTable<C> = bounded::Table<C>;
+
+/// The default memory table.
+pub type DefaultTable = ArenaTable<Ascend>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Log {
@@ -507,5 +522,16 @@ where
     Self::Memtable: DynamicMemtable,
   {
     Log::insert_batch(self, batch)
+  }
+}
+
+impl<M, S> Writer for swmr::OrderWal<M, S>
+where
+  M: DynamicMemtable + 'static,
+  S: 'static,
+{
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    swmr::OrderWalReader::from_core(self.core.clone())
   }
 }

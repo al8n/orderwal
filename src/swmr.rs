@@ -2,6 +2,9 @@ mod reader;
 mod wal;
 mod writer;
 
+pub use reader::OrderWalReader;
+pub use writer::OrderWal;
+
 // #[cfg(all(
 //   test,
 //   any(

@@ -1,18 +1,35 @@
 use core::ops::{Bound, RangeBounds};
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, checksum::BuildChecksumer};
+use dbutils::{buffer::VacantBuffer, checksum::{BuildChecksumer, Crc32}};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::{either::Either, generic::{Type, TypeRefQueryComparator}, Active, MaybeTombstone};
+use skl::{
+  either::Either,
+  generic::{Ascend, Type, TypeRefQueryComparator},
+  Active, MaybeTombstone,
+};
 
 use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::generic::multiple_version::GenericMemtable,
-  types::{KeyBuilder, ValueBuilder, BufWriter},
+  memtable::{generic::multiple_version::bounded, Memtable},
+  swmr,
+  types::{BufWriter, KeyBuilder, ValueBuilder},
 };
+
+
+pub use crate::memtable::generic::multiple_version::GenericMemtable;
+
+/// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
+pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
+
+/// The read-only view for the ordered write-ahead log [`OrderWal`].
+pub type OrderWalReader<M, S = Crc32> = swmr::OrderWalReader<M, S>;
+
+/// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+pub type ArenaTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K, V>
@@ -82,6 +99,24 @@ where
     Self::Memtable: GenericMemtable<K, V>,
   {
     self.memtable().may_contain_version(version)
+  }
+
+  /// Returns the number of entries in the WAL.
+  #[inline]
+  fn len(&self) -> usize
+  where
+    Self::Memtable: Memtable,
+  {
+    self.memtable().len()
+  }
+
+  /// Returns `true` if the WAL is empty.
+  #[inline]
+  fn is_empty(&self) -> bool
+  where
+    Self::Memtable: Memtable,
+  {
+    self.memtable().is_empty()
   }
 
   /// Returns the remaining capacity of the WAL.
@@ -607,5 +642,18 @@ where
     Self::Memtable: GenericMemtable<K, V>,
   {
     Log::insert_batch::<B>(self, batch)
+  }
+}
+
+impl<K, V, M, S> Writer<K, V> for swmr::OrderWal<M, S>
+where
+  M: GenericMemtable<K, V> + 'static,
+  K: Type + ?Sized + 'static,
+  V: Type + ?Sized + 'static,
+  S: 'static,
+{
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    swmr::OrderWalReader::from_core(self.core.clone())
   }
 }
