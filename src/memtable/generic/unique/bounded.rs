@@ -45,13 +45,15 @@ pub type RangePoints<'a, K, V, S, Q, R, C> = unique::RangePoints<'a, S, Q, R, C,
 pub type IterBulkDeletions<'a, K, V, S, C> = unique::IterBulkDeletions<'a, S, C, Generic<K, V>>;
 
 /// Bulk deletions range iterator of the [`Table`].
-pub type RangeBulkDeletions<'a, K, V, S, Q, R, C> = unique::RangeBulkDeletions<'a, S, Q, R, C, Generic<K, V>>;
+pub type RangeBulkDeletions<'a, K, V, S, Q, R, C> =
+  unique::RangeBulkDeletions<'a, S, Q, R, C, Generic<K, V>>;
 
 /// Bulk updates iterator of the [`Table`].
 pub type IterBulkUpdates<'a, K, V, S, C> = unique::IterBulkUpdates<'a, S, C, Generic<K, V>>;
 
 /// Bulk updates range iterator of the [`Table`].
-pub type RangeBulkUpdates<'a, K, V, S, Q, R, C> = unique::RangeBulkUpdates<'a, S, Q, R, C, Generic<K, V>>;
+pub type RangeBulkUpdates<'a, K, V, S, Q, R, C> =
+  unique::RangeBulkUpdates<'a, S, Q, R, C, Generic<K, V>>;
 
 impl<K, V, C> GenericMemtable<K, V> for Table<K, V, C>
 where

@@ -72,10 +72,11 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_key(self.ptr, a);
-      let bk = fetch_raw_key(self.ptr, b);
-
-      ak == bk
+      let (_, ak) = fetch_raw_key(self.ptr, a);
+      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
+      let (_, bk) = fetch_raw_key(self.ptr, b);
+      let bk = <K::Ref<'_> as TypeRef<'_>>::from_slice(bk);
+      self.cmp.equivalent_refs(&ak, &bk)
     }
   }
 
@@ -89,7 +90,6 @@ where
     unsafe {
       let (_, ak) = fetch_raw_key(self.ptr, a);
       let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
-      println!("compare ak: {:?}", ak);
       self.cmp.query_compare_ref(&ak, b)
     }
   }
@@ -101,14 +101,11 @@ where
     K: Type,
   {
     unsafe {
-      let (av, ak) = fetch_raw_key(self.ptr, a);
+      let (_, ak) = fetch_raw_key(self.ptr, a);
       let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
-      let (bv, bk) = fetch_raw_key(self.ptr, b);
+      let (_, bk) = fetch_raw_key(self.ptr, b);
       let bk = <K::Ref<'_> as TypeRef<'_>>::from_slice(bk);
-      let res = self.cmp.compare_refs(&ak, &bk);
-      println!("compare ak: {:?} bk: {:?} res: {res:?}", ak, bk);
-      // self.cmp.compare_refs(&ak, &bk)
-      res
+      self.cmp.compare_refs(&ak, &bk)
     }
   }
 }

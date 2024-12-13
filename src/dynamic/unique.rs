@@ -4,7 +4,10 @@ use core::{
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, checksum::{BuildChecksumer, Crc32}};
+use dbutils::{
+  buffer::VacantBuffer,
+  checksum::{BuildChecksumer, Crc32},
+};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
 use skl::{either::Either, generic::Ascend, Active, MaybeTombstone};

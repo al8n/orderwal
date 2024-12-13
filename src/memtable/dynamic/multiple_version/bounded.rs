@@ -45,13 +45,15 @@ pub type RangePoints<'a, S, Q, R, C> = multiple_version::RangePoints<'a, S, Q, R
 pub type IterBulkDeletions<'a, S, C> = multiple_version::IterBulkDeletions<'a, S, C, Dynamic>;
 
 /// Bulk deletions range iterator of the [`Table`].
-pub type RangeBulkDeletions<'a, S, Q, R, C> = multiple_version::RangeBulkDeletions<'a, S, Q, R, C, Dynamic>;
+pub type RangeBulkDeletions<'a, S, Q, R, C> =
+  multiple_version::RangeBulkDeletions<'a, S, Q, R, C, Dynamic>;
 
 /// Bulk updates iterator of the [`Table`].
 pub type IterBulkUpdates<'a, S, C> = multiple_version::IterBulkUpdates<'a, S, C, Dynamic>;
 
 /// Bulk updates range iterator of the [`Table`].
-pub type RangeBulkUpdates<'a, S, Q, R, C> = multiple_version::RangeBulkUpdates<'a, S, Q, R, C, Dynamic>;
+pub type RangeBulkUpdates<'a, S, Q, R, C> =
+  multiple_version::RangeBulkUpdates<'a, S, Q, R, C, Dynamic>;
 
 impl<C> DynamicMemtable for Table<C>
 where

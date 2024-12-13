@@ -54,14 +54,9 @@ impl<C: ?Sized> MemtableComparator<C> {
     C: BytesEquivalentor,
   {
     unsafe {
-      let (av, ak) = fetch_raw_key(self.ptr, a);
-      let (bv, bk) = fetch_raw_key(self.ptr, b);
-
-      match (av, bv) {
-        (Some(av), Some(bv)) => self.cmp.equivalent(ak, bk) && av == bv,
-        (None, None) => self.cmp.equivalent(ak, bk),
-        _ => unreachable!("trying to compare versioned and non-versioned keys"),
-      }
+      let (_, ak) = fetch_raw_key(self.ptr, a);
+      let (_, bk) = fetch_raw_key(self.ptr, b);
+      self.cmp.equivalent(ak, bk)
     }
   }
 
@@ -82,14 +77,9 @@ impl<C: ?Sized> MemtableComparator<C> {
     C: BytesComparator,
   {
     unsafe {
-      let (av, ak) = fetch_raw_key(self.ptr, a);
-      let (bv, bk) = fetch_raw_key(self.ptr, b);
-
-      match (av, bv) {
-        (Some(av), Some(bv)) => self.cmp.compare(ak, bk).then_with(|| bv.cmp(&av)),
-        (None, None) => self.cmp.compare(ak, bk),
-        _ => unreachable!("trying to compare versioned and non-versioned keys"),
-      }
+      let (_, ak) = fetch_raw_key(self.ptr, a);
+      let (_, bk) = fetch_raw_key(self.ptr, b);
+      self.cmp.compare(ak, bk)
     }
   }
 }

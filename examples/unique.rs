@@ -1,5 +1,7 @@
 use orderwal::{
-  dynamic::unique::{OrderWal, Reader, Writer}, memtable::MemtableEntry, Builder
+  dynamic::unique::{OrderWal, Reader, Writer},
+  memtable::MemtableEntry,
+  Builder,
 };
 
 fn main() {

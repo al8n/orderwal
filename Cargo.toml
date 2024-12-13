@@ -36,7 +36,8 @@ ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false }
 crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132", optional = true }
 crossbeam-skiplist-mvcc = { version = "0.2", optional = true }
-skl = { version = "0.22", default-features = false, features = ["alloc"] }
+# skl = { version = "0.22", default-features = false, features = ["alloc"] }
+skl = { version = "0.22", path = "../skl-rs", default-features = false, features = ["alloc"] }
 paste = "1"
 zerocopy = { version = "0.8", features = ["derive"] }
 tracing = { version = "0.1", default-features = false, optional = true }

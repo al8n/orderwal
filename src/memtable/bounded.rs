@@ -12,13 +12,14 @@ macro_rules! construct_skl {
 }
 
 macro_rules! memmap_or_not {
-  ($prefix: ident => $opts:ident($arena:ident)) => {{
+  ($opts:ident($arena:ident)) => {{
     paste::paste! {
       use skl::Arena;
 
       let arena_opts = skl::Options::new()
       .with_capacity($opts.capacity())
       .with_freelist(skl::options::Freelist::None)
+      .with_compression_policy(skl::options::CompressionPolicy::None)
       .with_unify(false)
       .with_max_height($opts.max_height());
 
@@ -35,7 +36,7 @@ macro_rules! memmap_or_not {
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       let points: SkipMap<_, _, _> = construct_skl!(b(mmap))?;
       #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
-      let points: SkipMap<_, _, C::[< $prefix:camel Comparator >]> = construct_skl!(b)?;
+      let points: SkipMap<_, _, T::Comparator<C>> = construct_skl!(b)?;
 
       let allocator = points.allocator().clone();
       let range_del_skl = SkipMap::<_, _, _>::create_from_allocator(
@@ -98,7 +99,7 @@ macro_rules! memtable {
           Self: Sized,
           A: rarena_allocator::Allocator,
         {
-          memmap_or_not!(dynamic => opts(arena))
+          memmap_or_not!(opts(arena))
         }
 
         #[inline]
@@ -108,9 +109,6 @@ macro_rules! memtable {
 
         #[inline]
         fn insert(&self, [< _ $($version)? >]: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
-          $(
-            println!("inserting version {:?}", [< _ $version >]);
-          )?
           self
             .skl
             .insert($([< _ $version >].unwrap(),)? &pointer, &())

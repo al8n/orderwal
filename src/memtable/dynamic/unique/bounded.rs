@@ -53,7 +53,6 @@ pub type IterBulkUpdates<'a, S, C> = unique::IterBulkUpdates<'a, S, C, Dynamic>;
 /// Bulk updates range iterator of the [`Table`].
 pub type RangeBulkUpdates<'a, S, Q, R, C> = unique::RangeBulkUpdates<'a, S, Q, R, C, Dynamic>;
 
-
 impl<C> DynamicMemtable for Table<C>
 where
   C: BytesComparator + 'static,

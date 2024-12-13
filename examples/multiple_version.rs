@@ -1,5 +1,7 @@
 use orderwal::{
-  dynamic::multiple_version::{OrderWal, Reader, Writer}, memtable::MemtableEntry, Builder
+  dynamic::multiple_version::{OrderWal, Reader, Writer},
+  memtable::MemtableEntry,
+  Builder,
 };
 
 fn main() {
@@ -20,10 +22,6 @@ fn main() {
   wal.insert(3, b"a", b"a3".as_slice()).unwrap();
   wal.insert(1, b"c", b"c1".as_slice()).unwrap();
   wal.insert(3, b"c", b"c3".as_slice()).unwrap();
-
-  for ent in wal.iter_all_points(3) {
-    println!("{:?}", ent);
-  }
 
   let a = wal.get(2, b"a").unwrap();
   let c = wal.get(2, b"c").unwrap();
