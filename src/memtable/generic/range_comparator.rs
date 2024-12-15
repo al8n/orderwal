@@ -71,7 +71,7 @@ where
     Q: ?Sized,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
       match &ak {
         Bound::Included(k) => self.cmp.query_equivalent_ref(k, b),
         Bound::Excluded(k) => self.cmp.query_equivalent_ref(k, b),
@@ -87,7 +87,7 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
       match &ak {
         Bound::Included(k) => self.cmp.equivalent_refs(k, b),
         Bound::Excluded(k) => self.cmp.equivalent_refs(k, b),
@@ -103,8 +103,8 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.input());
-      let bk = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, b).map(|k| k.input());
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.input());
+      let bk = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, b).map(|k| k.input());
 
       match (ak, bk) {
         (Bound::Unbounded, Bound::Unbounded) => true,
@@ -129,7 +129,7 @@ where
     Q: ?Sized,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
       match &ak {
         Bound::Included(k) => self.cmp.query_compare_ref(k, b),
         Bound::Excluded(k) => self
@@ -148,7 +148,7 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
       match &ak {
         Bound::Included(k) => self.cmp.compare_refs(k, b),
         Bound::Excluded(k) => self.cmp.compare_refs(k, b).then(cmp::Ordering::Greater),
@@ -164,8 +164,8 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, a).map(|k| k.output());
-      let bk = fetch_raw_range_key_start_bound::<LazyRef<'_, K>>(self.ptr, b).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
+      let bk = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, b).map(|k| k.output());
 
       match (&ak, &bk) {
         (Bound::Included(_), Bound::Unbounded) => cmp::Ordering::Greater,

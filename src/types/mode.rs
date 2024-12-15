@@ -25,7 +25,7 @@ where
 }
 
 pub(crate) mod sealed {
-  use skl::generic::{LazyRef, Type};
+  use skl::generic::{LazyRef, Type, TypeRef};
 
   use super::{
     super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
@@ -40,21 +40,21 @@ pub(crate) mod sealed {
     fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
     where
       T: TypeMode,
-      T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-      T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>;
+      T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: Pointee<'a, Input = &'a [u8]>;
   }
 
   pub trait RangeComparator<C: ?Sized>: ComparatorConstructor<C> {
     fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
     where
       T: TypeMode,
-      T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-      T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>;
+      T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+      T::Value<'a>: Pointee<'a, Input = &'a [u8]>;
 
     fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
     where
       T: TypeMode,
-      T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>;
+      T::Key<'a>: Pointee<'a, Input = &'a [u8]>;
   }
 
   pub trait Pointee<'a> {
@@ -90,10 +90,10 @@ pub(crate) mod sealed {
 
   impl<'a, T> Pointee<'a> for LazyRef<'a, T>
   where
-    T: Type + ?Sized,
+    T: TypeRef<'a>,
   {
     type Input = &'a [u8];
-    type Output = T::Ref<'a>;
+    type Output = T;
 
     #[inline]
     fn from_input(input: Self::Input) -> Self {
@@ -133,8 +133,8 @@ pub(crate) mod sealed {
     K: Type + ?Sized,
     V: Type + ?Sized,
   {
-    type Key<'a> = LazyRef<'a, K>;
-    type Value<'a> = LazyRef<'a, V>;
+    type Key<'a> = LazyRef<'a, K::Ref<'a>>;
+    type Value<'a> = LazyRef<'a, V::Ref<'a>>;
     type Comparator<C> = crate::memtable::generic::MemtableComparator<K, C>;
     type RangeComparator<C> = crate::memtable::generic::MemtableRangeComparator<K, C>;
   }

@@ -1,4 +1,4 @@
-use core::ops::{ControlFlow, RangeBounds};
+use core::ops::{Bound, ControlFlow, RangeBounds};
 
 use ref_cast::RefCast;
 use skl::{
@@ -175,6 +175,38 @@ where
   }
 
   #[inline]
+  fn upper_bound<'a, Q>(&'a self, version: u64, bound: core::ops::Bound<&'a Q>) -> Option<Self::Entry<'a>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>
+  {
+    self
+      .range::<Q, _>(version, (Bound::Unbounded, bound))
+      .next_back()
+  }
+
+  #[inline]
+  fn lower_bound<'a, Q>(&'a self, version: u64, bound: core::ops::Bound<&'a Q>) -> Option<Self::Entry<'a>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>
+  {
+    self
+      .range::<Q, _>(version, (bound, Bound::Unbounded))
+      .next()
+  }
+
+  #[inline]
+  fn first(&self, version: u64) -> Option<Self::Entry<'_>> {
+    self.iter(version).next()
+  }
+
+  #[inline]
+  fn last(&self, version: u64) -> Option<Self::Entry<'_>> {
+    self.iter(version).next_back()
+  }
+
+  #[inline]
   fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<Self::Entry<'a>>
   where
     Q: ?Sized,
@@ -277,12 +309,12 @@ where
     RangeBulkDeletions::new(self.range_deletions_skl.range_all(version, range.into()))
   }
 
-  #[inline]
+#[inline]
   fn iter_bulk_updates(&self, version: u64) -> Self::BulkUpdatesIterator<'_, Active> {
     IterBulkUpdates::new(self.range_updates_skl.iter(version))
   }
 
-  #[inline]
+#[inline]
   fn iter_all_bulk_updates(
     &self,
     version: u64,
@@ -290,7 +322,7 @@ where
     IterBulkUpdates::new(self.range_updates_skl.iter_all(version))
   }
 
-  #[inline]
+#[inline]
   fn range_bulk_updates<'a, Q, R>(
     &'a self,
     version: u64,
@@ -304,7 +336,7 @@ where
     RangeBulkUpdates::new(self.range_updates_skl.range(version, range.into()))
   }
 
-  #[inline]
+#[inline]
   fn range_all_bulk_updates<'a, Q, R>(
     &'a self,
     version: u64,

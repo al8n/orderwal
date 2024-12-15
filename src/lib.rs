@@ -88,10 +88,12 @@ impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
 pub use skl::{Active, MaybeTombstone};
 
 mod sealed {
-  pub trait Sealed<'a>: skl::State<'a>
+  pub trait Sealed<'a>
+  // : skl::State<'a>
   where
     Self: 'a,
   {
+
   }
 
   impl<'a, T: skl::State<'a> + 'a> Sealed<'a> for T {}

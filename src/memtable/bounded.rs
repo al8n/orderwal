@@ -169,8 +169,8 @@ macro_rules! point_entry_wrapper {
     $(#[$meta])*
     pub struct $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
-      T: $crate::types::TypeMode
+      S: $crate::State<'a> + skl::State<'a>,
+      T: $crate::types::TypeMode,
     {
       pub(in crate::memtable) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>,
       data: core::cell::OnceCell<$crate::types::RawEntryRef<'a, T>>,
@@ -178,7 +178,7 @@ macro_rules! point_entry_wrapper {
 
     impl<'a, S, C, T> core::fmt::Debug for $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
@@ -195,7 +195,7 @@ macro_rules! point_entry_wrapper {
 
     impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::Value<'a>: Clone,
       T::Key<'a>: Clone,
@@ -211,7 +211,7 @@ macro_rules! point_entry_wrapper {
 
     impl<'a, S, C, T> $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
     {
       #[inline]
@@ -319,7 +319,7 @@ macro_rules! point_entry_wrapper {
       impl<'a, S, C, T> $crate::WithVersion for $ent<'a, S, C, T>
       where
         C: 'static,
-        S: $crate::State<'a>,
+        S: $crate::State<'a> + skl::State<'a>,
         T: $crate::types::TypeMode,
       {
         #[inline]
@@ -339,7 +339,7 @@ macro_rules! range_entry_wrapper {
     $(#[$meta])*
     pub struct $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
     {
       pub(crate) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>,
@@ -349,7 +349,7 @@ macro_rules! range_entry_wrapper {
     impl<'a, S, C, T> core::fmt::Debug for $ent<'a, S, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
@@ -370,7 +370,7 @@ macro_rules! range_entry_wrapper {
 
     impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::Value<'a>: Clone,
       T::Key<'a>: Clone,
@@ -386,7 +386,7 @@ macro_rules! range_entry_wrapper {
 
     impl<'a, S, C, T> $ent<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
     {
       pub(in crate::memtable) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>) -> Self {
@@ -400,7 +400,7 @@ macro_rules! range_entry_wrapper {
     impl<'a, S, C, T> $crate::memtable::RangeEntry<'a> for $ent<'a, S, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
@@ -447,7 +447,7 @@ macro_rules! range_entry_wrapper {
       impl<'a, S, C, T> $crate::WithVersion for $ent<'a, S, C, T>
       where
         C: 'static,
-        S: $crate::State<'a>,
+        S: $crate::State<'a> + skl::State<'a>,
         T: $crate::types::TypeMode,
       {
         #[inline]
@@ -473,7 +473,7 @@ macro_rules! range_deletion_wrapper {
       for $ent<'a, S, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
       T::Value<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
@@ -559,7 +559,7 @@ macro_rules! iter_wrapper {
     $(#[$meta])*
     pub struct $iter<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
     {
       iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>,
@@ -567,7 +567,7 @@ macro_rules! iter_wrapper {
 
     impl<'a, S, C, T> $iter<'a, S, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
     {
       #[inline]
@@ -579,7 +579,7 @@ macro_rules! iter_wrapper {
     impl<'a, S, C, T> Iterator for $iter<'a, S, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer> + 'a,
     {
@@ -594,7 +594,7 @@ macro_rules! iter_wrapper {
     impl<'a, S, C, T> DoubleEndedIterator for $iter<'a, S, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       T: $crate::types::TypeMode,
       T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer> + 'a,
     {
@@ -614,7 +614,7 @@ macro_rules! range_wrapper {
     $(#[$meta])*
     pub struct $iter<'a, S, Q, R, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
     {
@@ -623,7 +623,7 @@ macro_rules! range_wrapper {
 
     impl<'a, S, Q, R, C, T> $iter<'a, S, Q, R, C, T>
     where
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
     {
@@ -636,7 +636,7 @@ macro_rules! range_wrapper {
     impl<'a, S, Q, R, C, T> Iterator for $iter<'a, S, Q, R, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
@@ -653,7 +653,7 @@ macro_rules! range_wrapper {
     impl<'a, S, Q, R, C, T> DoubleEndedIterator for $iter<'a, S, Q, R, C, T>
     where
       C: 'static,
-      S: $crate::State<'a>,
+      S: $crate::State<'a> + skl::State<'a>,
       R: core::ops::RangeBounds<Q>,
       Q: ?Sized,
       T: $crate::types::TypeMode,
