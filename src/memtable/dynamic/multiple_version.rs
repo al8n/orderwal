@@ -21,19 +21,19 @@ pub trait DynamicMemtable: Memtable {
   type PointEntry<'a, S>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   /// The item returned by the bulk deletions iterators
   type RangeDeletionEntry<'a, S>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   /// The item returned by the bulk updates iterators
   type RangeUpdateEntry<'a, S>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   /// The iterator type.
   type Iterator<'a>: DoubleEndedIterator<Item = Self::Entry<'a>>
@@ -51,13 +51,13 @@ pub trait DynamicMemtable: Memtable {
   type PointsIterator<'a, S>: DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   /// The range iterator over point entries.
   type RangePoints<'a, S, Q, R>: DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>,
+    S: State,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -65,13 +65,13 @@ pub trait DynamicMemtable: Memtable {
   type BulkDeletionsIterator<'a, S>: DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   /// The range iterator over range deletions entries.
   type BulkDeletionsRange<'a, S, Q, R>: DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>,
+    S: State,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -79,13 +79,13 @@ pub trait DynamicMemtable: Memtable {
   type BulkUpdatesIterator<'a, S>: DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   /// The range iterator over range updates entries.
   type BulkUpdatesRange<'a, S, Q, R>: DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>,
+    S: State,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 

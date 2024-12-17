@@ -1,31 +1,37 @@
+use skl::Transformable;
+
 use super::*;
 
 /// Entry in the memtable.
 pub struct Entry<'a, S, C, T>
 where
-  S: State<'a>,
+  S: State,
   T: TypeMode,
 {
   table: &'a Table<C, T>,
   point_ent: PointEntry<'a, S, C, T>,
   key: <T::Key<'a> as Pointee<'a>>::Output,
-  val: <T::Value<'a> as Pointee<'a>>::Output,
+  val: Option<S::Data<'a, T::Value<'a>>>,
   version: u64,
   query_version: u64,
 }
 
 impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
 where
-  S: State<'a>,
   C: 'static,
+  S: State,
+  S::Data<'a, LazyRef<'a, ()>>: Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <S::Data<'a, T::Value<'a>> as Transformable>::Output: core::fmt::Debug,
   T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
-  <T::Value<'a> as Pointee<'a>>::Output: core::fmt::Debug,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Entry")
       .field("key", &self.key)
-      .field("value", &self.val)
+      .field("value", &self.value_in())
       .field("version", &self.version)
       .finish()
   }
@@ -33,7 +39,10 @@ where
 
 impl<'a, S, C, T> Clone for Entry<'a, S, C, T>
 where
-  S: State<'a>,
+  S: State,
+  S::Data<'a, T::Value<'a>>: Transformable + Clone,
+  <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone, 
+  PointEntry<'a, S, C, T>: Clone,
   T: TypeMode,
   T::Key<'a>: Clone,
   T::Value<'a>: Clone,
@@ -44,22 +53,22 @@ where
       table: self.table,
       point_ent: self.point_ent.clone(),
       key: self.key,
-      val: self.val,
+      val: self.val.clone(),
       version: self.version,
       query_version: self.query_version,
     }
   }
 }
 
-impl<'a, C, T> MemtableEntry<'a> for Entry<'a, Active, C, T>
+impl<'a, S, C, T> MemtableEntry<'a> for Entry<'a, S, C, T>
 where
   C: 'static,
-  T: TypeMode,
+  S: State,
+  S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
-  <T::Key<'a> as Pointee<'a>>::Output: 'a,
-  <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
@@ -70,12 +79,13 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Pointee<'a>>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
-  type Value = <T::Value<'a> as Pointee<'a>>::Output;
+  type Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output;
 
   #[inline]
   fn key(&self) -> Self::Key {
@@ -84,7 +94,7 @@ where
 
   #[inline]
   fn value(&self) -> Self::Value {
-    self.val
+    self.value_in()
   }
 
   #[inline]
@@ -114,7 +124,8 @@ where
 
 impl<'a, S, C, T> Entry<'a, S, C, T>
 where
-  S: State<'a>,
+  S: State,
+  S::Data<'a, T::Value<'a>>: Transformable,
   T: TypeMode,
 {
   #[inline]
@@ -123,7 +134,7 @@ where
     query_version: u64,
     point_ent: PointEntry<'a, S, C, T>,
     key: <T::Key<'a> as Pointee<'a>>::Output,
-    val: <T::Value<'a> as Pointee<'a>>::Output,
+    val: Option<S::Data<'a, T::Value<'a>>>,
     version: u64,
   ) -> Self {
     Self {
@@ -137,9 +148,30 @@ where
   }
 }
 
+impl<'a, S, C, T> Entry<'a, S, C, T>
+where
+  C: 'static,
+  S: State,
+  S::Data<'a, LazyRef<'a, ()>>: skl::Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+{
+  #[inline]
+  fn value_in(&self) -> <S::Data<'a, T::Value<'a>> as Transformable>::Output {
+    match self.val.as_ref() {
+      Some(val) => val.transform(),
+      None => self.point_ent.value(),
+    }
+  }
+}
+     
+
 impl<'a, S, C, T> WithVersion for Entry<'a, S, C, T>
 where
-  S: State<'a>,
+  S: State,
+  S::Data<'a, T::Value<'a>>: Transformable,
   T: TypeMode,
 {
   #[inline]

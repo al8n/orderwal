@@ -1,15 +1,17 @@
 use core::{cmp, marker::PhantomData, ops::Bound};
 
 use skl::generic::{
-  Comparator, Equivalentor, LazyRef, Type, TypeRefComparator, TypeRefEquivalentor,
+  Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor,
   TypeRefQueryComparator, TypeRefQueryEquivalentor,
 };
 use triomphe::Arc;
 
 use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  sealed::Pointee, Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, RefQuery,
+  Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, RefQuery,
 };
+
+use super::ty_ref;
 
 pub struct MemtableRangeComparator<K, C>
 where
@@ -40,21 +42,12 @@ where
 impl<K: ?Sized, C: ?Sized> crate::types::sealed::RangeComparator<C>
   for MemtableRangeComparator<K, C>
 {
-  fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
-  where
-    T: crate::types::TypeMode,
-    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-  {
-    unsafe { fetch_raw_range_update_entry::<T>(self.ptr, kp) }
+  fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a> {
+    unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
   }
 
-  fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
-  where
-    T: crate::types::TypeMode,
-    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-  {
-    unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }
+  fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a> {
+    unsafe { fetch_raw_range_deletion_entry(self.ptr, kp) }
   }
 }
 
@@ -71,10 +64,10 @@ where
     Q: ?Sized,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
-      match &ak {
-        Bound::Included(k) => self.cmp.query_equivalent_ref(k, b),
-        Bound::Excluded(k) => self.cmp.query_equivalent_ref(k, b),
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a).map(|k| ty_ref::<K>(k));
+      match ak {
+        Bound::Included(k) => self.cmp.query_equivalent_ref(&k, b),
+        Bound::Excluded(k) => self.cmp.query_equivalent_ref(&k, b),
         Bound::Unbounded => false,
       }
     }
@@ -87,7 +80,7 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a).map(|k| ty_ref::<K>(k));
       match &ak {
         Bound::Included(k) => self.cmp.equivalent_refs(k, b),
         Bound::Excluded(k) => self.cmp.equivalent_refs(k, b),
@@ -103,20 +96,20 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.input());
-      let bk = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, b).map(|k| k.input());
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a).map(|k| ty_ref::<K>(k));
+      let bk = fetch_raw_range_key_start_bound(self.ptr, b).map(|k| ty_ref::<K>(k));
 
-      match (ak, bk) {
+      match (&ak, &bk) {
         (Bound::Unbounded, Bound::Unbounded) => true,
         (Bound::Included(_), Bound::Unbounded) => false,
         (Bound::Excluded(_), Bound::Unbounded) => false,
         (Bound::Unbounded, Bound::Included(_)) => false,
         (Bound::Unbounded, Bound::Excluded(_)) => false,
 
-        (Bound::Included(a), Bound::Included(b)) => a == b,
-        (Bound::Included(a), Bound::Excluded(b)) => a == b,
-        (Bound::Excluded(a), Bound::Included(b)) => a == b,
-        (Bound::Excluded(a), Bound::Excluded(b)) => a == b,
+        (Bound::Included(a), Bound::Included(b)) => self.cmp.equivalent_refs(a, b),
+        (Bound::Included(a), Bound::Excluded(b)) => self.cmp.equivalent_refs(a, b),
+        (Bound::Excluded(a), Bound::Included(b)) => self.cmp.equivalent_refs(a, b),
+        (Bound::Excluded(a), Bound::Excluded(b)) => self.cmp.equivalent_refs(a, b),
       }
     }
   }
@@ -129,7 +122,7 @@ where
     Q: ?Sized,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a).map(|k| ty_ref::<K>(k));
       match &ak {
         Bound::Included(k) => self.cmp.query_compare_ref(k, b),
         Bound::Excluded(k) => self
@@ -148,7 +141,7 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a).map(|k| ty_ref::<K>(k));
       match &ak {
         Bound::Included(k) => self.cmp.compare_refs(k, b),
         Bound::Excluded(k) => self.cmp.compare_refs(k, b).then(cmp::Ordering::Greater),
@@ -164,8 +157,8 @@ where
     K: Type,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, a).map(|k| k.output());
-      let bk = fetch_raw_range_key_start_bound::<LazyRef<'_, K::Ref<'_>>>(self.ptr, b).map(|k| k.output());
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a).map(|k| ty_ref::<K>(k));
+      let bk = fetch_raw_range_key_start_bound(self.ptr, b).map(|k| ty_ref::<K>(k));
 
       match (&ak, &bk) {
         (Bound::Included(_), Bound::Unbounded) => cmp::Ordering::Greater,

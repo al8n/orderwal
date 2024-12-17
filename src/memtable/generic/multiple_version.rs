@@ -15,55 +15,58 @@ pub trait GenericMemtable<K, V>
 where
   Self: Memtable,
   K: Type + ?Sized,
-  V: ?Sized,
+  V: Type + ?Sized,
 {
   /// The comparator used for key comparison.
   type Comparator: TypeRefComparator<K>;
 
   /// The item returned by the iterator or query methods.
-  type Entry<'a>
+  type Entry<'a, S>
   where
-    Self: 'a;
+    Self: 'a,
+    S: State + 'a;
 
   /// The item returned by the point iterators
   type PointEntry<'a, S>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State + 'a;
 
   /// The item returned by the bulk deletions iterators
   type RangeDeletionEntry<'a, S>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State + 'a;
 
   /// The item returned by the bulk updates iterators
   type RangeUpdateEntry<'a, S>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State + 'a;
 
   /// The iterator type.
-  type Iterator<'a>
+  type Iterator<'a, S>
   // : DoubleEndedIterator<Item = Self::Entry<'a>>
   where
-    Self: 'a;
+    Self: 'a,
+    S: State + 'a;
 
   /// The range iterator type.
-  type Range<'a, Q, R>
+  type Range<'a, S, Q, R>
   // : DoubleEndedIterator<Item = Self::Entry<'a>>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
+    Q: ?Sized + 'a,
+    S: State + 'a;
 
   /// The iterator over point entries.
   type PointsIterator<'a, S>
   // : DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State + 'a;
 
   /// The range iterator over point entries.
   type RangePoints<'a, S, Q, R>
@@ -71,7 +74,8 @@ where
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
-    S: State<'a>,
+    S: State + 'a,
+
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -80,7 +84,7 @@ where
   // : DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State + 'a;
 
   /// The range iterator over range deletions entries.
   type BulkDeletionsRange<'a, S, Q, R>
@@ -88,7 +92,8 @@ where
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
-    S: State<'a>,
+    S: State + 'a,
+
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -97,7 +102,7 @@ where
   // : DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State + 'a;
 
   /// The range iterator over range updates entries.
   type BulkUpdatesRange<'a, S, Q, R>
@@ -105,7 +110,8 @@ where
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
-    S: State<'a>,
+    S: State + 'a,
+
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -119,41 +125,25 @@ where
   fn may_contain_version(&self, version: u64) -> bool;
 
   /// Returns the upper bound of the memtable.
-  fn upper_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
+  fn upper_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a, Active>>
   where
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<K, Q>;
-  // {
-  //   self
-  //     .range::<Q, _>(version, (Bound::Unbounded, bound))
-  //     .next_back()
-  // }
 
   /// Returns the lower bound of the memtable.
-  fn lower_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
+  fn lower_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a, Active>>
   where
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<K, Q>;
-  // {
-  //   self
-  //     .range::<Q, _>(version, (bound, Bound::Unbounded))
-  //     .next()
-  // }
 
   /// Returns the first pointer in the memtable.
-  fn first(&self, version: u64) -> Option<Self::Entry<'_>>;
-  // {
-  //   self.iter(version).next()
-  // }
+  fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the last pointer in the memtable.
-  fn last(&self, version: u64) -> Option<Self::Entry<'_>>;
-  // {
-  //   self.iter(version).next_back()
-  // }
+  fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the pointer associated with the key.
-  fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<Self::Entry<'a>>
+  fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<Self::Entry<'a, Active>>
   where
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<K, Q>;
@@ -168,13 +158,13 @@ where
   }
 
   /// Returns an iterator over the memtable.
-  fn iter(&self, version: u64) -> Self::Iterator<'_>;
+  fn iter(&self, version: u64) -> Self::Iterator<'_, Active>;
 
   /// Returns an iterator over a subset of the memtable.
-  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
+  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized,
+    Q: ?Sized + 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>;
 
   /// Returns an iterator over point entries in the memtable.

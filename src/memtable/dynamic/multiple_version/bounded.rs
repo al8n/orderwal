@@ -69,19 +69,19 @@ where
     = PointEntry<'a, S, C>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   type RangeDeletionEntry<'a, S>
     = RangeDeletionEntry<'a, S, C>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   type RangeUpdateEntry<'a, S>
     = RangeUpdateEntry<'a, S, C>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   type Iterator<'a>
     = Iter<'a, C>
@@ -99,13 +99,13 @@ where
     = IterPoints<'a, S, C>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   type RangePoints<'a, S, Q, R>
     = RangePoints<'a, S, Q, R, C>
   where
     Self: 'a,
-    S: State<'a>,
+    S: State,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -113,13 +113,13 @@ where
     = IterBulkDeletions<'a, S, C>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   type BulkDeletionsRange<'a, S, Q, R>
     = RangeBulkDeletions<'a, S, Q, R, C>
   where
     Self: 'a,
-    S: State<'a>,
+    S: State,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -127,13 +127,13 @@ where
     = IterBulkUpdates<'a, S, C>
   where
     Self: 'a,
-    S: State<'a>;
+    S: State;
 
   type BulkUpdatesRange<'a, S, Q, R>
     = RangeBulkUpdates<'a, S, Q, R, C>
   where
     Self: 'a,
-    S: State<'a>,
+    S: State,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 

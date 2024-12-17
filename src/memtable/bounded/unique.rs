@@ -4,8 +4,8 @@ use core::ops::ControlFlow;
 
 use ref_cast::RefCast as _;
 use skl::{
-  generic::{Comparator, TypeRefComparator, TypeRefQueryComparator},
-  Active,
+  generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
+  Active, Transformable,
 };
 
 use crate::{
@@ -37,9 +37,6 @@ where
   C: 'static,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
-  <T::Key<'a> as Pointee<'a>>::Output: 'a,
-  <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
@@ -48,15 +45,20 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <T::Value<'a> as Pointee<'a>>::Output>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeDeletionEntry<'a, Active, C, T>: RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
-  pub(in crate::memtable) fn validate(
+  pub(in crate::memtable) fn validate<S>(
     &'a self,
-    ent: PointEntry<'a, Active, C, T>,
-  ) -> ControlFlow<Option<Entry<'a, Active, C, T>>, PointEntry<'a, Active, C, T>> {
+    ent: PointEntry<'a, S, C, T>,
+  ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
+  where
+    S: State,
+    S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+    S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+    <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+    RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
+    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  {
     let key = ent.key();
     let cmp = ent.ent.comparator();
     let query = RefQuery::new(key);
@@ -95,13 +97,12 @@ where
 
     // check if the next entry's value should be shadowed by the range key entries.
     if let Some(range_ent) = range_ent {
-      let val = range_ent.value();
-      return ControlFlow::Break(Some(Entry::new(self, ent, key, val)));
+      let val = range_ent.into_value();
+      return ControlFlow::Break(Some(Entry::new(self, ent, key, Some(S::data(val)))));
 
       // if value is None, the such range is unset, so we should return the value of the point entry.
     }
 
-    let val = ent.value();
-    ControlFlow::Break(Some(Entry::new(self, ent, key, val)))
+    ControlFlow::Break(Some(Entry::new(self, ent, key, None)))
   }
 }

@@ -25,7 +25,7 @@ where
 }
 
 pub(crate) mod sealed {
-  use skl::generic::{LazyRef, Type, TypeRef};
+  use skl::generic::{LazyRef, Type};
 
   use super::{
     super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
@@ -37,24 +37,13 @@ pub(crate) mod sealed {
   }
 
   pub trait PointComparator<C: ?Sized>: ComparatorConstructor<C> {
-    fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
-    where
-      T: TypeMode,
-      T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-      T::Value<'a>: Pointee<'a, Input = &'a [u8]>;
+    fn fetch_entry<'a>(&self, kp: &RecordPointer) -> RawEntryRef<'a>;
   }
 
   pub trait RangeComparator<C: ?Sized>: ComparatorConstructor<C> {
-    fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
-    where
-      T: TypeMode,
-      T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-      T::Value<'a>: Pointee<'a, Input = &'a [u8]>;
+    fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a>;
 
-    fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
-    where
-      T: TypeMode,
-      T::Key<'a>: Pointee<'a, Input = &'a [u8]>;
+    fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a>;
   }
 
   pub trait Pointee<'a> {
@@ -90,10 +79,10 @@ pub(crate) mod sealed {
 
   impl<'a, T> Pointee<'a> for LazyRef<'a, T>
   where
-    T: TypeRef<'a>,
+    T: Type + ?Sized,
   {
     type Input = &'a [u8];
-    type Output = T;
+    type Output = T::Ref<'a>;
 
     #[inline]
     fn from_input(input: Self::Input) -> Self {
@@ -121,20 +110,20 @@ pub(crate) mod sealed {
 
   impl<T: Sealed> TypeMode for T {}
 
-  impl Sealed for Dynamic {
-    type Key<'a> = &'a [u8];
-    type Value<'a> = &'a [u8];
-    type Comparator<C> = crate::memtable::dynamic::MemtableComparator<C>;
-    type RangeComparator<C> = crate::memtable::dynamic::MemtableRangeComparator<C>;
-  }
+  // impl Sealed for Dynamic {
+  //   type Key<'a> = &'a [u8];
+  //   type Value<'a> = &'a [u8];
+  //   type Comparator<C> = crate::memtable::dynamic::MemtableComparator<C>;
+  //   type RangeComparator<C> = crate::memtable::dynamic::MemtableRangeComparator<C>;
+  // }
 
   impl<K, V> Sealed for Generic<K, V>
   where
     K: Type + ?Sized,
     V: Type + ?Sized,
   {
-    type Key<'a> = LazyRef<'a, K::Ref<'a>>;
-    type Value<'a> = LazyRef<'a, V::Ref<'a>>;
+    type Key<'a> = LazyRef<'a, K>;
+    type Value<'a> = LazyRef<'a, V>;
     type Comparator<C> = crate::memtable::generic::MemtableComparator<K, C>;
     type RangeComparator<C> = crate::memtable::generic::MemtableRangeComparator<K, C>;
   }

@@ -6,17 +6,14 @@ use crate::VERSION_SIZE;
 
 use super::{split_lengths, EntryFlags, Pointee, Pointer, RecordPointer, TypeMode};
 
-pub struct RawEntryRef<'a, T: TypeMode> {
+pub struct RawEntryRef<'a> {
   flag: EntryFlags,
-  key: T::Key<'a>,
-  value: Option<T::Value<'a>>,
+  key: &'a [u8],
+  value: Option<&'a [u8]>,
   version: Option<u64>,
 }
 
-impl<T> RawEntryRef<'_, T>
-where
-  T: TypeMode,
-{
+impl RawEntryRef<'_> {
   #[inline]
   pub(crate) fn write_fmt(
     &self,
@@ -37,39 +34,28 @@ where
   }
 }
 
-impl<'a, T> Clone for RawEntryRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Clone,
-  T::Value<'a>: Clone,
-{
+impl Clone for RawEntryRef<'_> {
   fn clone(&self) -> Self {
     Self {
       flag: self.flag,
-      key: self.key.clone(),
-      value: self.value.clone(),
+      key: self.key,
+      value: self.value,
       version: self.version,
     }
   }
 }
 
-impl<'a, T> Copy for RawEntryRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Copy,
-  T::Value<'a>: Copy,
-{
-}
+impl Copy for RawEntryRef<'_> {}
 
-impl<'a, T: TypeMode> RawEntryRef<'a, T> {
+impl<'a> RawEntryRef<'a> {
   #[inline]
-  pub const fn key(&self) -> &T::Key<'a> {
+  pub const fn key(&self) -> &'a [u8] {
     &self.key
   }
 
   #[inline]
-  pub const fn value(&self) -> Option<&T::Value<'a>> {
-    self.value.as_ref()
+  pub const fn value(&self) -> Option<&'a [u8]> {
+    self.value
   }
 
   #[inline]
@@ -78,18 +64,15 @@ impl<'a, T: TypeMode> RawEntryRef<'a, T> {
   }
 }
 
-pub struct RawRangeUpdateRef<'a, T: TypeMode> {
+pub struct RawRangeUpdateRef<'a> {
   flag: EntryFlags,
-  start_bound: Bound<T::Key<'a>>,
-  end_bound: Bound<T::Key<'a>>,
-  value: Option<T::Value<'a>>,
+  start_bound: Bound<&'a [u8]>,
+  end_bound: Bound<&'a [u8]>,
+  value: Option<&'a [u8]>,
   version: Option<u64>,
 }
 
-impl<T> RawRangeUpdateRef<'_, T>
-where
-  T: TypeMode,
-{
+impl RawRangeUpdateRef<'_> {
   #[inline]
   pub(crate) fn write_fmt(
     &self,
@@ -99,8 +82,8 @@ where
     let mut debugger = f.debug_struct(wrapper_name);
     debugger
       .field("flags", &self.flag)
-      .field("start_bound", &self.start_bound_output())
-      .field("end_bound", &self.end_bound_output())
+      .field("start_bound", &self.start_bound())
+      .field("end_bound", &self.end_bound())
       .field("value", &self.value.as_ref().map(|v| v.output()));
 
     if let Some(version) = self.version {
@@ -111,34 +94,23 @@ where
   }
 }
 
-impl<'a, T> Clone for RawRangeUpdateRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Clone,
-  T::Value<'a>: Clone,
-{
+impl Clone for RawRangeUpdateRef<'_> {
   fn clone(&self) -> Self {
     Self {
       flag: self.flag,
-      start_bound: self.start_bound.clone(),
-      end_bound: self.end_bound.clone(),
-      value: self.value.clone(),
+      start_bound: self.start_bound,
+      end_bound: self.end_bound,
+      value: self.value,
       version: self.version,
     }
   }
 }
 
-impl<'a, T> Copy for RawRangeUpdateRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Copy,
-  T::Value<'a>: Copy,
-{
-}
+impl Copy for RawRangeUpdateRef<'_> {}
 
-impl<'a, T: TypeMode> RawRangeUpdateRef<'a, T> {
+impl<'a> RawRangeUpdateRef<'a> {
   #[inline]
-  pub const fn start_bound(&self) -> Bound<&T::Key<'a>> {
+  pub const fn start_bound(&self) -> Bound<&'a [u8]> {
     match &self.start_bound {
       Bound::Unbounded => Bound::Unbounded,
       Bound::Included(k) => Bound::Included(k),
@@ -146,17 +118,17 @@ impl<'a, T: TypeMode> RawRangeUpdateRef<'a, T> {
     }
   }
 
-  #[inline]
-  pub fn start_bound_output(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
-    match &self.start_bound {
-      Bound::Unbounded => Bound::Unbounded,
-      Bound::Included(k) => Bound::Included(k.output()),
-      Bound::Excluded(k) => Bound::Excluded(k.output()),
-    }
-  }
+  // #[inline]
+  // pub fn start_bound(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
+  //   match &self.start_bound {
+  //     Bound::Unbounded => Bound::Unbounded,
+  //     Bound::Included(k) => Bound::Included(k.output()),
+  //     Bound::Excluded(k) => Bound::Excluded(k.output()),
+  //   }
+  // }
 
   #[inline]
-  pub const fn end_bound(&self) -> Bound<&T::Key<'a>> {
+  pub const fn end_bound(&self) -> Bound<&'a [u8]> {
     match &self.end_bound {
       Bound::Unbounded => Bound::Unbounded,
       Bound::Included(k) => Bound::Included(k),
@@ -164,18 +136,18 @@ impl<'a, T: TypeMode> RawRangeUpdateRef<'a, T> {
     }
   }
 
-  #[inline]
-  pub fn end_bound_output(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
-    match &self.end_bound {
-      Bound::Unbounded => Bound::Unbounded,
-      Bound::Included(k) => Bound::Included(k.output()),
-      Bound::Excluded(k) => Bound::Excluded(k.output()),
-    }
-  }
+  // #[inline]
+  // pub fn end_bound(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
+  //   match &self.end_bound {
+  //     Bound::Unbounded => Bound::Unbounded,
+  //     Bound::Included(k) => Bound::Included(k.output()),
+  //     Bound::Excluded(k) => Bound::Excluded(k.output()),
+  //   }
+  // }
 
   #[inline]
-  pub const fn value(&self) -> Option<&T::Value<'a>> {
-    self.value.as_ref()
+  pub const fn value(&self) -> Option<&'a [u8]> {
+    self.value
   }
 
   #[inline]
@@ -184,17 +156,14 @@ impl<'a, T: TypeMode> RawRangeUpdateRef<'a, T> {
   }
 }
 
-pub struct RawRangeDeletionRef<'a, T: TypeMode> {
+pub struct RawRangeDeletionRef<'a> {
   flag: EntryFlags,
-  start_bound: Bound<T::Key<'a>>,
-  end_bound: Bound<T::Key<'a>>,
+  start_bound: Bound<&'a [u8]>,
+  end_bound: Bound<&'a [u8]>,
   version: Option<u64>,
 }
 
-impl<T> RawRangeDeletionRef<'_, T>
-where
-  T: TypeMode,
-{
+impl RawRangeDeletionRef<'_> {
   #[inline]
   pub(crate) fn write_fmt(
     &self,
@@ -204,8 +173,8 @@ where
     let mut debugger = f.debug_struct(wrapper_name);
     debugger
       .field("flags", &self.flag)
-      .field("start_bound", &self.start_bound_output())
-      .field("end_bound", &self.end_bound_output());
+      .field("start_bound", &self.start_bound())
+      .field("end_bound", &self.end_bound());
 
     if let Some(version) = self.version {
       debugger.field("version", &version);
@@ -215,34 +184,22 @@ where
   }
 }
 
-impl<'a, T> Clone for RawRangeDeletionRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Clone,
-{
+impl Clone for RawRangeDeletionRef<'_> {
   fn clone(&self) -> Self {
     Self {
       flag: self.flag,
-      start_bound: self.start_bound.clone(),
-      end_bound: self.end_bound.clone(),
+      start_bound: self.start_bound,
+      end_bound: self.end_bound,
       version: self.version,
     }
   }
 }
 
-impl<'a, T> Copy for RawRangeDeletionRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Copy,
-{
-}
+impl Copy for RawRangeDeletionRef<'_> {}
 
-impl<'a, T> RawRangeDeletionRef<'a, T>
-where
-  T: TypeMode,
-{
+impl<'a> RawRangeDeletionRef<'a> {
   #[inline]
-  pub const fn start_bound(&self) -> Bound<&T::Key<'a>> {
+  pub const fn start_bound(&self) -> Bound<&'a [u8]> {
     match &self.start_bound {
       Bound::Unbounded => Bound::Unbounded,
       Bound::Included(k) => Bound::Included(k),
@@ -251,29 +208,11 @@ where
   }
 
   #[inline]
-  pub fn start_bound_output(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
-    match &self.start_bound {
-      Bound::Unbounded => Bound::Unbounded,
-      Bound::Included(k) => Bound::Included(k.output()),
-      Bound::Excluded(k) => Bound::Excluded(k.output()),
-    }
-  }
-
-  #[inline]
-  pub const fn end_bound(&self) -> Bound<&T::Key<'a>> {
+  pub const fn end_bound(&self) -> Bound<&'a [u8]> {
     match &self.end_bound {
       Bound::Unbounded => Bound::Unbounded,
       Bound::Included(k) => Bound::Included(k),
       Bound::Excluded(k) => Bound::Excluded(k),
-    }
-  }
-
-  #[inline]
-  pub fn end_bound_output(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
-    match &self.end_bound {
-      Bound::Unbounded => Bound::Unbounded,
-      Bound::Included(k) => Bound::Included(k.output()),
-      Bound::Excluded(k) => Bound::Excluded(k.output()),
     }
   }
 
@@ -385,15 +324,7 @@ pub(crate) unsafe fn fetch_raw_key<'a>(
 }
 
 #[inline]
-pub(crate) unsafe fn fetch_entry<'a, T>(
-  data_ptr: *const u8,
-  p: &RecordPointer,
-) -> RawEntryRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
-{
+pub(crate) unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointer) -> RawEntryRef<'a> {
   let entry_buf = slice::from_raw_parts(data_ptr.add(p.offset()), p.len());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
@@ -446,8 +377,8 @@ where
 
   RawEntryRef {
     flag,
-    key: <T::Key<'a> as Pointee<'a>>::from_input(k),
-    value: v.map(<T::Value<'a> as Pointee<'a>>::from_input),
+    key: k,
+    value: v,
     version,
   }
 }
@@ -456,13 +387,10 @@ where
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to value which is stored in the data_ptr.
 #[inline]
-pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a, T>(
+pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
-) -> Bound<T>
-where
-  T: Pointee<'a, Input = &'a [u8]>,
-{
+) -> Bound<&'a [u8]> {
   let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
@@ -500,34 +428,30 @@ where
       data_ptr.add(pointer.offset() as usize),
       pointer.len() as usize,
     );
-    T::from_input(key)
+    key
   } else {
-    T::from_input(raw_start_key)
+    raw_start_key
   };
   start_bound.bound().map(|_| start_key)
 }
 
-struct FetchRangeKey<'a, T: Pointee<'a>> {
+struct FetchRangeKey<'a> {
   flag: EntryFlags,
-  start_bound: Bound<T>,
-  end_bound: Bound<T>,
+  start_bound: Bound<&'a [u8]>,
+  end_bound: Bound<&'a [u8]>,
   version: Option<u64>,
   value: Option<Pointer>,
-  _m: PhantomData<&'a ()>,
 }
 
 /// # Safety
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to value which is stored in the data_ptr.
 #[inline]
-unsafe fn fetch_raw_range_key_helper<'a, T>(
+unsafe fn fetch_raw_range_key_helper<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
   f: impl FnOnce(&EntryFlags),
-) -> FetchRangeKey<'a, T>
-where
-  T: Pointee<'a, Input = &'a [u8]>,
-{
+) -> FetchRangeKey<'a> {
   let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
@@ -569,9 +493,9 @@ where
       data_ptr.add(pointer.offset() as usize),
       pointer.len() as usize,
     );
-    T::from_input(key)
+    key
   } else {
-    T::from_input(raw_start_key)
+    raw_start_key
   };
   let start_bound = start_bound.bound().map(|_| start_key);
 
@@ -583,9 +507,9 @@ where
       data_ptr.add(pointer.offset() as usize),
       pointer.len() as usize,
     );
-    T::from_input(key)
+    key
   } else {
-    T::from_input(raw_end_key)
+    raw_end_key
   };
   let end_bound = end_bound.bound().map(|_| end_key);
 
@@ -601,21 +525,17 @@ where
     end_bound,
     value,
     version,
-    _m: PhantomData,
   }
 }
 
 /// # Safety
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `p` must be pointing to value which is stored in the `data_ptr`.
-pub(crate) unsafe fn fetch_raw_range_key<'a, T>(
+pub(crate) unsafe fn fetch_raw_range_key<'a>(
   data_ptr: *const u8,
   p: &RecordPointer,
-) -> (Bound<T>, Bound<T>)
-where
-  T: Pointee<'a, Input = &'a [u8]>,
-{
-  let FetchRangeKey::<T> {
+) -> (Bound<&'a [u8]>, Bound<&'a [u8]>) {
+  let FetchRangeKey {
     start_bound,
     end_bound,
     ..
@@ -634,15 +554,11 @@ where
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to value which is stored in the data_ptr.
 #[inline]
-pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a, T>(
+pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
-) -> RawRangeDeletionRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-{
-  let FetchRangeKey::<T::Key<'_>> {
+) -> RawRangeDeletionRef<'a> {
+  let FetchRangeKey {
     flag,
     version,
     start_bound,
@@ -667,16 +583,11 @@ where
 /// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to value which is stored in the data_ptr.
 #[inline]
-pub(crate) unsafe fn fetch_raw_range_update_entry<'a, T>(
+pub(crate) unsafe fn fetch_raw_range_update_entry<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
-) -> RawRangeUpdateRef<'a, T>
-where
-  T: TypeMode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
-{
-  let FetchRangeKey::<T::Key<'_>> {
+) -> RawRangeUpdateRef<'a> {
+  let FetchRangeKey {
     flag,
     version,
     start_bound,
@@ -694,12 +605,12 @@ where
     let v = slice::from_raw_parts(data_ptr.add(pointer.offset()), pointer.len());
     if !flag.contains(EntryFlags::VALUE_POINTER) {
       let pointer = Pointer::from_slice(v);
-      T::Value::from_input(slice::from_raw_parts(
+      slice::from_raw_parts(
         data_ptr.add(pointer.offset() as usize),
         pointer.len() as usize,
-      ))
+      )
     } else {
-      T::Value::from_input(v)
+      v
     }
   });
 

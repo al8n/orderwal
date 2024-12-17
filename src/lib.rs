@@ -56,8 +56,8 @@ mod log;
 mod options;
 mod types;
 
-/// Dynamic ordered write-ahead log implementation.
-pub mod dynamic;
+// /// Dynamic ordered write-ahead log implementation.
+// pub mod dynamic;
 
 /// Memory table related traits and structs.
 pub mod memtable;
@@ -80,21 +80,4 @@ pub trait WithoutVersion {}
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
 
-/// State of the entry.
-pub trait State<'a>: sealed::Sealed<'a> {}
-
-impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
-
-pub use skl::{Active, MaybeTombstone};
-
-mod sealed {
-  pub trait Sealed<'a>
-  // : skl::State<'a>
-  where
-    Self: 'a,
-  {
-
-  }
-
-  impl<'a, T: skl::State<'a> + 'a> Sealed<'a> for T {}
-}
+pub use dbutils::state::{Active, MaybeTombstone, State};

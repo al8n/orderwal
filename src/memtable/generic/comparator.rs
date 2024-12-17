@@ -1,12 +1,14 @@
 use core::{cmp, marker::PhantomData};
 
 use skl::generic::{
-  Comparator, Equivalentor, Type, TypeRef, TypeRefComparator, TypeRefEquivalentor,
+  Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor,
   TypeRefQueryComparator, TypeRefQueryEquivalentor,
 };
 use triomphe::Arc;
 
-use crate::types::{fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer, TypeMode};
+use crate::types::{fetch_entry, fetch_raw_key, Query, RawEntryRef, RecordPointer};
+
+use super::ty_ref;
 
 pub struct MemtableComparator<K, C>
 where
@@ -36,13 +38,8 @@ where
 
 impl<K: ?Sized, C: ?Sized> crate::types::sealed::PointComparator<C> for MemtableComparator<K, C> {
   #[inline]
-  fn fetch_entry<'a, T>(&self, kp: &RecordPointer) -> RawEntryRef<'a, T>
-  where
-    T: TypeMode,
-    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-  {
-    unsafe { fetch_entry::<T>(self.ptr, kp) }
+  fn fetch_entry<'a>(&self, kp: &RecordPointer) -> RawEntryRef<'a> {
+    unsafe { fetch_entry(self.ptr, kp) }
   }
 }
 
@@ -60,7 +57,7 @@ where
   {
     unsafe {
       let (_, ak) = fetch_raw_key(self.ptr, a);
-      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
+      let ak = ty_ref::<K>(ak);
       self.cmp.query_equivalent_ref(&ak, b)
     }
   }
@@ -73,9 +70,9 @@ where
   {
     unsafe {
       let (_, ak) = fetch_raw_key(self.ptr, a);
-      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
+      let ak = ty_ref::<K>(ak);
       let (_, bk) = fetch_raw_key(self.ptr, b);
-      let bk = <K::Ref<'_> as TypeRef<'_>>::from_slice(bk);
+      let bk = ty_ref::<K>(bk);
       self.cmp.equivalent_refs(&ak, &bk)
     }
   }
@@ -89,7 +86,7 @@ where
   {
     unsafe {
       let (_, ak) = fetch_raw_key(self.ptr, a);
-      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
+      let ak = ty_ref::<K>(ak);
       self.cmp.query_compare_ref(&ak, b)
     }
   }
@@ -102,9 +99,9 @@ where
   {
     unsafe {
       let (_, ak) = fetch_raw_key(self.ptr, a);
-      let ak = <K::Ref<'_> as TypeRef<'_>>::from_slice(ak);
+      let ak = ty_ref::<K>(ak);
       let (_, bk) = fetch_raw_key(self.ptr, b);
-      let bk = <K::Ref<'_> as TypeRef<'_>>::from_slice(bk);
+      let bk = ty_ref::<K>(bk);
       self.cmp.compare_refs(&ak, &bk)
     }
   }

@@ -102,7 +102,7 @@ where
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  fn iter(&self) -> <Self::Memtable as GenericMemtable<K, V>>::Iterator<'_>
+  fn iter(&self) -> <Self::Memtable as GenericMemtable<K, V>>::Iterator<'_, Active>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -113,7 +113,7 @@ where
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range<Q, R>(&self, range: R) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, Q, R>
+  fn range<Q, R>(&self, range: R) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, Active, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized,
@@ -305,7 +305,7 @@ where
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_>>
+  fn first(&self) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
   where
     Self::Memtable: GenericMemtable<K, V>,
     K: Type + 'static,
@@ -316,7 +316,7 @@ where
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_>>
+  fn last(&self) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
   where
     Self::Memtable: GenericMemtable<K, V>,
     K: Type + 'static,
@@ -340,7 +340,7 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
   where
     Q: ?Sized,
     K: Type + 'static,
@@ -357,7 +357,7 @@ where
   fn upper_bound<'a, Q>(
     &'a self,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
   where
     Q: ?Sized,
     K: Type + 'static,
@@ -374,7 +374,7 @@ where
   fn lower_bound<'a, Q>(
     &'a self,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
   where
     Q: ?Sized,
     K: Type + 'static,
