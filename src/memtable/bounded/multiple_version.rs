@@ -58,8 +58,10 @@ where
     S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+        'a,
+        Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>,
+      > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   {
     let key = ent.key();
     let cmp = ent.ent.comparator();

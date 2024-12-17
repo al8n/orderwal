@@ -110,12 +110,12 @@ pub(crate) mod sealed {
 
   impl<T: Sealed> TypeMode for T {}
 
-  // impl Sealed for Dynamic {
-  //   type Key<'a> = &'a [u8];
-  //   type Value<'a> = &'a [u8];
-  //   type Comparator<C> = crate::memtable::dynamic::MemtableComparator<C>;
-  //   type RangeComparator<C> = crate::memtable::dynamic::MemtableRangeComparator<C>;
-  // }
+  impl Sealed for Dynamic {
+    type Key<'a> = &'a [u8];
+    type Value<'a> = &'a [u8];
+    type Comparator<C> = crate::memtable::dynamic::MemtableComparator<C>;
+    type RangeComparator<C> = crate::memtable::dynamic::MemtableRangeComparator<C>;
+  }
 
   impl<K, V> Sealed for Generic<K, V>
   where

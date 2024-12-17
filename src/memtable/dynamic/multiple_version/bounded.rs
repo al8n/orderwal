@@ -18,7 +18,7 @@ use super::DynamicMemtable;
 pub type Table<C> = multiple_version::Table<C, Dynamic>;
 
 /// Entry of the [`Table`].
-pub type Entry<'a, C> = multiple_version::Entry<'a, Active, C, Dynamic>;
+pub type Entry<'a, S, C> = multiple_version::Entry<'a, S, C, Dynamic>;
 
 /// Point entry of the [`Table`].
 pub type PointEntry<'a, S, C> = multiple_version::PointEntry<'a, S, C, Dynamic>;
@@ -30,10 +30,10 @@ pub type RangeDeletionEntry<'a, S, C> = multiple_version::RangeDeletionEntry<'a,
 pub type RangeUpdateEntry<'a, S, C> = multiple_version::RangeUpdateEntry<'a, S, C, Dynamic>;
 
 /// Iterator of the [`Table`].
-pub type Iter<'a, C> = multiple_version::Iter<'a, C, Dynamic>;
+pub type Iter<'a, S, C> = multiple_version::Iter<'a, S, C, Dynamic>;
 
 /// Range iterator of the [`Table`].
-pub type Range<'a, Q, R, C> = multiple_version::Range<'a, Q, R, C, Dynamic>;
+pub type Range<'a, S, Q, R, C> = multiple_version::Range<'a, S, Q, R, C, Dynamic>;
 
 /// Point iterator of the [`Table`].
 pub type IterPoints<'a, S, C> = multiple_version::IterPoints<'a, S, C, Dynamic>;
@@ -60,52 +60,55 @@ where
   C: BytesComparator + 'static,
   for<'a> PointEntry<'a, Active, C>: WithVersion,
 {
-  type Entry<'a>
-    = Entry<'a, C>
+  type Entry<'a, S>
+    = Entry<'a, S, C>
   where
-    Self: 'a;
+    Self: 'a,
+    S: State + 'a;
 
   type PointEntry<'a, S>
     = PointEntry<'a, S, C>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   type RangeDeletionEntry<'a, S>
     = RangeDeletionEntry<'a, S, C>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   type RangeUpdateEntry<'a, S>
     = RangeUpdateEntry<'a, S, C>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
-  type Iterator<'a>
-    = Iter<'a, C>
+  type Iterator<'a, S>
+    = Iter<'a, S, C>
   where
-    Self: 'a;
+    Self: 'a,
+    S: State + 'a;
 
-  type Range<'a, Q, R>
-    = Range<'a, Q, R, C>
+  type Range<'a, S, Q, R>
+    = Range<'a, S, Q, R, C>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized + Borrow<[u8]>,
+    S: State + 'a;
 
   type PointsIterator<'a, S>
     = IterPoints<'a, S, C>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   type RangePoints<'a, S, Q, R>
     = RangePoints<'a, S, Q, R, C>
   where
     Self: 'a,
-    S: State,
+    S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -113,13 +116,13 @@ where
     = IterBulkDeletions<'a, S, C>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   type BulkDeletionsRange<'a, S, Q, R>
     = RangeBulkDeletions<'a, S, Q, R, C>
   where
     Self: 'a,
-    S: State,
+    S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -127,13 +130,13 @@ where
     = IterBulkUpdates<'a, S, C>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   type BulkUpdatesRange<'a, S, Q, R>
     = RangeBulkUpdates<'a, S, Q, R, C>
   where
     Self: 'a,
-    S: State,
+    S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -162,7 +165,41 @@ where
       || self.range_updates_skl.may_contain_version(version)
   }
 
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_>>
+  #[inline]
+  fn upper_bound<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: core::ops::Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, Active>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    todo!()
+  }
+
+  #[inline]
+  fn lower_bound<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: core::ops::Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, Active>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    todo!()
+  }
+
+  #[inline]
+  fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
+    todo!()
+  }
+
+  #[inline]
+  fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
+    todo!()
+  }
+
+  fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_, Active>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -174,12 +211,12 @@ where
   }
 
   #[inline]
-  fn iter(&self, version: u64) -> Self::Iterator<'_> {
+  fn iter(&self, version: u64) -> Self::Iterator<'_, Active> {
     Iter::new(version, self)
   }
 
   #[inline]
-  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
+  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,

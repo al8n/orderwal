@@ -99,7 +99,7 @@ where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + 'a,
+    Q: ?Sized,
     S: State + 'a;
 
   type PointsIterator<'a, S>
@@ -198,7 +198,7 @@ where
   fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + 'a,
+    Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<K, Q>,
   {
     Range::new(self, range)

@@ -13,79 +13,82 @@ pub mod bounded;
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait DynamicMemtable: Memtable {
   /// The item returned by the iterator or query methods.
-  type Entry<'a>
+  type Entry<'a, S>
   where
-    Self: 'a;
+    Self: 'a,
+    S: State + 'a;
 
   /// The item returned by the point iterators
   type PointEntry<'a, S>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   /// The item returned by the bulk deletions iterators
   type RangeDeletionEntry<'a, S>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   /// The item returned by the bulk updates iterators
   type RangeUpdateEntry<'a, S>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   /// The iterator type.
-  type Iterator<'a>: DoubleEndedIterator<Item = Self::Entry<'a>>
+  type Iterator<'a, S>
   where
-    Self: 'a;
+    Self: 'a,
+    S: State + 'a;
 
   /// The range iterator type.
-  type Range<'a, Q, R>: DoubleEndedIterator<Item = Self::Entry<'a>>
+  type Range<'a, S, Q, R>
   where
     Self: 'a,
     R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Borrow<[u8]>;
+    Q: ?Sized + Borrow<[u8]>,
+    S: State + 'a;
 
   /// The iterator over point entries.
-  type PointsIterator<'a, S>: DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
+  type PointsIterator<'a, S>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   /// The range iterator over point entries.
-  type RangePoints<'a, S, Q, R>: DoubleEndedIterator<Item = Self::PointEntry<'a, S>>
+  type RangePoints<'a, S, Q, R>
   where
     Self: 'a,
-    S: State,
+    S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
   /// The iterator over range deletions entries.
-  type BulkDeletionsIterator<'a, S>: DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
+  type BulkDeletionsIterator<'a, S>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   /// The range iterator over range deletions entries.
-  type BulkDeletionsRange<'a, S, Q, R>: DoubleEndedIterator<Item = Self::RangeDeletionEntry<'a, S>>
+  type BulkDeletionsRange<'a, S, Q, R>
   where
     Self: 'a,
-    S: State,
+    S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
   /// The iterator over range updates entries.
-  type BulkUpdatesIterator<'a, S>: DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
+  type BulkUpdatesIterator<'a, S>
   where
     Self: 'a,
-    S: State;
+    S: State + 'a;
 
   /// The range iterator over range updates entries.
-  type BulkUpdatesRange<'a, S, Q, R>: DoubleEndedIterator<Item = Self::RangeUpdateEntry<'a, S>>
+  type BulkUpdatesRange<'a, S, Q, R>
   where
     Self: 'a,
-    S: State,
+    S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
@@ -99,37 +102,31 @@ pub trait DynamicMemtable: Memtable {
   fn may_contain_version(&self, version: u64) -> bool;
 
   /// Returns the upper bound of the memtable.
-  fn upper_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
+  fn upper_bound<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, Active>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-  {
-    self
-      .range::<Q, _>(version, (Bound::Unbounded, bound))
-      .next_back()
-  }
+    Q: ?Sized + Borrow<[u8]>;
 
   /// Returns the lower bound of the memtable.
-  fn lower_bound<'a, Q>(&'a self, version: u64, bound: Bound<&'a Q>) -> Option<Self::Entry<'a>>
+  fn lower_bound<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, Active>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-  {
-    self
-      .range::<Q, _>(version, (bound, Bound::Unbounded))
-      .next()
-  }
+    Q: ?Sized + Borrow<[u8]>;
 
   /// Returns the first pointer in the memtable.
-  fn first(&self, version: u64) -> Option<Self::Entry<'_>> {
-    self.iter(version).next()
-  }
+  fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the last pointer in the memtable.
-  fn last(&self, version: u64) -> Option<Self::Entry<'_>> {
-    self.iter(version).next_back()
-  }
+  fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the pointer associated with the key.
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_>>
+  fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_, Active>>
   where
     Q: ?Sized + Borrow<[u8]>;
 
@@ -142,10 +139,10 @@ pub trait DynamicMemtable: Memtable {
   }
 
   /// Returns an iterator over the memtable.
-  fn iter(&self, version: u64) -> Self::Iterator<'_>;
+  fn iter(&self, version: u64) -> Self::Iterator<'_, Active>;
 
   /// Returns an iterator over a subset of the memtable.
-  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
+  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;

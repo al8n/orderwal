@@ -1,8 +1,8 @@
 use core::{cmp, marker::PhantomData, ops::Bound};
 
 use skl::generic::{
-  Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor,
-  TypeRefQueryComparator, TypeRefQueryEquivalentor,
+  Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
+  TypeRefQueryEquivalentor,
 };
 use triomphe::Arc;
 

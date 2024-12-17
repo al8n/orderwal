@@ -11,7 +11,6 @@ pub(crate) use comparator::MemtableComparator;
 pub(crate) use range_comparator::MemtableRangeComparator;
 use skl::generic::{Type, TypeRef};
 
-
 unsafe fn ty_ref<T: ?Sized + Type>(src: &[u8]) -> T::Ref<'_> {
   <T::Ref<'_> as TypeRef<'_>>::from_slice(src)
 }

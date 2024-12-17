@@ -356,7 +356,10 @@ where
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self, version: u64) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
+  fn first(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -367,7 +370,10 @@ where
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self, version: u64) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
+  fn last(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
   where
     K: Type + 'static,
     V: Type + 'static,

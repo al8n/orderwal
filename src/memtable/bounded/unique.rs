@@ -45,7 +45,8 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>: RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeDeletionEntry<'a, Active, C, T>:
+    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   pub(in crate::memtable) fn validate<S>(
     &'a self,
@@ -57,7 +58,7 @@ where
     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
     <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
     RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+      + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   {
     let key = ent.key();
     let cmp = ent.ent.comparator();

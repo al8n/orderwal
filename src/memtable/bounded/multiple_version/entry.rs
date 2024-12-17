@@ -41,7 +41,7 @@ impl<'a, S, C, T> Clone for Entry<'a, S, C, T>
 where
   S: State,
   S::Data<'a, T::Value<'a>>: Transformable + Clone,
-  <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone, 
+  <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
   PointEntry<'a, S, C, T>: Clone,
   T: TypeMode,
   T::Key<'a>: Clone,
@@ -166,7 +166,6 @@ where
     }
   }
 }
-     
 
 impl<'a, S, C, T> WithVersion for Entry<'a, S, C, T>
 where

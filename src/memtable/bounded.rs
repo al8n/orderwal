@@ -263,7 +263,7 @@ macro_rules! point_entry_wrapper {
           let ent = self.data.get_or_init(|| {
             self.ent.comparator().fetch_entry(self.ent.key())
           });
-  
+
           <S::Data<'a, _> as skl::Transformable>::from_input(ent.value())
         }).transform()
       }
@@ -388,7 +388,7 @@ macro_rules! range_entry_wrapper {
           let ent = self
             .data
             .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
-          
+
           ent.start_bound().map(<T::Key<'a> as $crate::types::sealed::Pointee>::from_input)
         });
         start_bound.as_ref().map(|k| k.output())
@@ -402,7 +402,7 @@ macro_rules! range_entry_wrapper {
           let ent = self
             .data
             .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
-          
+
           ent.end_bound().map(<T::Key<'a> as $crate::types::sealed::Pointee>::from_input)
         });
         end_bound.as_ref().map(|k| k.output())

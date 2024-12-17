@@ -113,7 +113,10 @@ where
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range<Q, R>(&self, range: R) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, Active, Q, R>
+  fn range<Q, R>(
+    &self,
+    range: R,
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, Active, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized,
@@ -340,7 +343,10 @@ where
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
+  fn get<'a, Q>(
+    &'a self,
+    key: &Q,
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
   where
     Q: ?Sized,
     K: Type + 'static,

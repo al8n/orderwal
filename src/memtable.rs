@@ -5,8 +5,8 @@ use crate::types::{Mode, Query, RecordPointer};
 #[macro_use]
 pub(crate) mod bounded;
 
-// /// Memtables for dynamic(bytes) key-value order WALs.
-// pub mod dynamic;
+/// Memtables for dynamic(bytes) key-value order WALs.
+pub mod dynamic;
 
 /// Memtables for generic(structured) key-value order WALs.
 pub mod generic;
