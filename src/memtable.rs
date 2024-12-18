@@ -1,6 +1,6 @@
 use core::ops::{Bound, RangeBounds};
 
-use crate::types::{Mode, Query, RecordPointer};
+use crate::types::{Query, RecordPointer};
 
 #[macro_use]
 pub(crate) mod bounded;
@@ -142,8 +142,5 @@ pub trait Memtable {
   fn range_set(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Unset a range from the memtable, this is a contra operation to [`range_set`](MultipleVersionMemtable::range_set).
-  fn range_unset(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
-
-  /// Returns the kind of the memtable.
-  fn mode() -> Mode;
+  fn range_unset(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>; 
 }

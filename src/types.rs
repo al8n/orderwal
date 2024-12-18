@@ -255,54 +255,6 @@ dbutils::builder!(
 
 builder_ext!(ValueBuilder, KeyBuilder,);
 
-/// The kind of the Write-Ahead Log.
-///
-/// Currently, there are two kinds of Write-Ahead Log:
-/// 1. Plain: The Write-Ahead Log is plain, which means it does not support multiple versions.
-/// 2. MultipleVersion: The Write-Ahead Log supports multiple versions.
-#[derive(Debug, PartialEq, Eq)]
-#[repr(u8)]
-#[non_exhaustive]
-pub enum Mode {
-  /// The Write-Ahead Log is plain, which means it does not support multiple versions.
-  Unique = 0,
-  /// The Write-Ahead Log supports multiple versions.
-  MultipleVersion = 1,
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl TryFrom<u8> for Mode {
-  type Error = crate::error::UnknownMode;
-
-  #[inline]
-  fn try_from(value: u8) -> Result<Self, Self::Error> {
-    Ok(match value {
-      0 => Self::Unique,
-      1 => Self::MultipleVersion,
-      _ => return Err(crate::error::UnknownMode(value)),
-    })
-  }
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl Mode {
-  #[inline]
-  pub(crate) const fn display_created_err_msg(&self) -> &'static str {
-    match self {
-      Self::Unique => "created without multiple versions support",
-      Self::MultipleVersion => "created with multiple versions support",
-    }
-  }
-
-  #[inline]
-  pub(crate) const fn display_open_err_msg(&self) -> &'static str {
-    match self {
-      Self::Unique => "opened without multiple versions support",
-      Self::MultipleVersion => "opened with multiple versions support",
-    }
-  }
-}
-
 const U32_SIZE: usize = mem::size_of::<u32>();
 
 /// The pointer to a record in the WAL.

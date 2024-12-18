@@ -35,11 +35,10 @@ pub use skl::KeySize;
 const RECORD_FLAG_SIZE: usize = mem::size_of::<types::Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
 const CURRENT_VERSION: u16 = 0;
-const MAGIC_TEXT: [u8; 5] = *b"order";
+const MAGIC_TEXT: [u8; 6] = *b"ordwal";
 const MAGIC_TEXT_SIZE: usize = MAGIC_TEXT.len();
-const WAL_KIND_SIZE: usize = mem::size_of::<types::Mode>();
 const MAGIC_VERSION_SIZE: usize = mem::size_of::<u16>();
-const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + WAL_KIND_SIZE + MAGIC_VERSION_SIZE;
+const HEADER_SIZE: usize = MAGIC_TEXT_SIZE + MAGIC_VERSION_SIZE;
 /// The mvcc version size.
 const VERSION_SIZE: usize = mem::size_of::<u64>();
 

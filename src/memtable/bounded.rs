@@ -8,7 +8,7 @@ use crate::{
   },
   types::{
     sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
-    Mode, Query, RecordPointer, RefQuery, TypeMode,
+    Query, RecordPointer, RefQuery, TypeMode,
   },
   State, WithVersion,
 };
@@ -128,7 +128,6 @@ pub struct Table<C, T>
 where
   T: TypeMode,
 {
-  pub(in crate::memtable) cmp: Arc<C>,
   pub(in crate::memtable) skl: SkipMap<RecordPointer, (), T::Comparator<C>>,
   pub(in crate::memtable) range_deletions_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
   pub(in crate::memtable) range_updates_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
@@ -183,7 +182,6 @@ where
         skl: points,
         range_updates_skl: range_key_skl,
         range_deletions_skl: range_del_skl,
-        cmp,
       })
     }
   }
@@ -230,10 +228,6 @@ where
       .get_or_remove(_version.unwrap(), &key)
       .map(|_| ())
       .map_err(Either::unwrap_right)
-  }
-  #[inline]
-  fn mode() -> Mode {
-    Mode::MultipleVersion
   }
 }
 

@@ -7,7 +7,6 @@ use crate::{
   types::{EncodedEntryMeta, EntryFlags, Flags, RecordPointer},
   utils::merge_lengths,
   CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
-  WAL_KIND_SIZE,
 };
 use among::Among;
 use core::ptr::NonNull;
@@ -38,8 +37,6 @@ pub trait Log: Sized {
       let mut cursor = 0;
       slice[0..MAGIC_TEXT_SIZE].copy_from_slice(&MAGIC_TEXT);
       cursor += MAGIC_TEXT_SIZE;
-      slice[MAGIC_TEXT_SIZE] = <Self::Memtable as Memtable>::mode() as u8;
-      cursor += WAL_KIND_SIZE;
       slice[cursor..HEADER_SIZE].copy_from_slice(&opts.magic_version().to_le_bytes());
     }
 
@@ -589,7 +586,7 @@ pub trait Log: Sized {
   where
     Self::Checksumer: BuildChecksumer,
   {
-    use crate::{types::Mode, utils::split_lengths};
+    use crate::utils::split_lengths;
     use dbutils::leb128::decode_u64_varint;
     use rarena_allocator::IncompleteBuffer;
 
@@ -600,12 +597,6 @@ pub trait Log: Sized {
       return Err(Error::magic_text_mismatch());
     }
     cursor += MAGIC_TEXT_SIZE;
-    let kind = Mode::try_from(slice[cursor])?;
-    let created_kind = <Self::Memtable as Memtable>::mode();
-    if kind != created_kind {
-      return Err(Error::wal_kind_mismatch(kind, created_kind));
-    }
-    cursor += WAL_KIND_SIZE;
 
     let magic_version = u16::from_le_bytes(slice[cursor..HEADER_SIZE].try_into().unwrap());
     if magic_version != opts.magic_version() {

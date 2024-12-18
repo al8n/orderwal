@@ -4,9 +4,6 @@ use derive_where::derive_where;
 
 use crate::memtable::Memtable;
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-use crate::types::Mode;
-
 /// The batch error type.
 #[derive(Debug)]
 pub enum BatchError {
@@ -79,21 +76,6 @@ pub enum Error<T: Memtable> {
   /// The WAL is read-only.
   ReadOnly,
 
-  /// Unknown WAL kind.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  UnknownMode(UnknownMode),
-
-  /// WAL kind mismatch.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  ModeMismatch {
-    /// The WAL was created with this kind.
-    create: Mode,
-    /// Trying to open the WAL with this kind.
-    open: Mode,
-  },
-
   /// I/O error.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -104,14 +86,6 @@ impl<T: Memtable> From<BatchError> for Error<T> {
   #[inline]
   fn from(e: BatchError) -> Self {
     Self::Batch(e)
-  }
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl<T: Memtable> From<UnknownMode> for Error<T> {
-  #[inline]
-  fn from(e: UnknownMode) -> Self {
-    Self::UnknownMode(e)
   }
 }
 
@@ -158,16 +132,6 @@ where
       ),
       Self::Batch(e) => write!(f, "{e}"),
       Self::ReadOnly => write!(f, "The WAL is read-only"),
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::UnknownMode(e) => write!(f, "{e}"),
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::ModeMismatch { create, open } => write!(
-        f,
-        "the wal was {}, cannot be {}",
-        create.display_created_err_msg(),
-        open.display_open_err_msg()
-      ),
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       Self::IO(e) => write!(f, "{e}"),
     }
@@ -189,10 +153,6 @@ where
       Self::Batch(e) => Some(e),
       Self::ReadOnly => None,
 
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::UnknownMode(e) => Some(e),
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      Self::ModeMismatch { .. } => None,
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       Self::IO(e) => Some(e),
     }
@@ -264,12 +224,6 @@ impl<T: Memtable> Error<T> {
     }
   }
 
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[inline]
-  pub(crate) const fn wal_kind_mismatch(create: Mode, open: Mode) -> Self {
-    Self::ModeMismatch { create, open }
-  }
-
   /// Create a new corrupted error.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
@@ -331,18 +285,3 @@ impl<T: Memtable> Error<T> {
   }
 }
 
-/// Unknown WAL kind error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-pub struct UnknownMode(pub(super) u8);
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl core::fmt::Display for UnknownMode {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    write!(f, "unknown WAL kind: {}", self.0)
-  }
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-impl core::error::Error for UnknownMode {}
