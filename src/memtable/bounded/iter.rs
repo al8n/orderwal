@@ -1,10 +1,30 @@
 use core::ops::{ControlFlow, RangeBounds};
 
-use skl::{Active, MaybeTombstone};
+use skl::{
+  generic::{
+    multiple_version::Map as _, Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator,
+  },
+  Active, MaybeTombstone, State, Transformable,
+};
 
-use crate::types::TypeMode;
+use crate::{
+  memtable::{
+    RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    RangeUpdateEntry as RangeUpdateEntryTrait,
+  },
+  types::{
+    sealed::{PointComparator, Pointee, RangeComparator},
+    Query, RecordPointer, RefQuery, TypeMode,
+  },
+};
 
-use super::*;
+use super::{
+  entry::Entry,
+  point::{IterPoints, RangePoints},
+  range_deletion::RangeDeletionEntry,
+  range_update::RangeUpdateEntry,
+  Table,
+};
 
 /// An iterator over the entries of a `Memtable`.
 pub struct Iter<'a, S, C, T>
@@ -15,6 +35,7 @@ where
 {
   table: &'a Table<C, T>,
   iter: IterPoints<'a, S, C, T>,
+  query_version: u64,
 }
 
 impl<'a, C, T> Iter<'a, MaybeTombstone, C, T>
@@ -23,9 +44,10 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
 {
-  pub(in crate::memtable) fn with_tombstone(table: &'a Table<C, T>) -> Self {
+  pub(in crate::memtable) fn with_tombstone(version: u64, table: &'a Table<C, T>) -> Self {
     Self {
-      iter: IterPoints::new(table.skl.iter_with_tombstone()),
+      iter: IterPoints::new(table.skl.iter_all(version)),
+      query_version: version,
       table,
     }
   }
@@ -37,9 +59,10 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
 {
-  pub(in crate::memtable) fn new(table: &'a Table<C, T>) -> Self {
+  pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>) -> Self {
     Self {
-      iter: IterPoints::new(table.skl.iter()),
+      iter: IterPoints::new(table.skl.iter(version)),
+      query_version: version,
       table,
     }
   }
@@ -66,9 +89,9 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   type Item = Entry<'a, S, C, T>;
 
@@ -76,7 +99,7 @@ where
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       let next = self.iter.next()?;
-      match self.table.validate(next) {
+      match self.table.validate(self.query_version, next) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }
@@ -105,15 +128,15 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     loop {
       let prev = self.iter.next_back()?;
-      match self.table.validate(prev) {
+      match self.table.validate(self.query_version, prev) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }
@@ -132,6 +155,7 @@ where
 {
   table: &'a Table<C, T>,
   iter: RangePoints<'a, S, Q, R, C, T>,
+  query_version: u64,
 }
 
 impl<'a, Q, R, C, T> Range<'a, Active, Q, R, C, T>
@@ -142,9 +166,10 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
 {
-  pub(in crate::memtable) fn new(table: &'a Table<C, T>, r: R) -> Self {
+  pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>, r: R) -> Self {
     Self {
-      iter: RangePoints::new(table.skl.range(r.into())),
+      iter: RangePoints::new(table.skl.range(version, r.into())),
+      query_version: version,
       table,
     }
   }
@@ -158,9 +183,10 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
 {
-  pub(in crate::memtable) fn with_tombstone(table: &'a Table<C, T>, r: R) -> Self {
+  pub(in crate::memtable) fn with_tombstone(version: u64, table: &'a Table<C, T>, r: R) -> Self {
     Self {
-      iter: RangePoints::new(table.skl.range_with_tombstone(r.into())),
+      iter: RangePoints::new(table.skl.range_all(version, r.into())),
+      query_version: version,
       table,
     }
   }
@@ -190,9 +216,9 @@ where
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   type Item = Entry<'a, S, C, T>;
 
@@ -200,7 +226,7 @@ where
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       let next = self.iter.next()?;
-      match self.table.validate(next) {
+      match self.table.validate(self.query_version, next) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }
@@ -230,17 +256,17 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     loop {
       let prev = self.iter.next_back()?;
-      match self.table.validate(prev) {
+      match self.table.validate(self.query_version, prev) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(_) => continue,
       }

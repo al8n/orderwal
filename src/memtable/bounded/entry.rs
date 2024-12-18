@@ -1,4 +1,25 @@
-use super::*;
+use core::ops::ControlFlow;
+
+use skl::{
+  generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
+  Active, MaybeTombstone, State, Transformable,
+};
+
+use crate::{
+  memtable::{
+    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    RangeUpdateEntry as RangeUpdateEntryTrait,
+  },
+  types::{
+    sealed::{PointComparator, Pointee, RangeComparator},
+    Query, RecordPointer, RefQuery, TypeMode,
+  },
+  WithVersion,
+};
+
+use super::{
+  point::PointEntry, range_deletion::RangeDeletionEntry, range_update::RangeUpdateEntry, Table,
+};
 
 /// Entry in the memtable.
 pub struct Entry<'a, S, C, T>
@@ -10,6 +31,8 @@ where
   point_ent: PointEntry<'a, S, C, T>,
   key: <T::Key<'a> as Pointee<'a>>::Output,
   val: Option<S::Data<'a, T::Value<'a>>>,
+  version: u64,
+  query_version: u64,
 }
 
 impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
@@ -28,6 +51,7 @@ where
     f.debug_struct("Entry")
       .field("key", &self.key)
       .field("value", &self.value_in())
+      .field("version", &self.version)
       .finish()
   }
 }
@@ -49,6 +73,8 @@ where
       point_ent: self.point_ent.clone(),
       key: self.key,
       val: self.val.clone(),
+      version: self.version,
+      query_version: self.query_version,
     }
   }
 }
@@ -70,11 +96,11 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, Active, C, T>: RangeUpdateEntryTrait<'a, Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
@@ -94,7 +120,7 @@ where
   fn next(&self) -> Option<Self> {
     let mut next = self.point_ent.next();
     while let Some(ent) = next {
-      match self.table.validate(ent) {
+      match self.table.validate(self.query_version, ent) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(ent) => next = ent.next(),
       }
@@ -106,7 +132,7 @@ where
   fn prev(&self) -> Option<Self> {
     let mut prev = self.point_ent.prev();
     while let Some(ent) = prev {
-      match self.table.validate(ent) {
+      match self.table.validate(self.query_version, ent) {
         ControlFlow::Break(entry) => return entry,
         ControlFlow::Continue(ent) => prev = ent.prev(),
       }
@@ -124,15 +150,19 @@ where
   #[inline]
   pub(crate) fn new(
     table: &'a Table<C, T>,
+    query_version: u64,
     point_ent: PointEntry<'a, S, C, T>,
     key: <T::Key<'a> as Pointee<'a>>::Output,
     val: Option<S::Data<'a, T::Value<'a>>>,
+    version: u64,
   ) -> Self {
     Self {
       table,
       point_ent,
       key,
       val,
+      version,
+      query_version,
     }
   }
 }
@@ -153,5 +183,17 @@ where
       Some(val) => val.transform(),
       None => self.point_ent.value(),
     }
+  }
+}
+
+impl<'a, S, C, T> WithVersion for Entry<'a, S, C, T>
+where
+  S: State,
+  S::Data<'a, T::Value<'a>>: Transformable,
+  T: TypeMode,
+{
+  #[inline]
+  fn version(&self) -> u64 {
+    self.version
   }
 }

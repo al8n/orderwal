@@ -1,5 +1,5 @@
 use orderwal::{
-  dynamic::multiple_version::{OrderWal, Reader, Writer},
+  dynamic::{OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   Builder,
 };

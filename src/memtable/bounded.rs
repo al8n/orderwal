@@ -1,658 +1,42 @@
-macro_rules! construct_skl {
-  ($builder:ident) => {{
-    $builder.alloc()
-  }};
-  ($builder:ident($mmap:ident)) => {{
-    if $mmap {
-      $builder.map_anon().map_err(skl::error::Error::IO)
-    } else {
-      $builder.alloc()
-    }
-  }};
-}
-
-macro_rules! memmap_or_not {
-  ($opts:ident($arena:ident)) => {{
-    paste::paste! {
-      use skl::Arena;
-
-      let arena_opts = skl::Options::new()
-      .with_capacity($opts.capacity())
-      .with_freelist(skl::options::Freelist::None)
-      .with_compression_policy(skl::options::CompressionPolicy::None)
-      .with_unify(false)
-      .with_max_height($opts.max_height());
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      let mmap = $opts.map_anon();
-      let cmp = Arc::new($opts.cmp);
-      let ptr = $arena.raw_ptr();
-      let points_cmp = <T::Comparator<C> as $crate::types::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
-      let range_del_cmp = <T::RangeComparator<C> as $crate::types::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
-      let range_update_cmp = <T::RangeComparator<C> as $crate::types::sealed::ComparatorConstructor<_>>::new(ptr, cmp.clone());
-
-      let b = skl::generic::Builder::with(points_cmp).with_options(arena_opts);
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      let points: SkipMap<_, _, _> = construct_skl!(b(mmap))?;
-      #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
-      let points: SkipMap<_, _, T::Comparator<C>> = construct_skl!(b)?;
-
-      let allocator = points.allocator().clone();
-      let range_del_skl = SkipMap::<_, _, _>::create_from_allocator(
-        allocator.clone(),
-        range_del_cmp,
-      )?;
-      let range_key_skl =
-        SkipMap::<_, _, _>::create_from_allocator(allocator, range_update_cmp)?;
-
-      Ok(Self {
-        skl: points,
-        range_updates_skl: range_key_skl,
-        range_deletions_skl: range_del_skl,
-        cmp,
-      })
-    }
-  }};
-}
-
-macro_rules! memtable {
-  ($mode:ident($($version:ident)?)) => {
-    paste::paste! {
-      use among::Among;
-      use skl::{
-        either::Either, generic::$mode::{sync::SkipMap, Map}
-      };
-      use triomphe::Arc;
-
-      use crate::{
-        memtable::{Memtable, bounded::TableOptions},
-        types::{Mode, RecordPointer},
-      };
-
-      /// A memory table implementation based on ARENA [`SkipMap`](skl).
-      pub struct Table<C, T>
-      where
-        T: $crate::types::TypeMode,
-      {
-        pub(in crate::memtable) cmp: Arc<C>,
-        pub(in crate::memtable) skl: SkipMap<RecordPointer, (), T::Comparator<C>>,
-        pub(in crate::memtable) range_deletions_skl:
-          SkipMap<RecordPointer, (), T::RangeComparator<C>>,
-        pub(in crate::memtable) range_updates_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
-      }
-
-      impl<C, T> Memtable for Table<C, T>
-      where
-        C: 'static,
-        T: $crate::types::TypeMode,
-        T::Comparator<C>: dbutils::equivalentor::TypeRefComparator<RecordPointer> + 'static,
-        T::RangeComparator<C>: dbutils::equivalentor::TypeRefComparator<RecordPointer> + 'static,
-      {
-        type Options = TableOptions<C>;
-
-        type Error = skl::error::Error;
-
-        #[inline]
-        fn new<A>(arena: A, opts: Self::Options) -> Result<Self, Self::Error>
-        where
-          Self: Sized,
-          A: rarena_allocator::Allocator,
-        {
-          memmap_or_not!(opts(arena))
-        }
-
-        #[inline]
-        fn len(&self) -> usize {
-          self.skl.len() + self.range_deletions_skl.len() + self.range_updates_skl.len()
-        }
-
-        #[inline]
-        fn insert(&self, [< _ $($version)? >]: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
-          self
-            .skl
-            .insert($([< _ $version >].unwrap(),)? &pointer, &())
-            .map(|_| ())
-            .map_err(Among::unwrap_right)
-        }
-
-        #[inline]
-        fn remove(&self, [< _ $($version)? >]: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
-          self
-            .skl
-            .get_or_remove($([< _ $version >].unwrap(),)? &key)
-            .map(|_| ())
-            .map_err(Either::unwrap_right)
-        }
-
-        #[inline]
-        fn range_remove(&self, [< _ $($version)? >]: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
-          self
-            .range_deletions_skl
-            .insert($([< _ $version >].unwrap(),)? &pointer, &())
-            .map(|_| ())
-            .map_err(Among::unwrap_right)
-        }
-
-        #[inline]
-        fn range_set(&self, [< _ $($version)? >]: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
-          self
-            .range_updates_skl
-            .insert($([< _ $version >].unwrap(),)? &pointer, &())
-            .map(|_| ())
-            .map_err(Among::unwrap_right)
-        }
-
-        #[inline]
-        fn range_unset(&self, [< _ $($version)? >]: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
-          self
-            .range_updates_skl
-            .get_or_remove($([< _ $version >].unwrap(),)? &key)
-            .map(|_| ())
-            .map_err(Either::unwrap_right)
-        }
-
-        #[inline]
-        fn mode() -> Mode {
-          Mode::[< $mode:camel >]
-        }
-      }
-    }
-  };
-}
-
-macro_rules! point_entry_wrapper {
-  (
-    $(#[$meta:meta])*
-    $ent:ident($inner:ident) $(::$version:ident)?
-  ) => {
-    $(#[$meta])*
-    pub struct $ent<'a, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-    {
-      pub(in crate::memtable) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>,
-      data: core::cell::OnceCell<$crate::types::RawEntryRef<'a>>,
-      key: core::cell::OnceCell<T::Key<'a>>,
-      pub(in crate::memtable) value: core::cell::OnceCell<S::Data<'a, T::Value<'a>>>,
-    }
-
-    impl<S, C, T> core::fmt::Debug for $ent<'_, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-      T::Comparator<C>: $crate::types::sealed::PointComparator<C>,
-    {
-      fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use crate::types::sealed::PointComparator;
-
-        self.data.get_or_init(|| {
-          self.ent.comparator().fetch_entry(self.ent.key())
-        }).write_fmt(stringify!($ent), f)
-      }
-    }
-
-    impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
-    where
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Clone,
-      S::Data<'a, T::Value<'a>>: Clone,
-      T: $crate::types::TypeMode,
-      T::Key<'a>: Clone,
-    {
-      #[inline]
-      fn clone(&self) -> Self {
-        Self {
-          ent: self.ent.clone(),
-          data: self.data.clone(),
-          key: self.key.clone(),
-          value: self.value.clone(),
-        }
-      }
-    }
-
-    impl<'a, S, C, T> $ent<'a, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-    {
-      #[inline]
-      pub(in crate::memtable) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::Comparator<C>>) -> Self {
-        Self {
-          ent,
-          data: core::cell::OnceCell::new(),
-          key: core::cell::OnceCell::new(),
-          value: core::cell::OnceCell::new(),
-        }
-      }
-    }
-
-    impl<'a, S, C, T> $crate::memtable::MemtableEntry<'a> for $ent<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: skl::Transformable<Input = Option<&'a [u8]>>,
-      S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
-      T: $crate::types::TypeMode,
-      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]> + 'a,
-      T::Comparator<C>: $crate::types::sealed::PointComparator<C> + dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>,
-    {
-      type Key = <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output;
-      type Value = <S::Data<'a, T::Value<'a>> as skl::Transformable>::Output;
-
-      #[inline]
-      fn key(&self) -> Self::Key {
-        use $crate::types::sealed::{PointComparator, Pointee};
-
-        self.key.get_or_init(|| {
-          let ent = self.data.get_or_init(|| {
-            self.ent.comparator().fetch_entry(self.ent.key())
-          });
-
-          <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
-        }).output()
-      }
-
-      #[inline]
-      fn value(&self) -> Self::Value {
-        use $crate::types::sealed::PointComparator;
-        use skl::Transformable;
-
-        self.value.get_or_init(|| {
-          let ent = self.data.get_or_init(|| {
-            self.ent.comparator().fetch_entry(self.ent.key())
-          });
-
-          <S::Data<'a, _> as skl::Transformable>::from_input(ent.value())
-        }).transform()
-      }
-
-      #[inline]
-      fn next(&self) -> Option<Self> {
-        self.ent.next().map(Self::new)
-      }
-
-      #[inline]
-      fn prev(&self) -> Option<Self> {
-        self.ent.prev().map(Self::new)
-      }
-    }
-
-    $(
-      impl<S, C, T> $crate::WithVersion for $ent<'_, S, C, T>
-      where
-        C: 'static,
-        S: $crate::State,
-        T: $crate::types::TypeMode,
-      {
-        #[inline]
-        fn $version(&self) -> u64 {
-          self.ent.$version()
-        }
-      }
-    )?
-  };
-}
-
-macro_rules! range_entry_wrapper {
-  (
-    $(#[$meta:meta])*
-    $ent:ident($inner:ident => $raw:ident.$fetch:ident) $(::$version:ident)?
-  ) => {
-    $(#[$meta])*
-    pub struct $ent<'a, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-    {
-      pub(crate) ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>,
-      data: core::cell::OnceCell<$crate::types::$raw<'a>>,
-      start_bound: core::cell::OnceCell<core::ops::Bound<T::Key<'a>>>,
-      end_bound: core::cell::OnceCell<core::ops::Bound<T::Key<'a>>>,
-      value: core::cell::OnceCell<S::Data<'a, T::Value<'a>>>,
-    }
-
-    impl<S, C, T> core::fmt::Debug for $ent<'_, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-      T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
-        + $crate::types::sealed::RangeComparator<C>,
-    {
-      fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use crate::types::sealed::RangeComparator;
-
-        self.data.get_or_init(|| {
-          self.ent.comparator().$fetch(self.ent.key())
-        }).write_fmt(stringify!($ent), f)
-      }
-    }
-
-    impl<'a, S, C, T> Clone for $ent<'a, S, C, T>
-    where
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Clone,
-      T: $crate::types::TypeMode,
-      S::Data<'a, T::Value<'a>>: Clone,
-      T::Key<'a>: Clone,
-    {
-      #[inline]
-      fn clone(&self) -> Self {
-        Self {
-          ent: self.ent.clone(),
-          data: self.data.clone(),
-          start_bound: self.start_bound.clone(),
-          end_bound: self.end_bound.clone(),
-          value: self.value.clone(),
-        }
-      }
-    }
-
-    impl<'a, S, C, T> $ent<'a, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-    {
-      pub(in crate::memtable) fn new(ent: $inner<'a, $crate::types::RecordPointer, (), S, T::RangeComparator<C>>) -> Self {
-        Self {
-          ent,
-          data: core::cell::OnceCell::new(),
-          start_bound: core::cell::OnceCell::new(),
-          end_bound: core::cell::OnceCell::new(),
-          value: core::cell::OnceCell::new(),
-        }
-      }
-    }
-
-    impl<'a, S, C, T> $crate::memtable::RangeEntry<'a> for $ent<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: skl::Transformable<Input = Option<&'a [u8]>>,
-      T: $crate::types::TypeMode,
-      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]> + 'a,
-      T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
-        + $crate::types::sealed::RangeComparator<C>,
-    {
-      type Key = <T::Key<'a> as $crate::types::sealed::Pointee<'a>>::Output;
-
-      #[inline]
-      fn start_bound(&self) -> core::ops::Bound<Self::Key> {
-        use $crate::types::sealed::{RangeComparator, Pointee};
-
-        let start_bound = self.start_bound.get_or_init(|| {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
-
-          ent.start_bound().map(<T::Key<'a> as $crate::types::sealed::Pointee>::from_input)
-        });
-        start_bound.as_ref().map(|k| k.output())
-      }
-
-      #[inline]
-      fn end_bound(&self) -> core::ops::Bound<Self::Key> {
-        use $crate::types::sealed::{RangeComparator, Pointee};
-
-        let end_bound = self.end_bound.get_or_init(|| {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().$fetch(self.ent.key()));
-
-          ent.end_bound().map(<T::Key<'a> as $crate::types::sealed::Pointee>::from_input)
-        });
-        end_bound.as_ref().map(|k| k.output())
-      }
-
-      #[inline]
-      fn next(&mut self) -> Option<Self> {
-        self.ent.next().map(Self::new)
-      }
-
-      #[inline]
-      fn prev(&mut self) -> Option<Self> {
-        self.ent.prev().map(Self::new)
-      }
-    }
-
-    $(
-      impl<S, C, T> $crate::WithVersion for $ent<'_, S, C, T>
-      where
-        C: 'static,
-        S: $crate::State,
-        T: $crate::types::TypeMode,
-      {
-        #[inline]
-        fn $version(&self) -> u64 {
-          self.ent.$version()
-        }
-      }
-    )?
-  };
-}
-
-macro_rules! range_deletion_wrapper {
-  (
-    $(#[$meta:meta])*
-    $ent:ident($inner:ident) $(::$version:ident)?
-  ) => {
-    range_entry_wrapper! {
-      $(#[$meta])*
-      $ent($inner => RawRangeDeletionRef.fetch_range_deletion) $(::$version)?
-    }
-
-    impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a>
-      for $ent<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: skl::Transformable<Input = Option<&'a [u8]>>,
-      T: $crate::types::TypeMode,
-      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]> + 'a,
-      T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
-        + $crate::types::sealed::RangeComparator<C>,
-    {
-    }
-  };
-}
-
-macro_rules! range_update_wrapper {
-  (
-    $(#[$meta:meta])*
-    $ent:ident($inner:ident) $(::$version:ident)?
-  ) => {
-    range_entry_wrapper! {
-      $(#[$meta])*
-      $ent($inner => RawRangeUpdateRef.fetch_range_update) $(::$version)?
-    }
-
-    impl<'a, S, C, T> crate::memtable::RangeUpdateEntry<'a>
-      for $ent<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State + 'a,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Sized + skl::Transformable<Input = Option<&'a [u8]>>,
-      S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
-      T: $crate::types::TypeMode,
-      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]> + 'a,
-      T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
-        + $crate::types::sealed::RangeComparator<C>,
-    {
-      type Value = <S::Data<'a, T::Value<'a>> as skl::Transformable>::Output;
-
-      #[inline]
-      fn value(&self) -> Self::Value {
-        use $crate::types::sealed::RangeComparator;
-        use skl::Transformable;
-
-        self.value.get_or_init(|| {
-          let ent = self
-          .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-          <S::Data<'a, T::Value<'a>> as skl::Transformable>::from_input(ent.value())
-        }).transform()
-      }
-    }
-
-    impl<'a, S, C, T> $ent<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State + 'a,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Sized + skl::Transformable<Input = Option<&'a [u8]>>,
-      S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
-      T: $crate::types::TypeMode,
-      T::Key<'a>: $crate::types::sealed::Pointee<'a, Input = &'a [u8]> + 'a,
-      T::RangeComparator<C>:
-        dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer>
-        + $crate::types::sealed::RangeComparator<C>,
-    {
-      #[inline]
-      pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> {
-        use $crate::types::sealed::RangeComparator;
-
-        self.value.get_or_init(|| {
-          let ent = self
-          .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-          <S::Data<'a, T::Value<'a>> as skl::Transformable>::from_input(ent.value())
-        });
-        self.value.into_inner().unwrap()
-      }
-    }
-  };
-}
-
-macro_rules! iter_wrapper {
-  (
-    $(#[$meta:meta])*
-    $iter:ident($inner:ident) yield $ent:ident by $cmp:ident
-  ) => {
-    $(#[$meta])*
-    pub struct $iter<'a, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-    {
-      iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>,
-    }
-
-    impl<'a, S, C, T> $iter<'a, S, C, T>
-    where
-      S: $crate::State,
-      T: $crate::types::TypeMode,
-    {
-      #[inline]
-      pub(in crate::memtable) const fn new(iter: $inner<'a, $crate::types::RecordPointer, (), S, T::$cmp<C>>) -> Self {
-        Self { iter }
-      }
-    }
-
-    impl<'a, S, C, T> Iterator for $iter<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Clone + skl::Transformable<Input = Option<&'a [u8]>>,
-      T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer> + 'a,
-    {
-      type Item = $ent<'a, S, C, T>;
-
-      #[inline]
-      fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map($ent::new)
-      }
-    }
-
-    impl<'a, S, C, T> DoubleEndedIterator for $iter<'a, S, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Clone + skl::Transformable<Input = Option<&'a [u8]>>,
-      T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefComparator<$crate::types::RecordPointer> + 'a,
-    {
-      #[inline]
-      fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map($ent::new)
-      }
-    }
-  };
-}
-
-macro_rules! range_wrapper {
-  (
-    $(#[$meta:meta])*
-    $iter:ident($inner:ident) yield $ent:ident by $cmp:ident
-  ) => {
-    $(#[$meta])*
-    pub struct $iter<'a, S, Q, R, C, T>
-    where
-      S: $crate::State,
-      Q: ?Sized,
-      T: $crate::types::TypeMode,
-    {
-      range: $inner<'a, $crate::types::RecordPointer, (), S, $crate::types::Query<Q>, $crate::types::QueryRange<Q, R>, T::$cmp<C>>,
-    }
-
-    impl<'a, S, Q, R, C, T> $iter<'a, S, Q, R, C, T>
-    where
-      S: $crate::State,
-      Q: ?Sized,
-      T: $crate::types::TypeMode,
-    {
-      #[inline]
-      pub(in crate::memtable) const fn new(range: $inner<'a, $crate::types::RecordPointer, (), S, $crate::types::Query<Q>, $crate::types::QueryRange<Q, R>, T::$cmp<C>>) -> Self {
-        Self { range }
-      }
-    }
-
-    impl<'a, S, Q, R, C, T> Iterator for $iter<'a, S, Q, R, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Clone + skl::Transformable<Input = Option<&'a [u8]>>,
-      R: core::ops::RangeBounds<Q>,
-      Q: ?Sized,
-      T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<$crate::types::RecordPointer, $crate::types::Query<Q>> + 'a,
-    {
-      type Item = $ent<'a, S, C, T>;
-
-      #[inline]
-      fn next(&mut self) -> Option<Self::Item> {
-        self.range.next().map($ent::new)
-      }
-    }
-
-    impl<'a, S, Q, R, C, T> DoubleEndedIterator for $iter<'a, S, Q, R, C, T>
-    where
-      C: 'static,
-      S: $crate::State,
-      S::Data<'a, dbutils::types::LazyRef<'a, ()>>: Clone + skl::Transformable<Input = Option<&'a [u8]>>,
-      R: core::ops::RangeBounds<Q>,
-      Q: ?Sized,
-      T: $crate::types::TypeMode,
-      T::$cmp<C>: dbutils::equivalentor::TypeRefQueryComparator<$crate::types::RecordPointer, $crate::types::Query<Q>> + 'a,
-    {
-      #[inline]
-      fn next_back(&mut self) -> Option<Self::Item> {
-        self.range.next_back().map($ent::new)
-      }
-    }
-  };
-}
-
 use skl::generic::Ascend;
 pub use skl::Height;
 
-pub(crate) mod multiple_version;
-pub(crate) mod unique;
+use crate::{
+  memtable::{
+    Memtable, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    RangeEntryExt as _, RangeUpdateEntry as RangeUpdateEntryTrait,
+  },
+  types::{
+    sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
+    Mode, Query, RecordPointer, RefQuery, TypeMode,
+  },
+  State, WithVersion,
+};
+use core::ops::ControlFlow;
+use ref_cast::RefCast;
+use skl::{
+  generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
+  Active, MaybeTombstone, Transformable,
+};
+
+use among::Among;
+use skl::{
+  either::Either,
+  generic::multiple_version::{sync::SkipMap, Map},
+};
+use triomphe::Arc;
+
+pub use entry::*;
+pub use iter::*;
+pub use point::*;
+pub use range_deletion::*;
+pub use range_update::*;
+
+mod entry;
+mod iter;
+mod point;
+mod range_deletion;
+mod range_update;
 
 /// Options to configure the [`Table`] or [`MultipleVersionTable`].
 #[derive(Debug, Copy, Clone)]
@@ -736,5 +120,217 @@ impl<C> TableOptions<C> {
   #[inline]
   pub const fn max_height(&self) -> Height {
     self.max_height
+  }
+}
+
+/// A memory table implementation based on ARENA [`SkipMap`](skl).
+pub struct Table<C, T>
+where
+  T: TypeMode,
+{
+  pub(in crate::memtable) cmp: Arc<C>,
+  pub(in crate::memtable) skl: SkipMap<RecordPointer, (), T::Comparator<C>>,
+  pub(in crate::memtable) range_deletions_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
+  pub(in crate::memtable) range_updates_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
+}
+impl<C, T> Memtable for Table<C, T>
+where
+  C: 'static,
+  T: TypeMode,
+  T::Comparator<C>: TypeRefComparator<RecordPointer> + 'static,
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'static,
+{
+  type Options = TableOptions<C>;
+  type Error = skl::error::Error;
+  #[inline]
+  fn new<A>(arena: A, opts: Self::Options) -> Result<Self, Self::Error>
+  where
+    Self: Sized,
+    A: rarena_allocator::Allocator,
+  {
+    {
+      use skl::Arena;
+      let arena_opts = skl::Options::new()
+        .with_capacity(opts.capacity())
+        .with_freelist(skl::options::Freelist::None)
+        .with_compression_policy(skl::options::CompressionPolicy::None)
+        .with_unify(false)
+        .with_max_height(opts.max_height());
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let mmap = opts.map_anon();
+      let cmp = Arc::new(opts.cmp);
+      let ptr = arena.raw_ptr();
+      let points_cmp = <T::Comparator<C> as ComparatorConstructor<_>>::new(ptr, cmp.clone());
+      let range_del_cmp =
+        <T::RangeComparator<C> as ComparatorConstructor<_>>::new(ptr, cmp.clone());
+      let range_update_cmp =
+        <T::RangeComparator<C> as ComparatorConstructor<_>>::new(ptr, cmp.clone());
+      let b = skl::generic::Builder::with(points_cmp).with_options(arena_opts);
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let points: SkipMap<_, _, _> = {
+        if mmap {
+          b.map_anon().map_err(skl::error::Error::IO)
+        } else {
+          b.alloc()
+        }
+      }?;
+      let allocator = points.allocator().clone();
+      let range_del_skl =
+        SkipMap::<_, _, _>::create_from_allocator(allocator.clone(), range_del_cmp)?;
+      let range_key_skl = SkipMap::<_, _, _>::create_from_allocator(allocator, range_update_cmp)?;
+      Ok(Self {
+        skl: points,
+        range_updates_skl: range_key_skl,
+        range_deletions_skl: range_del_skl,
+        cmp,
+      })
+    }
+  }
+  #[inline]
+  fn len(&self) -> usize {
+    self.skl.len() + self.range_deletions_skl.len() + self.range_updates_skl.len()
+  }
+  #[inline]
+  fn insert(&self, _version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .skl
+      .insert(_version.unwrap(), &pointer, &())
+      .map(|_| ())
+      .map_err(Among::unwrap_right)
+  }
+  #[inline]
+  fn remove(&self, _version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .skl
+      .get_or_remove(_version.unwrap(), &key)
+      .map(|_| ())
+      .map_err(Either::unwrap_right)
+  }
+  #[inline]
+  fn range_remove(&self, _version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_deletions_skl
+      .insert(_version.unwrap(), &pointer, &())
+      .map(|_| ())
+      .map_err(Among::unwrap_right)
+  }
+  #[inline]
+  fn range_set(&self, _version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_updates_skl
+      .insert(_version.unwrap(), &pointer, &())
+      .map(|_| ())
+      .map_err(Among::unwrap_right)
+  }
+  #[inline]
+  fn range_unset(&self, _version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_updates_skl
+      .get_or_remove(_version.unwrap(), &key)
+      .map(|_| ())
+      .map_err(Either::unwrap_right)
+  }
+  #[inline]
+  fn mode() -> Mode {
+    Mode::MultipleVersion
+  }
+}
+
+impl<'a, C, T> Table<C, T>
+where
+  C: 'static,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Comparator<C>: PointComparator<C>
+    + TypeRefComparator<RecordPointer>
+    + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
+    + 'static,
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
+    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+    + RangeComparator<C>
+    + 'static,
+  RangeDeletionEntry<'a, Active, C, T>:
+    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+{
+  pub(in crate::memtable) fn validate<S>(
+    &'a self,
+    query_version: u64,
+    ent: PointEntry<'a, S, C, T>,
+  ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
+  where
+    S: State,
+    S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+    S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+    <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+        'a,
+        Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>,
+      > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  {
+    let key = ent.key();
+    let cmp = ent.ent.comparator();
+    let version = ent.ent.version();
+    let query = RefQuery::new(key);
+    let shadow = self
+      .range_deletions_skl
+      .range(query_version, ..=&query)
+      .any(|ent| {
+        let del_ent_version = ent.version();
+        if !(version <= del_ent_version && del_ent_version <= query_version) {
+          return false;
+        }
+        let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
+        dbutils::equivalentor::RangeComparator::contains(
+          cmp,
+          &ent.query_range(),
+          Query::ref_cast(&query.query),
+        )
+      });
+    if shadow {
+      return ControlFlow::Continue(ent);
+    }
+    let range_ent = self
+      .range_updates_skl
+      .range_all(query_version, ..=&query)
+      .filter_map(|ent| {
+        let range_ent_version = ent.version();
+        if !(version <= range_ent_version && range_ent_version <= query_version) {
+          return None;
+        }
+        let ent = RangeUpdateEntry::<MaybeTombstone, C, T>::new(ent);
+        if dbutils::equivalentor::RangeComparator::contains(
+          cmp,
+          &ent.query_range(),
+          Query::ref_cast(&query.query),
+        ) {
+          Some(ent)
+        } else {
+          None
+        }
+      })
+      .max_by_key(|e| e.version());
+    if let Some(range_ent) = range_ent {
+      let version = range_ent.version();
+      if let Some(val) = range_ent.into_value() {
+        return ControlFlow::Break(Some(Entry::new(
+          self,
+          query_version,
+          ent,
+          key,
+          Some(S::data(val)),
+          version,
+        )));
+      }
+    }
+    let version = ent.version();
+    ControlFlow::Break(Some(Entry::new(
+      self,
+      query_version,
+      ent,
+      key,
+      None,
+      version,
+    )))
   }
 }

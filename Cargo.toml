@@ -85,8 +85,8 @@ path = "examples/zero_cost.rs"
 required-features = ["memmap"]
 
 [[example]]
-name = "multiple_version"
-path = "examples/multiple_version.rs"
+name = "basic"
+path = "examples/basic.rs"
 required-features = ["memmap"]
 
 [[example]]
