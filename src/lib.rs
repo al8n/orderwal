@@ -56,8 +56,8 @@ mod log;
 mod options;
 mod types;
 
-// /// Dynamic ordered write-ahead log implementation.
-// pub mod dynamic;
+/// Dynamic ordered write-ahead log implementation.
+pub mod dynamic;
 
 /// Memory table related traits and structs.
 pub mod memtable;

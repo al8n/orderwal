@@ -1,6 +1,6 @@
 use core::{
   borrow::Borrow,
-  ops::{ControlFlow, RangeBounds},
+  ops::{Bound, ControlFlow, RangeBounds},
 };
 
 use ref_cast::RefCast as _;
@@ -174,7 +174,9 @@ where
   where
     Q: ?Sized + Borrow<[u8]>,
   {
-    todo!()
+    self
+      .range::<Q, _>(version, (Bound::Unbounded, bound))
+      .next_back()
   }
 
   #[inline]
@@ -186,17 +188,19 @@ where
   where
     Q: ?Sized + Borrow<[u8]>,
   {
-    todo!()
+    self
+      .range::<Q, _>(version, (bound, Bound::Unbounded))
+      .next()
   }
 
   #[inline]
   fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
-    todo!()
+    self.iter(version).next()
   }
 
   #[inline]
   fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
-    todo!()
+    self.iter(version).next_back()
   }
 
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_, Active>>

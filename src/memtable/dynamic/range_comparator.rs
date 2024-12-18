@@ -28,21 +28,12 @@ impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableRange
 }
 
 impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeComparator<C> {
-  fn fetch_range_update<'a, T>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a, T>
-  where
-    T: crate::types::TypeMode,
-    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-    T::Value<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-  {
-    unsafe { fetch_raw_range_update_entry::<T>(self.ptr, kp) }
+  fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a> {
+    unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
   }
 
-  fn fetch_range_deletion<'a, T>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a, T>
-  where
-    T: crate::types::TypeMode,
-    T::Key<'a>: crate::types::sealed::Pointee<'a, Input = &'a [u8]>,
-  {
-    unsafe { fetch_raw_range_deletion_entry::<T>(self.ptr, kp) }
+  fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a> {
+    unsafe { fetch_raw_range_deletion_entry(self.ptr, kp) }
   }
 }
 
@@ -53,7 +44,7 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     C: BytesEquivalentor,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
       match ak {
         Bound::Included(k) => self.cmp.equivalent(k, b),
         Bound::Excluded(k) => self.cmp.equivalent(k, b),
@@ -68,8 +59,8 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     C: BytesEquivalentor,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
-      let bk = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, b);
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
+      let bk = fetch_raw_range_key_start_bound(self.ptr, b);
 
       match (ak, bk) {
         (Bound::Unbounded, Bound::Unbounded) => true,
@@ -92,7 +83,7 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     C: BytesComparator,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
       match ak {
         Bound::Included(k) => self.cmp.compare(k, b),
         Bound::Excluded(k) => self.cmp.compare(k, b).then(cmp::Ordering::Greater),
@@ -107,8 +98,8 @@ impl<C: ?Sized> MemtableRangeComparator<C> {
     C: BytesComparator,
   {
     unsafe {
-      let ak = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, a);
-      let bk = fetch_raw_range_key_start_bound::<&[u8]>(self.ptr, b);
+      let ak = fetch_raw_range_key_start_bound(self.ptr, a);
+      let bk = fetch_raw_range_key_start_bound(self.ptr, b);
 
       match (ak, bk) {
         (Bound::Included(_), Bound::Unbounded) => cmp::Ordering::Greater,

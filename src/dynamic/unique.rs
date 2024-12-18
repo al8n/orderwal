@@ -99,7 +99,7 @@ pub trait Reader: Log {
 
   /// Returns an iterator over the entries in the WAL.
   #[inline]
-  fn iter(&self) -> <Self::Memtable as DynamicMemtable>::Iterator<'_>
+  fn iter(&self) -> <Self::Memtable as DynamicMemtable>::Iterator<'_, Active>
   where
     Self::Memtable: DynamicMemtable,
   {
@@ -108,7 +108,7 @@ pub trait Reader: Log {
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range<Q, R>(&self, range: R) -> <Self::Memtable as DynamicMemtable>::Range<'_, Q, R>
+  fn range<Q, R>(&self, range: R) -> <Self::Memtable as DynamicMemtable>::Range<'_, Active, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized + Borrow<[u8]>,
@@ -267,7 +267,7 @@ pub trait Reader: Log {
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(&self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
+  fn first(&self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, Active>>
   where
     Self::Memtable: DynamicMemtable,
   {
@@ -276,7 +276,7 @@ pub trait Reader: Log {
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(&self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_>>
+  fn last(&self) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, Active>>
   where
     Self::Memtable: DynamicMemtable,
   {
@@ -295,7 +295,7 @@ pub trait Reader: Log {
 
   /// Gets the value associated with the key.
   #[inline]
-  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, Active>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
@@ -309,7 +309,7 @@ pub trait Reader: Log {
   fn upper_bound<'a, Q>(
     &'a self,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, Active>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,
@@ -323,7 +323,7 @@ pub trait Reader: Log {
   fn lower_bound<'a, Q>(
     &'a self,
     bound: Bound<&'a Q>,
-  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a>>
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, Active>>
   where
     Q: ?Sized + Borrow<[u8]>,
     Self::Memtable: DynamicMemtable,

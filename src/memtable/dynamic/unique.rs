@@ -95,28 +95,18 @@ pub trait DynamicMemtable: Memtable {
   /// Returns the upper bound of the memtable.
   fn upper_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<Self::Entry<'a, Active>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-  {
-    self.range::<Q, _>((Bound::Unbounded, bound)).next_back()
-  }
+    Q: ?Sized + Borrow<[u8]>;
 
   /// Returns the lower bound of the memtable.
   fn lower_bound<'a, Q>(&'a self, bound: Bound<&'a Q>) -> Option<Self::Entry<'a, Active>>
   where
-    Q: ?Sized + Borrow<[u8]>,
-  {
-    self.range::<Q, _>((bound, Bound::Unbounded)).next()
-  }
+    Q: ?Sized + Borrow<[u8]>;
 
   /// Returns the first pointer in the memtable.
-  fn first(&self) -> Option<Self::Entry<'_, Active>> {
-    self.iter().next()
-  }
+  fn first(&self) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the last pointer in the memtable.
-  fn last(&self) -> Option<Self::Entry<'_, Active>> {
-    self.iter().next_back()
-  }
+  fn last(&self) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the pointer associated with the key.
   fn get<Q>(&self, key: &Q) -> Option<Self::Entry<'_, Active>>

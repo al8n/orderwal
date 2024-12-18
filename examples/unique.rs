@@ -23,19 +23,10 @@ fn main() {
   wal.insert(b"c", b"c1".as_slice()).unwrap();
   wal.insert(b"c", b"c3".as_slice()).unwrap();
 
-  for ent in wal.iter_points_with_tombstone() {
-    println!("{:?}", ent);
-  }
 
-  // let a = wal.get(2, b"a").unwrap();
-  // let c = wal.get(2, b"c").unwrap();
+  let a = wal.get(b"a").unwrap();
+  let c = wal.get(b"c").unwrap();
 
-  // assert_eq!(a.value(), b"a1");
-  // assert_eq!(c.value(), b"c1");
-
-  // let a = wal.get(3, b"a").unwrap();
-  // let c = wal.get(3, b"c").unwrap();
-
-  // assert_eq!(a.value(), b"a3");
-  // assert_eq!(c.value(), b"c3");
+  assert_eq!(a.value(), b"a3");
+  assert_eq!(c.value(), b"c3");
 }

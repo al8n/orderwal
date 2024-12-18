@@ -20,6 +20,7 @@ fn main() {
 
   wal.insert(1, b"a", b"a1".as_slice()).unwrap();
   wal.insert(3, b"a", b"a3".as_slice()).unwrap();
+  wal.insert(3, b"a", b"a5".as_slice()).unwrap();
   wal.insert(1, b"c", b"c1".as_slice()).unwrap();
   wal.insert(3, b"c", b"c3".as_slice()).unwrap();
 
@@ -32,6 +33,6 @@ fn main() {
   let a = wal.get(3, b"a").unwrap();
   let c = wal.get(3, b"c").unwrap();
 
-  assert_eq!(a.value(), b"a3");
+  assert_eq!(a.value(), b"a5");
   assert_eq!(c.value(), b"c3");
 }
