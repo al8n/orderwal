@@ -209,36 +209,6 @@ pub(crate) struct EncodedRangeEntryMeta {
 
 impl EncodedRangeEntryMeta {
   #[inline]
-  pub(crate) const fn batch(start_key_len: usize, end_key_len: usize, value_len: usize) -> Self {
-    let range_key_len = merge_lengths(start_key_len as u32, end_key_len as u32);
-    let range_key_len_size = encoded_u64_varint_len(range_key_len);
-    let total_range_key_size = range_key_len_size + start_key_len + end_key_len;
-
-    // Cast to u32 is safe, because we already checked those values before calling this function.
-
-    let len = merge_lengths(total_range_key_size as u32, value_len as u32);
-    let len_size = encoded_u64_varint_len(len);
-    let elen = EntryFlags::SIZE as u32
-      + VERSION_SIZE as u32
-      + len_size as u32
-      + total_range_key_size as u32
-      + value_len as u32;
-
-    Self {
-      packed_kvlen_size: len_size,
-      packed_kvlen: len,
-      entry_size: elen,
-      range_key_len,
-      range_key_len_size,
-      total_range_key_size,
-      start_key_len,
-      end_key_len,
-      vlen: value_len,
-      batch: true,
-    }
-  }
-
-  #[inline]
   pub(crate) const fn batch_zero() -> Self {
     Self {
       packed_kvlen_size: 0,
@@ -270,7 +240,7 @@ impl EncodedRangeEntryMeta {
 
   #[inline]
   pub(crate) const fn start_key_offset(&self) -> usize {
-    VERSION_SIZE + self.packed_kvlen_size + self.range_key_len_size
+    self.range_key_offset() + self.range_key_len_size
   }
 
   #[inline]

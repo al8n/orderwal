@@ -1,5 +1,5 @@
 use crate::{
-  batch::Batch,
+  batch::{Batch, Data},
   checksum::{BuildChecksumer, Checksumer},
   error::Error,
   memtable::Memtable,
@@ -338,8 +338,8 @@ pub trait Log: Sized {
       return Err(Among::Right(Error::read_only()));
     }
 
-    let start_bound = BoundWriter::new(start_bound);
-    let end_bound = BoundWriter::new(end_bound);
+    let start_bound = BoundWriterOnce::new(start_bound);
+    let end_bound = BoundWriterOnce::new(end_bound);
 
     let res = {
       let start_key_encoded_len = start_bound.encoded_len();
@@ -598,7 +598,7 @@ pub trait Log: Sized {
     })
   }
 
-  fn insert_batch<B>(
+  fn apply<B>(
     &self,
     batch: &mut B,
   ) -> Result<
@@ -623,13 +623,47 @@ pub trait Log: Sized {
       let (mut cursor, _allocator, mut buf) = batch
         .iter_mut()
         .try_fold((0u32, 0u64), |(num_entries, size), ent| {
-          let klen = ent.encoded_key_len();
-          let vlen = ent.value_len();
-          check_batch_entry(klen, vlen, maximum_key_size, minimum_value_size).map(|meta| {
-            let ent_size = meta.entry_size as u64;
-            ent.set_encoded_meta(meta);
-            (num_entries + 1, size + ent_size)
-          })
+          match &mut ent.data {
+            Data::InsertPoint { key, value, meta } => {
+              let klen = key.encoded_len();
+              let vlen = value.encoded_len();
+
+              check_batch_entry(klen, vlen, maximum_key_size, minimum_value_size).map(|entry_meta| {
+                let ent_size = entry_meta.entry_size as u64;
+                *meta = entry_meta;
+                (num_entries + 1, size + ent_size)
+              })
+            },
+            Data::RemovePoint { key, meta } => {
+              let klen = key.encoded_len();
+              check_batch_entry(klen, 0, maximum_key_size, minimum_value_size).map(|entry_meta| {
+                let ent_size = entry_meta.entry_size as u64;
+                *meta = entry_meta;
+                (num_entries + 1, size + ent_size)
+              })
+            },
+            Data::RangeRemove { start_bound, end_bound, meta } | Data::RangeUnset { start_bound, end_bound, meta } => {
+              let start_key_encoded_len = encode_bound_key_len(start_bound.as_ref());
+              let end_key_encoded_len = encode_bound_key_len(end_bound.as_ref());
+              check_batch_range_entry(start_key_encoded_len, end_key_encoded_len, 0, maximum_key_size, minimum_value_size,)
+                .map(|entry_meta| {
+                  let ent_size = entry_meta.entry_size as u64;
+                  *meta = entry_meta;
+                  (num_entries + 1, size + ent_size)
+                })
+            },
+            Data::RangeSet { start_bound, end_bound, value, meta } => {
+              let start_key_encoded_len = encode_bound_key_len(start_bound.as_ref());
+              let end_key_encoded_len = encode_bound_key_len(end_bound.as_ref());
+              let vlen = value.encoded_len();
+              check_batch_range_entry(start_key_encoded_len, end_key_encoded_len, vlen, maximum_key_size, minimum_value_size,)
+                .map(|entry_meta| {
+                  let ent_size = entry_meta.entry_size as u64;
+                  *meta = entry_meta;
+                  (num_entries + 1, size + ent_size)
+                })
+            },
+          }
         })
         .and_then(|(num_entries, batch_encoded_size)| {
           // safe to cast batch_encoded_size to u32 here, we already checked it's less than capacity (less than u32::MAX).
@@ -665,59 +699,131 @@ pub trait Log: Sized {
 
       for ent in batch.iter_mut() {
         let meta = ent.encoded_meta();
+        match meta {
+          Either::Left(meta) => {
+            let remaining = buf.remaining();
+            if remaining < meta.checksum_offset() {
+              return Err(Among::Right(
+                Error::larger_batch_size(buf.capacity() as u32),
+              ));
+            }
 
-        let remaining = buf.remaining();
-        if remaining
-          < meta.packed_kvlen_size + EntryFlags::SIZE + VERSION_SIZE + meta.klen + meta.vlen
-        {
-          return Err(Among::Right(
-            Error::larger_batch_size(buf.capacity() as u32),
-          ));
+            let entry_offset = cursor;
+            buf.put_u8_unchecked(ent.flag.bits());
+            let (ko, vo) = {
+              buf.put_u64_le_unchecked(ent.internal_version());
+              (cursor + meta.key_offset(), cursor + meta.value_offset())
+            };
+
+            let ent_len_size = buf.put_u64_varint_unchecked(meta.packed_kvlen);
+            debug_assert_eq!(
+              ent_len_size, meta.packed_kvlen_size,
+              "the actual encoded u64 varint length ({}) doos not match the length ({}) returned by `dbutils::leb128::encoded_u64_varint_len`, please report bug to https://github.com/al8n/layer0/issues",
+              ent_len_size, meta.packed_kvlen_size,
+            );
+
+            let ptr = buf.as_mut_ptr();
+            let kp = ptr.add(ko);
+            let vp = ptr.add(vo);
+            buf.set_len(cursor + meta.value_offset());
+
+            let (kb, vb) = (ent.key(), ent.value());
+            let mut key_buf = VacantBuffer::new(meta.klen, NonNull::new_unchecked(kp));
+            let written = kb.write(&mut key_buf).map_err(Among::Left)?;
+            debug_assert_eq!(
+              written, meta.klen,
+              "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
+              meta.klen, written,
+            );
+
+            buf.set_len(cursor + meta.checksum_offset());
+            if let Some(vb) = vb {
+              let mut value_buf = VacantBuffer::new(meta.vlen, NonNull::new_unchecked(vp));
+              let written = vb.write(&mut value_buf).map_err(Among::Middle)?;
+
+              debug_assert_eq!(
+                written, meta.vlen,
+                "the actual bytes written to the value buffer not equal to the expected size, expected {} but got {}.",
+                meta.vlen, written,
+              );
+            }
+
+            let entry_size = meta.entry_size as usize;
+            ent.set_pointer(RecordPointer::new(entry_offset as u32, meta.entry_size));
+            cursor += entry_size;
+          }
+          Either::Right(meta) => {
+            let remaining = buf.remaining();
+            if remaining < meta.checksum_offset() {
+              return Err(Among::Right(
+                Error::larger_batch_size(buf.capacity() as u32),
+              ));
+            }
+
+            let entry_offset = cursor;
+            buf.put_u8_unchecked(ent.flag.bits());
+            buf.put_u64_le_unchecked(ent.internal_version());
+            let ent_len_size = buf.put_u64_varint_unchecked(meta.packed_kvlen);
+            debug_assert_eq!(
+              ent_len_size, meta.packed_kvlen_size,
+              "the actual encoded u64 varint length ({}) doos not match the length ({}) returned by `dbutils::leb128::encoded_u64_varint_len`, please report bug to https://github.com/al8n/layer0/issues",
+              ent_len_size, meta.packed_kvlen_size,
+            );
+
+            let range_key_len_size = buf.put_u64_varint_unchecked(meta.range_key_len);
+            debug_assert_eq!(
+              range_key_len_size, meta.range_key_len_size,
+              "the actual encoded u64 varint length ({}) doos not match the length ({}) returned by `dbutils::leb128::encoded_u64_varint_len`, please report bug to https://github.com/al8n/layer0/issues",
+              range_key_len_size, meta.range_key_len_size,
+            );
+
+            let ptr = buf.as_mut_ptr();
+            let start_key_ptr = ptr.add(meta.start_key_offset());
+            let end_key_ptr = ptr.add(meta.end_key_offset());
+            let value_ptr = ptr.add(meta.value_offset());
+            buf.set_len(cursor + meta.checksum_offset());
+
+            let (start_bound, end_bound) = ent.bounds();
+            let vb = ent.value();
+            let mut start_bound_buf =
+              VacantBuffer::new(meta.start_key_len, NonNull::new_unchecked(start_key_ptr));
+            let mut end_bound_buf =
+              VacantBuffer::new(meta.end_key_len, NonNull::new_unchecked(end_key_ptr));
+
+            let written = BoundWriter::new(start_bound)
+              .write(&mut start_bound_buf)
+              .map_err(Among::Left)?;
+            debug_assert_eq!(
+              written, meta.start_key_len,
+              "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
+              meta.start_key_len, written,
+            );
+
+            let written = BoundWriter::new(end_bound)
+              .write(&mut end_bound_buf)
+              .map_err(Among::Left)?;
+            debug_assert_eq!(
+              written, meta.end_key_len,
+              "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
+              meta.end_key_len, written,
+            );
+
+            if let Some(vb) = vb {
+              let mut value_buf = VacantBuffer::new(meta.vlen, NonNull::new_unchecked(value_ptr));
+              let written = vb.write(&mut value_buf).map_err(Among::Middle)?;
+
+              debug_assert_eq!(
+                written, meta.vlen,
+                "the actual bytes written to the value buffer not equal to the expected size, expected {} but got {}.",
+                meta.vlen, written,
+              );
+            }
+
+            let entry_size = meta.entry_size as usize;
+            ent.set_pointer(RecordPointer::new(entry_offset as u32, meta.entry_size));
+            cursor += entry_size;
+          }
         }
-
-        let entry_offset = cursor;
-        buf.put_u8_unchecked(ent.flag.bits());
-        let (ko, vo) = {
-          buf.put_u64_le_unchecked(ent.internal_version());
-          (cursor + meta.key_offset(), cursor + meta.value_offset())
-        };
-
-        let ent_len_size = buf.put_u64_varint_unchecked(meta.packed_kvlen);
-        debug_assert_eq!(
-          ent_len_size, meta.packed_kvlen_size,
-          "the actual encoded u64 varint length ({}) doos not match the length ({}) returned by `dbutils::leb128::encoded_u64_varint_len`, please report bug to https://github.com/al8n/layer0/issues",
-          ent_len_size, meta.packed_kvlen_size,
-        );
-
-        let ptr = buf.as_mut_ptr();
-        let kp = ptr.add(ko);
-        let vp = ptr.add(vo);
-        buf.set_len(cursor + meta.value_offset());
-
-        let (kb, vb) = (ent.key(), ent.value());
-        let mut key_buf = VacantBuffer::new(meta.klen, NonNull::new_unchecked(kp));
-        let written = kb.write(&mut key_buf).map_err(Among::Left)?;
-        debug_assert_eq!(
-          written, meta.klen,
-          "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
-          meta.klen, written,
-        );
-
-        buf.set_len(cursor + meta.checksum_offset());
-        if let Some(vb) = vb {
-          let mut value_buf = VacantBuffer::new(meta.vlen, NonNull::new_unchecked(vp));
-          let written = vb.write(&mut value_buf).map_err(Among::Middle)?;
-
-          debug_assert_eq!(
-            written, meta.vlen,
-            "the actual bytes written to the value buffer not equal to the expected size, expected {} but got {}.",
-            meta.vlen, written,
-          );
-        }
-
-        let entry_size = meta.entry_size as usize;
-        ent.set_pointer(RecordPointer::new(entry_offset as u32, meta.entry_size));
-        cursor += entry_size;
       }
 
       let total_size = buf.capacity();
@@ -1176,10 +1282,14 @@ fn check_batch_entry<T: Memtable>(
     return Err(Error::value_too_large(vlen as u64, max_value_size));
   }
 
-  let encoded_entry_meta = EncodedEntryMeta::batch(klen, vlen);
-  if encoded_entry_meta.entry_size == u32::MAX {
+  let len = merge_lengths(klen as u32, vlen as u32);
+  let len_size = encoded_u64_varint_len(len);
+  let elen =
+    EntryFlags::SIZE as u64 + VERSION_SIZE as u64 + len_size as u64 + klen as u64 + vlen as u64;
+
+  if elen > u32::MAX as u64 {
     return Err(Error::entry_too_large(
-      encoded_entry_meta.entry_size as u64,
+      elen,
       min_u64(
         10 + EntryFlags::SIZE as u64
           + VERSION_SIZE as u64
@@ -1190,7 +1300,80 @@ fn check_batch_entry<T: Memtable>(
     ));
   }
 
-  Ok(encoded_entry_meta)
+  Ok(EncodedEntryMeta {
+    packed_kvlen_size: len_size,
+    packed_kvlen: len,
+    entry_size: elen as u32,
+    klen,
+    vlen,
+    batch: true,
+  })
+}
+
+#[inline]
+fn check_batch_range_entry<T: Memtable>(
+  start_key_len: usize,
+  end_key_len: usize,
+  vlen: usize,
+  max_key_size: u32,
+  max_value_size: u32,
+) -> Result<EncodedRangeEntryMeta, Error<T>> {
+  let max_ksize = min_u64(max_key_size as u64, u32::MAX as u64);
+  let max_vsize = min_u64(max_value_size as u64, u32::MAX as u64);
+
+  if max_ksize < start_key_len as u64 {
+    return Err(Error::key_too_large(start_key_len as u64, max_key_size));
+  }
+
+  if max_ksize < end_key_len as u64 {
+    return Err(Error::key_too_large(end_key_len as u64, max_key_size));
+  }
+
+  let range_key_len = merge_lengths(start_key_len as u32, end_key_len as u32);
+  let range_key_len_size = encoded_u64_varint_len(range_key_len);
+  let total_range_key_size = range_key_len_size + start_key_len + end_key_len;
+
+  if total_range_key_size as u64 > u32::MAX as u64 {
+    return Err(Error::range_key_too_large(total_range_key_size as u64));
+  }
+
+  if max_vsize < vlen as u64 {
+    return Err(Error::value_too_large(vlen as u64, max_value_size));
+  }
+
+  let len = merge_lengths(total_range_key_size as u32, vlen as u32);
+  let len_size = encoded_u64_varint_len(len);
+  let elen = EntryFlags::SIZE as u64
+    + VERSION_SIZE as u64
+    + len_size as u64
+    + total_range_key_size as u64
+    + vlen as u64;
+
+  if elen > u32::MAX as u64 {
+    return Err(Error::entry_too_large(
+      elen,
+      min_u64(
+        10 + EntryFlags::SIZE as u64
+          + VERSION_SIZE as u64
+          + max_key_size as u64
+          + max_value_size as u64,
+        u32::MAX as u64,
+      ),
+    ));
+  }
+
+  Ok(EncodedRangeEntryMeta {
+    packed_kvlen_size: len_size,
+    packed_kvlen: len,
+    entry_size: elen as u32,
+    range_key_len,
+    range_key_len_size,
+    total_range_key_size,
+    start_key_len,
+    end_key_len,
+    vlen,
+    batch: true,
+  })
 }
 
 struct Noop;
@@ -1211,12 +1394,22 @@ impl BufWriterOnce for Noop {
   }
 }
 
-struct BoundWriter<W> {
+#[inline]
+fn encode_bound_key_len<W: BufWriter>(writer: Bound<&W>) -> usize {
+  BoundedKey::encoded_size()
+    + match writer {
+      Bound::Included(k) => k.encoded_len(),
+      Bound::Excluded(k) => k.encoded_len(),
+      Bound::Unbounded => 0,
+    }
+}
+
+struct BoundWriterOnce<W> {
   writer: Bound<W>,
   pointer: bool,
 }
 
-impl<W> BoundWriter<W> {
+impl<W> BoundWriterOnce<W> {
   #[inline]
   fn new(writer: Bound<W>) -> Self {
     Self {
@@ -1226,7 +1419,7 @@ impl<W> BoundWriter<W> {
   }
 }
 
-impl<W> BufWriterOnce for BoundWriter<W>
+impl<W> BufWriterOnce for BoundWriterOnce<W>
 where
   W: BufWriterOnce,
 {
@@ -1263,6 +1456,59 @@ where
         buf
           .put_u8(BoundedKey::new(Bound::Unbounded, false).encode())
           .map_err(Either::Right)?;
+        Ok(1)
+      }
+    }
+  }
+}
+
+struct BoundWriter<'a, W> {
+  writer: Bound<&'a W>,
+  pointer: bool,
+}
+
+impl<'a, W> BoundWriter<'a, W> {
+  #[inline]
+  fn new(writer: Bound<&'a W>) -> Self {
+    Self {
+      writer,
+      pointer: false,
+    }
+  }
+}
+
+impl<W> BufWriter for BoundWriter<'_, W>
+where
+  W: BufWriter,
+{
+  type Error = W::Error;
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    BoundedKey::encoded_size()
+      + match self.writer.as_ref() {
+        Bound::Included(k) => k.encoded_len(),
+        Bound::Excluded(k) => k.encoded_len(),
+        Bound::Unbounded => 0,
+      }
+  }
+
+  #[inline]
+  fn write(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
+    // use put_u8_unchecked as this method is used internally, and should be have enough space before calling this method.
+    match self.writer {
+      Bound::Included(k) => {
+        buf.put_u8_unchecked(BoundedKey::new(Bound::Included(()), self.pointer).encode());
+        let mut kbuf = buf.split_off(1);
+        k.write(&mut kbuf).map(|n| n + 1)
+      }
+      Bound::Excluded(k) => {
+        buf.put_u8_unchecked(BoundedKey::new(Bound::Included(()), self.pointer).encode());
+        let mut kbuf = buf.split_off(1);
+        k.write(&mut kbuf).map(|n| n + 1)
+      }
+      Bound::Unbounded => {
+        buf.put_u8_unchecked(BoundedKey::new(Bound::Unbounded, false).encode());
         Ok(1)
       }
     }

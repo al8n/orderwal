@@ -455,28 +455,6 @@ unsafe fn fetch_raw_range_key_helper<'a>(
 
 /// # Safety
 /// - `data_ptr` must be a valid pointer to the data.
-/// - `p` must be pointing to value which is stored in the `data_ptr`.
-pub(crate) unsafe fn fetch_raw_range_key<'a>(
-  data_ptr: *const u8,
-  p: &RecordPointer,
-) -> (Bound<&'a [u8]>, Bound<&'a [u8]>) {
-  let FetchRangeKey {
-    start_bound,
-    end_bound,
-    ..
-  } = fetch_raw_range_key_helper(data_ptr, p, |flag| {
-    debug_assert!(
-      flag.contains(EntryFlags::RANGE_SET)
-        | flag.contains(EntryFlags::RANGE_DELETION)
-        | flag.contains(EntryFlags::RANGE_UNSET),
-      "unexpected point key"
-    )
-  });
-  (start_bound, end_bound)
-}
-
-/// # Safety
-/// - `data_ptr` must be a valid pointer to the data.
 /// - `kp` must be pointing to value which is stored in the data_ptr.
 #[inline]
 pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a>(

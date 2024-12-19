@@ -842,7 +842,7 @@ where
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error<Self::Memtable>>
+  fn apply<B>(&mut self, batch: &mut B) -> Result<(), Error<Self::Memtable>>
   where
     B: Batch<Self::Memtable>,
     B::Key: AsRef<[u8]>,
@@ -850,12 +850,12 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch(self, batch).map_err(Among::unwrap_right)
+    Log::apply(self, batch).map_err(Among::unwrap_right)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_key_builder<B>(
+  fn apply_with_key_builder<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<<B::Key as BufWriter>::Error, Error<Self::Memtable>>>
@@ -866,12 +866,12 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch::<B>(self, batch).map_err(Among::into_left_right)
+    Log::apply::<B>(self, batch).map_err(Among::into_left_right)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_value_builder<B>(
+  fn apply_with_value_builder<B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Either<<B::Value as BufWriter>::Error, Error<Self::Memtable>>>
@@ -882,12 +882,12 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch::<B>(self, batch).map_err(Among::into_middle_right)
+    Log::apply::<B>(self, batch).map_err(Among::into_middle_right)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch_with_builders<KB, VB, B>(
+  fn apply_with_builders<KB, VB, B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
@@ -898,7 +898,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert_batch::<B>(self, batch)
+    Log::apply::<B>(self, batch)
   }
 }
 

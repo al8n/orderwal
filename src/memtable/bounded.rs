@@ -193,7 +193,7 @@ where
   fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .skl
-      .insert(version, &pointer, &())
+      .get_or_insert(version, &pointer, &())
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
@@ -209,7 +209,7 @@ where
   fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_deletions_skl
-      .insert(version, &pointer, &())
+      .get_or_insert(version, &pointer, &())
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
@@ -217,7 +217,7 @@ where
   fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_updates_skl
-      .insert(version, &pointer, &())
+      .get_or_insert(version, &pointer, &())
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }

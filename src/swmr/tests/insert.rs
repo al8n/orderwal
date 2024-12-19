@@ -69,7 +69,7 @@ where
   }
 }
 
-fn insert_batch<M>(mut wal: OrderWal<Person, String, M>) -> (Person, Vec<(Person, String)>, Person)
+fn apply<M>(mut wal: OrderWal<Person, String, M>) -> (Person, Vec<(Person, String)>, Person)
 where
   M: Memtable<Key = Person, Value = String> + Send + 'static,
   for<'a> M::Item<'a>: MemtableEntry<'a>,
@@ -101,7 +101,7 @@ where
 
   let rp1 = Person::random();
   wal.insert(&rp1, &"rp1".to_string()).unwrap();
-  wal.insert_batch(&mut batch).unwrap();
+  wal.apply(&mut batch).unwrap();
   let rp2 = Person::random();
   wal.insert(&rp2, &"rp2".to_string()).unwrap();
 
@@ -123,7 +123,7 @@ where
   (rp1, output, rp2)
 }
 
-fn insert_batch_with_key_builder<M>(
+fn apply_with_key_builder<M>(
   mut wal: OrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
@@ -160,7 +160,7 @@ where
 
   let rp1 = Person::random();
   wal.insert(&rp1, &"rp1".to_string()).unwrap();
-  wal.insert_batch_with_key_builder(&mut batch).unwrap();
+  wal.apply_with_key_builder(&mut batch).unwrap();
   let rp2 = Person::random();
   wal.insert(&rp2, &"rp2".to_string()).unwrap();
 
@@ -182,7 +182,7 @@ where
   (rp1, output, rp2)
 }
 
-fn insert_batch_with_value_builder<M>(
+fn apply_with_value_builder<M>(
   mut wal: OrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
@@ -218,7 +218,7 @@ where
 
   let rp1 = Person::random();
   wal.insert(&rp1, &"rp1".to_string()).unwrap();
-  wal.insert_batch_with_value_builder(&mut batch).unwrap();
+  wal.apply_with_value_builder(&mut batch).unwrap();
   let rp2 = Person::random();
   wal.insert(&rp2, &"rp2".to_string()).unwrap();
 
@@ -240,7 +240,7 @@ where
   (rp1, output, rp2)
 }
 
-fn insert_batch_with_builders<M>(
+fn apply_with_builders<M>(
   mut wal: OrderWal<Person, String, M>,
 ) -> (Person, Vec<(Person, String)>, Person)
 where
@@ -279,7 +279,7 @@ where
 
   let rp1 = Person::random();
   wal.insert(&rp1, &"rp1".to_string()).unwrap();
-  wal.insert_batch_with_builders(&mut batch).unwrap();
+  wal.apply_with_builders(&mut batch).unwrap();
   let rp2 = Person::random();
   wal.insert(&rp2, &"rp2".to_string()).unwrap();
 
@@ -321,7 +321,7 @@ expand_unit_tests!(
 #[cfg(feature = "std")]
 expand_unit_tests!(
   move "linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
-    insert_batch |p, (rp1, data, rp2)| {
+    apply |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -334,7 +334,7 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    insert_batch_with_key_builder |p, (rp1, data, rp2)| {
+    apply_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -347,7 +347,7 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    insert_batch_with_value_builder |p, (rp1, data, rp2)| {
+    apply_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -360,7 +360,7 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    insert_batch_with_builders |p, (rp1, data, rp2)| {
+    apply_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -395,7 +395,7 @@ expand_unit_tests!(
 
 expand_unit_tests!(
   move "arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
-    insert_batch |p, (rp1, data, rp2)| {
+    apply |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -408,7 +408,7 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    insert_batch_with_key_builder |p, (rp1, data, rp2)| {
+    apply_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -421,7 +421,7 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    insert_batch_with_value_builder |p, (rp1, data, rp2)| {
+    apply_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)
@@ -434,7 +434,7 @@ expand_unit_tests!(
       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
     },
-    insert_batch_with_builders |p, (rp1, data, rp2)| {
+    apply_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
           .map::<OrderWalReaderAlternativeTable<Person, String>, _>(&p)

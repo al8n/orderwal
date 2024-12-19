@@ -977,52 +977,7 @@ where
 
   /// Inserts a batch of key-value pairs into the WAL.
   #[inline]
-  fn insert_batch<B>(&mut self, batch: &mut B) -> Result<(), Error<Self::Memtable>>
-  where
-    B: Batch<Self::Memtable>,
-    B::Key: AsRef<[u8]>,
-    B::Value: AsRef<[u8]>,
-    Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
-  {
-    Log::insert_batch(self, batch).map_err(Among::unwrap_right)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_key_builder<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<<B::Key as BufWriter>::Error, Error<Self::Memtable>>>
-  where
-    B: Batch<Self::Memtable>,
-    B::Key: BufWriter,
-    B::Value: AsRef<[u8]>,
-    Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
-  {
-    Log::insert_batch::<B>(self, batch).map_err(Among::into_left_right)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_value_builder<B>(
-    &mut self,
-    batch: &mut B,
-  ) -> Result<(), Either<<B::Value as BufWriter>::Error, Error<Self::Memtable>>>
-  where
-    B: Batch<Self::Memtable>,
-    B::Key: AsRef<[u8]>,
-    B::Value: BufWriter,
-    Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
-  {
-    Log::insert_batch::<B>(self, batch).map_err(Among::into_middle_right)
-  }
-
-  /// Inserts a batch of key-value pairs into the WAL.
-  #[inline]
-  fn insert_batch_with_builders<KB, VB, B>(
+  fn apply<KB, VB, B>(
     &mut self,
     batch: &mut B,
   ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
@@ -1033,7 +988,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: GenericMemtable<K, V>,
   {
-    Log::insert_batch::<B>(self, batch)
+    Log::apply::<B>(self, batch)
   }
 }
 
