@@ -1,16 +1,17 @@
-use core::{marker::PhantomData, ops::Bound, slice};
+use core::{ops::Bound, slice};
 
 use dbutils::leb128::decode_u64_varint;
 
 use crate::VERSION_SIZE;
 
-use super::{split_lengths, EntryFlags, Pointee, Pointer, RecordPointer, TypeMode};
+use super::{split_lengths, EntryFlags, Pointee, Pointer, RecordPointer};
 
+#[derive(Clone, Copy)]
 pub struct RawEntryRef<'a> {
   flag: EntryFlags,
   key: &'a [u8],
   value: Option<&'a [u8]>,
-  version: Option<u64>,
+  version: u64,
 }
 
 impl RawEntryRef<'_> {
@@ -20,37 +21,19 @@ impl RawEntryRef<'_> {
     wrapper_name: &'static str,
     f: &mut core::fmt::Formatter<'_>,
   ) -> core::fmt::Result {
-    let mut debugger = f.debug_struct(wrapper_name);
-    debugger
+    f.debug_struct(wrapper_name)
       .field("flags", &self.flag)
       .field("key", &self.key.output())
-      .field("value", &self.value.as_ref().map(|v| v.output()));
-
-    if let Some(version) = self.version {
-      debugger.field("version", &version);
-    }
-
-    debugger.finish()
+      .field("value", &self.value.as_ref().map(|v| v.output()))
+      .field("version", &self.version)
+      .finish()
   }
 }
-
-impl Clone for RawEntryRef<'_> {
-  fn clone(&self) -> Self {
-    Self {
-      flag: self.flag,
-      key: self.key,
-      value: self.value,
-      version: self.version,
-    }
-  }
-}
-
-impl Copy for RawEntryRef<'_> {}
 
 impl<'a> RawEntryRef<'a> {
   #[inline]
   pub const fn key(&self) -> &'a [u8] {
-    &self.key
+    self.key
   }
 
   #[inline]
@@ -59,17 +42,18 @@ impl<'a> RawEntryRef<'a> {
   }
 
   #[inline]
-  pub const fn version(&self) -> Option<u64> {
+  pub const fn version(&self) -> u64 {
     self.version
   }
 }
 
+#[derive(Clone, Copy)]
 pub struct RawRangeUpdateRef<'a> {
   flag: EntryFlags,
   start_bound: Bound<&'a [u8]>,
   end_bound: Bound<&'a [u8]>,
   value: Option<&'a [u8]>,
-  version: Option<u64>,
+  version: u64,
 }
 
 impl RawRangeUpdateRef<'_> {
@@ -79,34 +63,15 @@ impl RawRangeUpdateRef<'_> {
     wrapper_name: &'static str,
     f: &mut core::fmt::Formatter<'_>,
   ) -> core::fmt::Result {
-    let mut debugger = f.debug_struct(wrapper_name);
-    debugger
+    f.debug_struct(wrapper_name)
       .field("flags", &self.flag)
       .field("start_bound", &self.start_bound())
       .field("end_bound", &self.end_bound())
-      .field("value", &self.value.as_ref().map(|v| v.output()));
-
-    if let Some(version) = self.version {
-      debugger.field("version", &version);
-    }
-
-    debugger.finish()
+      .field("value", &self.value.as_ref().map(|v| v.output()))
+      .field("version", &self.version)
+      .finish()
   }
 }
-
-impl Clone for RawRangeUpdateRef<'_> {
-  fn clone(&self) -> Self {
-    Self {
-      flag: self.flag,
-      start_bound: self.start_bound,
-      end_bound: self.end_bound,
-      value: self.value,
-      version: self.version,
-    }
-  }
-}
-
-impl Copy for RawRangeUpdateRef<'_> {}
 
 impl<'a> RawRangeUpdateRef<'a> {
   #[inline]
@@ -118,15 +83,6 @@ impl<'a> RawRangeUpdateRef<'a> {
     }
   }
 
-  // #[inline]
-  // pub fn start_bound(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
-  //   match &self.start_bound {
-  //     Bound::Unbounded => Bound::Unbounded,
-  //     Bound::Included(k) => Bound::Included(k.output()),
-  //     Bound::Excluded(k) => Bound::Excluded(k.output()),
-  //   }
-  // }
-
   #[inline]
   pub const fn end_bound(&self) -> Bound<&'a [u8]> {
     match &self.end_bound {
@@ -136,31 +92,23 @@ impl<'a> RawRangeUpdateRef<'a> {
     }
   }
 
-  // #[inline]
-  // pub fn end_bound(&self) -> Bound<<T::Key<'a> as Pointee<'a>>::Output> {
-  //   match &self.end_bound {
-  //     Bound::Unbounded => Bound::Unbounded,
-  //     Bound::Included(k) => Bound::Included(k.output()),
-  //     Bound::Excluded(k) => Bound::Excluded(k.output()),
-  //   }
-  // }
-
   #[inline]
   pub const fn value(&self) -> Option<&'a [u8]> {
     self.value
   }
 
   #[inline]
-  pub const fn version(&self) -> Option<u64> {
+  pub const fn version(&self) -> u64 {
     self.version
   }
 }
 
+#[derive(Clone, Copy)]
 pub struct RawRangeDeletionRef<'a> {
   flag: EntryFlags,
   start_bound: Bound<&'a [u8]>,
   end_bound: Bound<&'a [u8]>,
-  version: Option<u64>,
+  version: u64,
 }
 
 impl RawRangeDeletionRef<'_> {
@@ -170,32 +118,14 @@ impl RawRangeDeletionRef<'_> {
     wrapper_name: &'static str,
     f: &mut core::fmt::Formatter<'_>,
   ) -> core::fmt::Result {
-    let mut debugger = f.debug_struct(wrapper_name);
-    debugger
+    f.debug_struct(wrapper_name)
       .field("flags", &self.flag)
       .field("start_bound", &self.start_bound())
-      .field("end_bound", &self.end_bound());
-
-    if let Some(version) = self.version {
-      debugger.field("version", &version);
-    }
-
-    debugger.finish()
+      .field("end_bound", &self.end_bound())
+      .field("version", &self.version)
+      .finish()
   }
 }
-
-impl Clone for RawRangeDeletionRef<'_> {
-  fn clone(&self) -> Self {
-    Self {
-      flag: self.flag,
-      start_bound: self.start_bound,
-      end_bound: self.end_bound,
-      version: self.version,
-    }
-  }
-}
-
-impl Copy for RawRangeDeletionRef<'_> {}
 
 impl<'a> RawRangeDeletionRef<'a> {
   #[inline]
@@ -217,7 +147,7 @@ impl<'a> RawRangeDeletionRef<'a> {
   }
 
   #[inline]
-  pub const fn version(&self) -> Option<u64> {
+  pub const fn version(&self) -> u64 {
     self.version
   }
 }
@@ -267,6 +197,11 @@ impl BoundedKey {
   }
 
   #[inline]
+  pub const fn encoded_size() -> usize {
+    1
+  }
+
+  #[inline]
   pub const fn pointer(&self) -> bool {
     self.pointer
   }
@@ -295,15 +230,13 @@ pub(crate) unsafe fn fetch_raw_key<'a>(
     "unexpected range key"
   );
 
-  let (mut cursor, version) = if flag.contains(EntryFlags::VERSIONED) {
+  let (mut cursor, version) = {
     let version = u64::from_le_bytes(
       entry_buf[EntryFlags::SIZE..EntryFlags::SIZE + VERSION_SIZE]
         .try_into()
         .unwrap(),
     );
     (1 + VERSION_SIZE, Some(version))
-  } else {
-    (1, None)
   };
 
   let (readed, kvlen) = decode_u64_varint(&entry_buf[cursor..]).expect("");
@@ -335,15 +268,13 @@ pub(crate) unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointer) -> 
     "unexpected range entry"
   );
 
-  let (mut cursor, version) = if flag.contains(EntryFlags::VERSIONED) {
+  let (mut cursor, version) = {
     let version = u64::from_le_bytes(
       entry_buf[EntryFlags::SIZE..EntryFlags::SIZE + VERSION_SIZE]
         .try_into()
         .unwrap(),
     );
-    (EntryFlags::SIZE + VERSION_SIZE, Some(version))
-  } else {
-    (EntryFlags::SIZE, None)
+    (EntryFlags::SIZE + VERSION_SIZE, version)
   };
 
   let (readed, kvlen) = decode_u64_varint(&entry_buf[cursor..]).expect("");
@@ -401,11 +332,7 @@ pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a>(
     "unexpected point key"
   );
 
-  let mut cursor = if flag.contains(EntryFlags::VERSIONED) {
-    EntryFlags::SIZE + VERSION_SIZE
-  } else {
-    EntryFlags::SIZE
-  };
+  let mut cursor = EntryFlags::SIZE + VERSION_SIZE;
 
   let (readed, kvlen) =
     decode_u64_varint(&entry_buf[cursor..]).expect("kvlen should be decoded without error");
@@ -439,7 +366,7 @@ struct FetchRangeKey<'a> {
   flag: EntryFlags,
   start_bound: Bound<&'a [u8]>,
   end_bound: Bound<&'a [u8]>,
-  version: Option<u64>,
+  version: u64,
   value: Option<Pointer>,
 }
 
@@ -458,15 +385,13 @@ unsafe fn fetch_raw_range_key_helper<'a>(
   #[cfg(debug_assertions)]
   f(&flag);
 
-  let (mut cursor, version) = if flag.contains(EntryFlags::VERSIONED) {
+  let (mut cursor, version) = {
     let version = u64::from_le_bytes(
       entry_buf[EntryFlags::SIZE..EntryFlags::SIZE + VERSION_SIZE]
         .try_into()
         .unwrap(),
     );
-    (EntryFlags::SIZE + VERSION_SIZE, Some(version))
-  } else {
-    (EntryFlags::SIZE, None)
+    (EntryFlags::SIZE + VERSION_SIZE, version)
   };
 
   let (readed, kvlen) =

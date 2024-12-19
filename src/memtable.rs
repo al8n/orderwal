@@ -126,21 +126,21 @@ pub trait Memtable {
   }
 
   /// Inserts a pointer into the memtable.
-  fn insert(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
+  fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Removes the pointer associated with the key.
-  fn remove(&self, version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error>;
+  fn remove(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts a range deletion pointer into the memtable, a range deletion is a deletion of a range of keys,
   /// which means that keys in the range are marked as deleted.
   ///
   /// This is not a contra operation to [`range_set`](MultipleVersionMemtable::range_set).
   /// See also [`range_set`](MultipleVersionMemtable::range_set) and [`range_set`](MultipleVersionMemtable::range_unset).
-  fn range_remove(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
+  fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts an range update pointer into the memtable.
-  fn range_set(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>;
+  fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Unset a range from the memtable, this is a contra operation to [`range_set`](MultipleVersionMemtable::range_set).
-  fn range_unset(&self, version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error>; 
+  fn range_unset(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 }

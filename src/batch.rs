@@ -14,41 +14,8 @@ pub struct BatchEntry<K, V, M: Memtable> {
   pub(crate) flag: EntryFlags,
   pub(crate) meta: EncodedEntryMeta,
   pointers: Option<RecordPointer>,
-  pub(crate) version: Option<u64>,
+  pub(crate) version: u64,
   _m: PhantomData<M>,
-}
-
-impl<K, V, M> BatchEntry<K, V, M>
-where
-  M: Memtable,
-{
-  /// Creates a new entry.
-  #[inline]
-  pub const fn new(key: K, value: V) -> Self {
-    Self {
-      key,
-      value: Some(value),
-      flag: EntryFlags::empty(),
-      meta: EncodedEntryMeta::batch_zero(false),
-      pointers: None,
-      version: None,
-      _m: PhantomData,
-    }
-  }
-
-  /// Creates a tombstone entry.
-  #[inline]
-  pub const fn tombstone(key: K) -> Self {
-    Self {
-      key,
-      value: None,
-      flag: EntryFlags::REMOVED,
-      meta: EncodedEntryMeta::batch_zero(false),
-      pointers: None,
-      version: None,
-      _m: PhantomData,
-    }
-  }
 }
 
 impl<K, V, M> BatchEntry<K, V, M>
@@ -61,10 +28,10 @@ where
     Self {
       key,
       value: Some(value),
-      flag: EntryFlags::empty() | EntryFlags::VERSIONED,
-      meta: EncodedEntryMeta::batch_zero(true),
+      flag: EntryFlags::empty(),
+      meta: EncodedEntryMeta::batch_zero(),
       pointers: None,
-      version: Some(version),
+      version,
       _m: PhantomData,
     }
   }
@@ -75,10 +42,10 @@ where
     Self {
       key,
       value: None,
-      flag: EntryFlags::REMOVED | EntryFlags::VERSIONED,
-      meta: EncodedEntryMeta::batch_zero(true),
+      flag: EntryFlags::REMOVED,
+      meta: EncodedEntryMeta::batch_zero(),
       pointers: None,
-      version: Some(version),
+      version,
       _m: PhantomData,
     }
   }
@@ -86,16 +53,13 @@ where
   /// Returns the version of the entry.
   #[inline]
   pub const fn version(&self) -> u64 {
-    match self.version {
-      Some(version) => version,
-      None => unreachable!(),
-    }
+    self.version
   }
 
   /// Set the version of the entry.
   #[inline]
   pub fn set_version(&mut self, version: u64) {
-    self.version = Some(version);
+    self.version = version;
   }
 }
 
@@ -149,7 +113,7 @@ where
   }
 
   #[inline]
-  pub(crate) const fn internal_version(&self) -> Option<u64> {
+  pub(crate) const fn internal_version(&self) -> u64 {
     self.version
   }
 

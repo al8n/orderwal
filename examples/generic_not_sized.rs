@@ -18,10 +18,10 @@ fn main() {
       .unwrap()
   };
 
-  wal.insert(1, b"a", b"a1".as_slice()).unwrap();
-  wal.insert(3, b"a", b"a3".as_slice()).unwrap();
-  wal.insert(1, b"c", b"c1".as_slice()).unwrap();
-  wal.insert(3, b"c", b"c3".as_slice()).unwrap();
+  wal.insert(1, "a", b"a1".as_slice()).unwrap();
+  wal.insert(3, "a", b"a3".as_slice()).unwrap();
+  wal.insert(1, "c", b"c1".as_slice()).unwrap();
+  wal.insert(3, "c", b"c3".as_slice()).unwrap();
 
   let a = wal.get(2, "a").unwrap();
   let c = wal.get(2, "c").unwrap();

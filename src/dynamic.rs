@@ -448,7 +448,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert::<_, &[u8]>(self, Some(version), kb, value).map_err(Among::into_left_right)
+    Log::insert::<_, &[u8]>(self, version, kb, value).map_err(Among::into_left_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -466,7 +466,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable + 'a,
   {
-    Log::insert::<&[u8], _>(self, Some(version), key, vb).map_err(Among::into_middle_right)
+    Log::insert::<&[u8], _>(self, version, key, vb).map_err(Among::into_middle_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -482,7 +482,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert(self, Some(version), kb, vb)
+    Log::insert(self, version, kb, vb)
   }
 
   /// Inserts a key-value pair into the WAL.
@@ -492,7 +492,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::insert(self, Some(version), key, value).map_err(Among::unwrap_right)
+    Log::insert(self, version, key, value).map_err(Among::unwrap_right)
   }
 
   /// Removes a key-value pair from the WAL. This method
@@ -507,7 +507,7 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::remove(self, Some(version), kb)
+    Log::remove(self, version, kb)
   }
 
   /// Removes a key-value pair from the WAL.
@@ -517,7 +517,327 @@ where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: DynamicMemtable,
   {
-    Log::remove(self, Some(version), key).map_err(Either::unwrap_right)
+    Log::remove(self, version, key).map_err(Either::unwrap_right)
+  }
+
+  /// Mark all keys in the range as removed.
+  ///
+  /// This is not a contra operation to [`range_set`](Writer::range_set).
+  /// See also [`range_set`](Writer::range_set) and [`range_set`](Writer::range_unset).
+  #[inline]
+  fn range_remove(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound).map_err(Among::unwrap_right)
+  }
+
+  /// Mark all keys in the range as removed, which allows the caller to build the start bound in place.
+  ///
+  /// See [`range_remove`](Writer::range_remove).
+  #[inline]
+  fn range_remove_with_start_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Mark all keys in the range as removed, which allows the caller to build the end bound in place.
+  ///
+  /// See [`range_remove`](Writer::range_remove).
+  #[inline]
+  fn range_remove_with_end_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(_) => unreachable!(),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Mark all keys in the range as removed, which allows the caller to build both bounds in place.
+  ///
+  /// See [`range_remove`](Writer::range_remove).
+  #[inline]
+  fn range_remove_with_builders<S, E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound)
+  }
+
+  /// Set all keys in the range to the `value`.
+  #[inline]
+  fn range_set(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+    value: &[u8],
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(Among::unwrap_right)
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the start bound in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_start_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    end_bound: Bound<&[u8]>,
+    value: &[u8],
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e.unwrap_left()),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the end bound in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_end_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: &[u8],
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e.unwrap_right()),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_value_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(_) => unreachable!(),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the start bound key and value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_start_bound_builder_and_value_builder<S, V>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<&[u8]>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, V>>,
+  ) -> Result<(), Among<S, V, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Among::Left(e.unwrap_left()),
+      Among::Middle(e) => Among::Middle(e),
+      Among::Right(e) => Among::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the end bound key and value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_end_bound_builder_and_value_builder<E, V>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, V>>,
+  ) -> Result<(), Among<E, V, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Among::Left(e.unwrap_right()),
+      Among::Middle(e) => Among::Middle(e),
+      Among::Right(e) => Among::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build both bounds in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_bound_builders<S, E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: &[u8],
+  ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(Either::Left(e)) => Among::Left(e),
+      Among::Left(Either::Right(e)) => Among::Middle(e),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Among::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build both bounds and value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_builders<S, E, V>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, V>>,
+  ) -> Result<(), Among<Either<S, E>, V, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value)
+  }
+
+  /// Unsets all keys in the range to their original value.
+  ///
+  /// This is a contra operation to [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_unset(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound).map_err(Among::unwrap_right)
+  }
+
+  /// Unsets all keys in the range to their original value, which allows the caller to build the start bound in place.
+  ///
+  /// See [`range_unset`](Writer::range_unset).
+  #[inline]
+  fn range_unset_with_start_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Unsets all keys in the range to their original value, which allows the caller to build the end bound in place.
+  ///
+  /// See [`range_unset`](Writer::range_unset).
+  #[inline]
+  fn range_unset_with_end_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(_) => unreachable!(),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Unsets all keys in the range to their original value, which allows the caller to build both bounds in place.
+  ///
+  /// See [`range_unset`](Writer::range_unset).
+  #[inline]
+  fn range_unset_with_builders<S, E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound)
   }
 
   /// Inserts a batch of key-value pairs into the WAL.

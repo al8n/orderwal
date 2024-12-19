@@ -62,6 +62,8 @@ pub enum Error<T: Memtable> {
     /// The maximum value size.
     maximum_value_size: u32,
   },
+  /// The range key is too large.
+  RangeKeyTooLarge(u64),
   /// The entry is too large.
   EntryTooLarge {
     /// The size of the entry.
@@ -122,6 +124,7 @@ where
         "the value size is {} larger than the maximum value size {}",
         size, maximum_value_size
       ),
+      Self::RangeKeyTooLarge(size) => write!(f, "the range key size is {} too large", size),
       Self::EntryTooLarge {
         size,
         maximum_entry_size,
@@ -148,6 +151,7 @@ where
       Self::InsufficientSpace(e) => Some(e),
       Self::Memtable(e) => Some(e),
       Self::KeyTooLarge { .. } => None,
+      Self::RangeKeyTooLarge(_) => None,
       Self::ValueTooLarge { .. } => None,
       Self::EntryTooLarge { .. } => None,
       Self::Batch(e) => Some(e),
@@ -193,6 +197,12 @@ impl<T: Memtable> Error<T> {
       size,
       maximum_key_size,
     }
+  }
+
+  /// Create a new `Error::RangeKeyTooLarge` instance.
+  #[inline]
+  pub(crate) const fn range_key_too_large(size: u64) -> Self {
+    Self::RangeKeyTooLarge(size)
   }
 
   /// Create a new `Error::ValueTooLarge` instance.
@@ -284,4 +294,3 @@ impl<T: Memtable> Error<T> {
     ))
   }
 }
-

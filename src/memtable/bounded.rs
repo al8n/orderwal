@@ -190,42 +190,42 @@ where
     self.skl.len() + self.range_deletions_skl.len() + self.range_updates_skl.len()
   }
   #[inline]
-  fn insert(&self, _version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+  fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .skl
-      .insert(_version.unwrap(), &pointer, &())
+      .insert(version, &pointer, &())
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
   #[inline]
-  fn remove(&self, _version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+  fn remove(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
     self
       .skl
-      .get_or_remove(_version.unwrap(), &key)
+      .get_or_remove(version, &key)
       .map(|_| ())
       .map_err(Either::unwrap_right)
   }
   #[inline]
-  fn range_remove(&self, _version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+  fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_deletions_skl
-      .insert(_version.unwrap(), &pointer, &())
+      .insert(version, &pointer, &())
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
   #[inline]
-  fn range_set(&self, _version: Option<u64>, pointer: RecordPointer) -> Result<(), Self::Error> {
+  fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_updates_skl
-      .insert(_version.unwrap(), &pointer, &())
+      .insert(version, &pointer, &())
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
   #[inline]
-  fn range_unset(&self, _version: Option<u64>, key: RecordPointer) -> Result<(), Self::Error> {
+  fn range_unset(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_updates_skl
-      .get_or_remove(_version.unwrap(), &key)
+      .get_or_remove(version, &key)
       .map(|_| ())
       .map_err(Either::unwrap_right)
   }

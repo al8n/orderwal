@@ -4,17 +4,17 @@ use crate::{
   error::Error,
   memtable::Memtable,
   options::Options,
-  types::{EncodedEntryMeta, EntryFlags, Flags, RecordPointer},
+  types::{BoundedKey, EncodedEntryMeta, EncodedRangeEntryMeta, EntryFlags, Flags, RecordPointer},
   utils::merge_lengths,
   CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
 };
 use among::Among;
-use core::ptr::NonNull;
+use core::{ops::Bound, ptr::NonNull};
 use dbutils::{
-  buffer::{BufWriter, VacantBuffer},
+  buffer::{BufWriter, BufWriterOnce, VacantBuffer},
   leb128::encoded_u64_varint_len,
 };
-use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
+use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer, InsufficientBuffer};
 
 pub trait Log: Sized {
   type Allocator: Allocator + 'static;
@@ -182,7 +182,7 @@ pub trait Log: Sized {
   #[inline]
   fn insert_pointer(
     &self,
-    version: Option<u64>,
+    version: u64,
     flag: EntryFlags,
     kp: RecordPointer,
   ) -> Result<(), Error<Self::Memtable>>
@@ -208,7 +208,7 @@ pub trait Log: Sized {
   #[inline]
   fn insert_pointers(
     &self,
-    mut ptrs: impl Iterator<Item = (Option<u64>, EntryFlags, RecordPointer)>,
+    mut ptrs: impl Iterator<Item = (u64, EntryFlags, RecordPointer)>,
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Memtable: Memtable,
@@ -216,75 +216,121 @@ pub trait Log: Sized {
     ptrs.try_for_each(|(version, flag, p)| self.insert_pointer(version, flag, p))
   }
 
+  fn range_remove<S, E>(
+    &self,
+    version: u64,
+    start_bound: Bound<S>,
+    end_bound: Bound<E>,
+  ) -> Result<(), Among<S::Error, E::Error, Error<Self::Memtable>>>
+  where
+    S: BufWriterOnce,
+    E: BufWriterOnce,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: Memtable,
+  {
+    self
+      .range_update::<_, _, Noop>(
+        version,
+        EntryFlags::RANGE_DELETION,
+        start_bound,
+        end_bound,
+        None,
+      )
+      .map_err(|e| match e.into_left_right() {
+        Either::Left(Either::Left(e)) => Among::Left(e),
+        Either::Left(Either::Right(e)) => Among::Middle(e),
+        Either::Right(e) => Among::Right(e),
+      })
+  }
+
+  fn range_unset<S, E>(
+    &self,
+    version: u64,
+    start_bound: Bound<S>,
+    end_bound: Bound<E>,
+  ) -> Result<(), Among<S::Error, E::Error, Error<Self::Memtable>>>
+  where
+    S: BufWriterOnce,
+    E: BufWriterOnce,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: Memtable,
+  {
+    self
+      .range_update::<_, _, Noop>(
+        version,
+        EntryFlags::RANGE_UNSET,
+        start_bound,
+        end_bound,
+        None,
+      )
+      .map_err(|e| match e.into_left_right() {
+        Either::Left(Either::Left(e)) => Among::Left(e),
+        Either::Left(Either::Right(e)) => Among::Middle(e),
+        Either::Right(e) => Among::Right(e),
+      })
+  }
+
+  fn range_set<S, E, V>(
+    &self,
+    version: u64,
+    start_bound: Bound<S>,
+    end_bound: Bound<E>,
+    value: V,
+  ) -> Result<(), Among<Either<S::Error, E::Error>, V::Error, Error<Self::Memtable>>>
+  where
+    S: BufWriterOnce,
+    E: BufWriterOnce,
+    V: BufWriterOnce,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: Memtable,
+  {
+    self.range_update(
+      version,
+      EntryFlags::RANGE_SET,
+      start_bound,
+      end_bound,
+      Some(value),
+    )
+  }
+
   fn insert<KE, VE>(
     &self,
-    version: Option<u64>,
+    version: u64,
     kb: KE,
     vb: VE,
   ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
   where
-    KE: super::types::BufWriterOnce,
-    VE: super::types::BufWriterOnce,
+    KE: BufWriterOnce,
+    VE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
-    let flag = if version.is_none() {
-      EntryFlags::empty()
-    } else {
-      EntryFlags::VERSIONED
-    };
-    self.update(version, flag, kb, Some(vb))
+    self.update(version, EntryFlags::empty(), kb, Some(vb))
   }
 
-  fn remove<KE>(
-    &self,
-    version: Option<u64>,
-    kb: KE,
-  ) -> Result<(), Either<KE::Error, Error<Self::Memtable>>>
+  fn remove<KE>(&self, version: u64, kb: KE) -> Result<(), Either<KE::Error, Error<Self::Memtable>>>
   where
-    KE: super::types::BufWriterOnce,
+    KE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
-    struct Noop;
-
-    impl super::types::BufWriterOnce for Noop {
-      type Error = ();
-
-      #[inline(never)]
-      #[cold]
-      fn encoded_len(&self) -> usize {
-        0
-      }
-
-      #[inline(never)]
-      #[cold]
-      fn write_once(self, _: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
-        Ok(0)
-      }
-    }
-
-    let flag = if version.is_none() {
-      EntryFlags::REMOVED
-    } else {
-      EntryFlags::VERSIONED | EntryFlags::REMOVED
-    };
-
     self
-      .update::<KE, Noop>(version, flag, kb, None)
+      .update::<KE, Noop>(version, EntryFlags::REMOVED, kb, None)
       .map_err(Among::into_left_right)
   }
 
-  fn update<KE, VE>(
+  fn range_update<S, E, VE>(
     &self,
-    version: Option<u64>,
+    version: u64,
     entry_flag: EntryFlags,
-    kb: KE,
+    start_bound: Bound<S>,
+    end_bound: Bound<E>,
     vb: Option<VE>,
-  ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
+  ) -> Result<(), Among<Either<S::Error, E::Error>, VE::Error, Error<Self::Memtable>>>
   where
-    KE: super::types::BufWriterOnce,
-    VE: super::types::BufWriterOnce,
+    S: BufWriterOnce,
+    E: BufWriterOnce,
+    VE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: Memtable,
   {
@@ -292,13 +338,18 @@ pub trait Log: Sized {
       return Err(Among::Right(Error::read_only()));
     }
 
+    let start_bound = BoundWriter::new(start_bound);
+    let end_bound = BoundWriter::new(end_bound);
+
     let res = {
-      let klen = kb.encoded_len();
-      let vlen = vb.as_ref().map(|vb| vb.encoded_len()).unwrap_or(0);
-      let encoded_entry_meta = check(
-        klen,
+      let start_key_encoded_len = start_bound.encoded_len();
+      let end_key_encoded_len = end_bound.encoded_len();
+      let vlen = vb.as_ref().map_or(0, |vb| vb.encoded_len());
+
+      let encoded_entry_meta = check_range(
+        start_key_encoded_len,
+        end_key_encoded_len,
         vlen,
-        version.is_some(),
         self.maximum_key_size(),
         self.maximum_value_size(),
         self.read_only(),
@@ -324,9 +375,156 @@ pub trait Log: Sized {
 
             buf.put_slice_unchecked(&[Flags::empty().bits(), entry_flag.bits()]);
 
-            if entry_flag.contains(EntryFlags::VERSIONED) {
-              buf.put_u64_le_unchecked(version.expect("EntryFlags::VERSIONED must have a version"));
+            buf.put_u64_le_unchecked(version);
+
+            let written = buf.put_u64_varint_unchecked(encoded_entry_meta.packed_kvlen);
+            debug_assert_eq!(
+              written, encoded_entry_meta.packed_kvlen_size,
+              "the precalculated size should be equal to the written size"
+            );
+
+            let written = buf.put_u64_varint_unchecked(encoded_entry_meta.range_key_len);
+            debug_assert_eq!(
+              written, encoded_entry_meta.range_key_len_size,
+              "the precalculated size should be equal to the written size"
+            );
+
+            let sko = encoded_entry_meta.start_key_offset();
+            let ptr = buf.as_mut_ptr().add(sko);
+            buf.set_len(encoded_entry_meta.entry_size as usize - CHECKSUM_SIZE);
+
+            let mut start_key_buf = VacantBuffer::new(
+              encoded_entry_meta.start_key_len as usize,
+              NonNull::new_unchecked(ptr),
+            );
+            let written = start_bound.write_once(&mut start_key_buf).map_err(|e| {
+              let e = e.unwrap_left();
+              Among::Left(Either::Left(e))
+            })?;
+
+            debug_assert_eq!(
+              written, encoded_entry_meta.start_key_len as usize,
+              "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
+              encoded_entry_meta.start_key_len, written,
+            );
+
+            let eko = encoded_entry_meta.end_key_offset();
+            let ptr = buf.as_mut_ptr().add(eko);
+            let mut end_key_buf = VacantBuffer::new(
+              encoded_entry_meta.end_key_len as usize,
+              NonNull::new_unchecked(ptr),
+            );
+            let written = end_bound.write_once(&mut end_key_buf).map_err(|e| {
+              let e = e.unwrap_left();
+              Among::Left(Either::Right(e))
+            })?;
+
+            debug_assert_eq!(
+              written, encoded_entry_meta.end_key_len as usize,
+              "the actual bytes written to the key buffer not equal to the expected size, expected {} but got {}.",
+              encoded_entry_meta.end_key_len, written,
+            );
+
+            if let Some(vb) = vb {
+              let vo = encoded_entry_meta.value_offset();
+              let mut value_buf = VacantBuffer::new(
+                encoded_entry_meta.vlen as usize,
+                NonNull::new_unchecked(buf.as_mut_ptr().add(vo)),
+              );
+              let written = vb.write_once(&mut value_buf).map_err(Among::Middle)?;
+
+              debug_assert_eq!(
+                written, encoded_entry_meta.vlen as usize,
+                "the actual bytes written to the value buffer not equal to the expected size, expected {} but got {}.",
+                encoded_entry_meta.vlen, written,
+              );
             }
+
+            let cks = {
+              cks.update(&buf[1..]);
+              cks.digest()
+            };
+            buf.put_u64_le_unchecked(cks);
+
+            // commit the entry
+            buf[0] |= Flags::COMMITTED.bits();
+
+            #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+            if self.options().sync() && is_ondisk {
+              allocator
+                .flush_header_and_range(buf.offset(), encoded_entry_meta.entry_size as usize)
+                .map_err(|e| Among::Right(e.into()))?;
+            }
+
+            buf.detach();
+            let eoffset = buf.offset();
+            let offset = eoffset + encoded_entry_meta.entry_flag_offset();
+            let p = RecordPointer::new(offset as u32, (buf.len() - RECORD_FLAG_SIZE) as u32);
+            Ok((buf.buffer_offset(), p, entry_flag))
+          }
+        }
+      }
+    };
+
+    res.and_then(|(offset, p, flag)| {
+      self.insert_pointer(version, flag, p).map_err(|e| {
+        unsafe {
+          self.allocator().rewind(ArenaPosition::Start(offset as u32));
+        };
+        Among::Right(e)
+      })
+    })
+  }
+
+  fn update<KE, VE>(
+    &self,
+    version: u64,
+    entry_flag: EntryFlags,
+    kb: KE,
+    vb: Option<VE>,
+  ) -> Result<(), Among<KE::Error, VE::Error, Error<Self::Memtable>>>
+  where
+    KE: BufWriterOnce,
+    VE: BufWriterOnce,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: Memtable,
+  {
+    if self.read_only() {
+      return Err(Among::Right(Error::read_only()));
+    }
+
+    let res = {
+      let klen = kb.encoded_len();
+      let vlen = vb.as_ref().map_or(0, |vb| vb.encoded_len());
+      let encoded_entry_meta = check(
+        klen,
+        vlen,
+        self.maximum_key_size(),
+        self.maximum_value_size(),
+        self.read_only(),
+      )
+      .map_err(Either::Right)?;
+
+      let allocator = self.allocator();
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let is_ondisk = allocator.is_ondisk();
+
+      let buf = allocator.alloc_bytes(encoded_entry_meta.entry_size);
+      let mut cks = self.hasher().build_checksumer();
+
+      match buf {
+        Err(e) => Err(Among::Right(Error::from_insufficient_space(e))),
+        Ok(mut buf) => {
+          unsafe {
+            // We allocate the buffer with the exact size, so it's safe to write to the buffer.
+            let flag = Flags::COMMITTED.bits();
+
+            cks.update(&[flag]);
+
+            buf.put_slice_unchecked(&[Flags::empty().bits(), entry_flag.bits()]);
+
+            buf.put_u64_le_unchecked(version);
 
             let written = buf.put_u64_varint_unchecked(encoded_entry_meta.packed_kvlen);
             debug_assert_eq!(
@@ -427,7 +625,7 @@ pub trait Log: Sized {
         .try_fold((0u32, 0u64), |(num_entries, size), ent| {
           let klen = ent.encoded_key_len();
           let vlen = ent.value_len();
-          check_batch_entry(klen, vlen, maximum_key_size, minimum_value_size, ent.internal_version().is_some()).map(|meta| {
+          check_batch_entry(klen, vlen, maximum_key_size, minimum_value_size).map(|meta| {
             let ent_size = meta.entry_size as u64;
             ent.set_encoded_meta(meta);
             (num_entries + 1, size + ent_size)
@@ -467,15 +665,10 @@ pub trait Log: Sized {
 
       for ent in batch.iter_mut() {
         let meta = ent.encoded_meta();
-        let version_size = if ent.internal_version().is_some() {
-          VERSION_SIZE
-        } else {
-          0
-        };
 
         let remaining = buf.remaining();
         if remaining
-          < meta.packed_kvlen_size + EntryFlags::SIZE + version_size + meta.klen + meta.vlen
+          < meta.packed_kvlen_size + EntryFlags::SIZE + VERSION_SIZE + meta.klen + meta.vlen
         {
           return Err(Among::Right(
             Error::larger_batch_size(buf.capacity() as u32),
@@ -484,10 +677,8 @@ pub trait Log: Sized {
 
         let entry_offset = cursor;
         buf.put_u8_unchecked(ent.flag.bits());
-        let (ko, vo) = if let Some(version) = ent.internal_version() {
-          buf.put_u64_le_unchecked(version);
-          (cursor + meta.key_offset(), cursor + meta.value_offset())
-        } else {
+        let (ko, vo) = {
+          buf.put_u64_le_unchecked(ent.internal_version());
           (cursor + meta.key_offset(), cursor + meta.value_offset())
         };
 
@@ -638,7 +829,7 @@ pub trait Log: Sized {
           sub_cursor += RECORD_FLAG_SIZE;
 
           let entry_flag = EntryFlags::from_bits_retain(entry_flag);
-          let version = if entry_flag.contains(EntryFlags::VERSIONED) {
+          let version = {
             let version = arena.get_u64_le(sub_cursor).map_err(|e| {
               #[cfg(feature = "tracing")]
               tracing::error!(err=%e);
@@ -648,9 +839,7 @@ pub trait Log: Sized {
             sub_cursor += VERSION_SIZE;
             minimum_version = minimum_version.min(version);
             maximum_version = maximum_version.max(version);
-            Some(version)
-          } else {
-            None
+            version
           };
 
           let (readed, encoded_len) = arena.get_u64_varint(sub_cursor).map_err(|e| {
@@ -760,7 +949,7 @@ pub trait Log: Sized {
             let entry_flag = EntryFlags::from_bits_retain(batch_data_buf[0]);
             entry_cursor += EntryFlags::SIZE;
 
-            let version = if entry_flag.contains(EntryFlags::VERSIONED) {
+            let version = {
               if batch_data_buf.len() < entry_cursor + VERSION_SIZE {
                 return Err(Error::corrupted(IncompleteBuffer::new()));
               }
@@ -773,9 +962,7 @@ pub trait Log: Sized {
               entry_cursor += VERSION_SIZE;
               minimum_version = minimum_version.min(version);
               maximum_version = maximum_version.max(version);
-              Some(version)
-            } else {
-              None
+              version
             };
 
             let (kvlen, ent_len) =
@@ -839,10 +1026,84 @@ const fn min_u64(a: u64, b: u64) -> u64 {
 }
 
 #[inline]
+const fn check_range<T: Memtable>(
+  start_key_len: usize,
+  end_key_len: usize,
+  vlen: usize,
+  max_key_size: u32,
+  max_value_size: u32,
+  ro: bool,
+) -> Result<EncodedRangeEntryMeta, Error<T>> {
+  if ro {
+    return Err(Error::read_only());
+  }
+
+  let max_ksize = min_u64(max_key_size as u64, u32::MAX as u64);
+  let max_vsize = min_u64(max_value_size as u64, u32::MAX as u64);
+
+  if max_ksize < start_key_len as u64 {
+    return Err(Error::key_too_large(start_key_len as u64, max_key_size));
+  }
+
+  if max_ksize < end_key_len as u64 {
+    return Err(Error::key_too_large(end_key_len as u64, max_key_size));
+  }
+
+  let range_key_len = merge_lengths(start_key_len as u32, end_key_len as u32);
+  let range_key_len_size = encoded_u64_varint_len(range_key_len);
+  let total_range_key_size = range_key_len_size + start_key_len + end_key_len;
+
+  if total_range_key_size as u64 > u32::MAX as u64 {
+    return Err(Error::range_key_too_large(total_range_key_size as u64));
+  }
+
+  if max_vsize < vlen as u64 {
+    return Err(Error::value_too_large(vlen as u64, max_value_size));
+  }
+
+  let len = merge_lengths(total_range_key_size as u32, vlen as u32);
+  let len_size = encoded_u64_varint_len(len);
+  let elen = RECORD_FLAG_SIZE as u64
+    + EntryFlags::SIZE as u64
+    + VERSION_SIZE as u64
+    + len_size as u64
+    + total_range_key_size as u64
+    + vlen as u64
+    + CHECKSUM_SIZE as u64;
+
+  if elen > u32::MAX as u64 {
+    return Err(Error::entry_too_large(
+      elen,
+      min_u64(
+        RECORD_FLAG_SIZE as u64
+          + 10
+          + EntryFlags::SIZE as u64
+          + VERSION_SIZE as u64
+          + max_key_size as u64
+          + max_value_size as u64,
+        u32::MAX as u64,
+      ),
+    ));
+  }
+
+  Ok(EncodedRangeEntryMeta {
+    packed_kvlen_size: len_size,
+    packed_kvlen: len,
+    entry_size: elen as u32,
+    range_key_len,
+    range_key_len_size,
+    total_range_key_size,
+    start_key_len,
+    end_key_len,
+    vlen,
+    batch: false,
+  })
+}
+
+#[inline]
 const fn check<T: Memtable>(
   klen: usize,
   vlen: usize,
-  versioned: bool,
   max_key_size: u32,
   max_value_size: u32,
   ro: bool,
@@ -862,16 +1123,24 @@ const fn check<T: Memtable>(
     return Err(Error::value_too_large(vlen as u64, max_value_size));
   }
 
-  let encoded_entry_meta = EncodedEntryMeta::new(klen, vlen, versioned);
-  if encoded_entry_meta.entry_size == u32::MAX {
-    let version_size = if versioned { VERSION_SIZE } else { 0 };
+  let len = merge_lengths(klen as u32, vlen as u32);
+  let len_size = encoded_u64_varint_len(len);
+  let elen = RECORD_FLAG_SIZE as u64
+    + EntryFlags::SIZE as u64
+    + VERSION_SIZE as u64
+    + len_size as u64
+    + klen as u64
+    + vlen as u64
+    + CHECKSUM_SIZE as u64;
+
+  if elen > u32::MAX as u64 {
     return Err(Error::entry_too_large(
-      encoded_entry_meta.entry_size as u64,
+      elen,
       min_u64(
         RECORD_FLAG_SIZE as u64
           + 10
           + EntryFlags::SIZE as u64
-          + version_size as u64
+          + VERSION_SIZE as u64
           + max_key_size as u64
           + max_value_size as u64,
         u32::MAX as u64,
@@ -879,7 +1148,14 @@ const fn check<T: Memtable>(
     ));
   }
 
-  Ok(encoded_entry_meta)
+  Ok(EncodedEntryMeta {
+    packed_kvlen_size: len_size,
+    batch: false,
+    packed_kvlen: len,
+    entry_size: elen as u32,
+    klen,
+    vlen,
+  })
 }
 
 #[inline]
@@ -888,7 +1164,6 @@ fn check_batch_entry<T: Memtable>(
   vlen: usize,
   max_key_size: u32,
   max_value_size: u32,
-  versioned: bool,
 ) -> Result<EncodedEntryMeta, Error<T>> {
   let max_ksize = min_u64(max_key_size as u64, u32::MAX as u64);
   let max_vsize = min_u64(max_value_size as u64, u32::MAX as u64);
@@ -901,14 +1176,13 @@ fn check_batch_entry<T: Memtable>(
     return Err(Error::value_too_large(vlen as u64, max_value_size));
   }
 
-  let encoded_entry_meta = EncodedEntryMeta::batch(klen, vlen, versioned);
+  let encoded_entry_meta = EncodedEntryMeta::batch(klen, vlen);
   if encoded_entry_meta.entry_size == u32::MAX {
-    let version_size = if versioned { VERSION_SIZE } else { 0 };
     return Err(Error::entry_too_large(
       encoded_entry_meta.entry_size as u64,
       min_u64(
         10 + EntryFlags::SIZE as u64
-          + version_size as u64
+          + VERSION_SIZE as u64
           + max_key_size as u64
           + max_value_size as u64,
         u32::MAX as u64,
@@ -917,4 +1191,80 @@ fn check_batch_entry<T: Memtable>(
   }
 
   Ok(encoded_entry_meta)
+}
+
+struct Noop;
+
+impl BufWriterOnce for Noop {
+  type Error = ();
+
+  #[inline(never)]
+  #[cold]
+  fn encoded_len(&self) -> usize {
+    0
+  }
+
+  #[inline(never)]
+  #[cold]
+  fn write_once(self, _: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
+    Ok(0)
+  }
+}
+
+struct BoundWriter<W> {
+  writer: Bound<W>,
+  pointer: bool,
+}
+
+impl<W> BoundWriter<W> {
+  #[inline]
+  fn new(writer: Bound<W>) -> Self {
+    Self {
+      writer,
+      pointer: false,
+    }
+  }
+}
+
+impl<W> BufWriterOnce for BoundWriter<W>
+where
+  W: BufWriterOnce,
+{
+  type Error = Either<W::Error, InsufficientBuffer>;
+
+  #[inline]
+  fn encoded_len(&self) -> usize {
+    BoundedKey::encoded_size()
+      + match self.writer.as_ref() {
+        Bound::Included(k) => k.encoded_len(),
+        Bound::Excluded(k) => k.encoded_len(),
+        Bound::Unbounded => 0,
+      }
+  }
+
+  #[inline]
+  fn write_once(self, buf: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
+    match self.writer {
+      Bound::Included(k) => {
+        buf
+          .put_u8(BoundedKey::new(Bound::Included(()), self.pointer).encode())
+          .map_err(Either::Right)?;
+        let mut kbuf = buf.split_off(1);
+        k.write_once(&mut kbuf).map(|n| n + 1).map_err(Either::Left)
+      }
+      Bound::Excluded(k) => {
+        buf
+          .put_u8(BoundedKey::new(Bound::Included(()), self.pointer).encode())
+          .map_err(Either::Right)?;
+        let mut kbuf = buf.split_off(1);
+        k.write_once(&mut kbuf).map(|n| n + 1).map_err(Either::Left)
+      }
+      Bound::Unbounded => {
+        buf
+          .put_u8(BoundedKey::new(Bound::Unbounded, false).encode())
+          .map_err(Either::Right)?;
+        Ok(1)
+      }
+    }
+  }
 }
