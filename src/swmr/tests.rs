@@ -8,11 +8,11 @@ use std::{
   vec::Vec,
 };
 
-use base::{AlternativeTable, OrderWal, OrderWalReader};
+// use crate::memtable::bounded::{AlternativeTable, OrderWal, OrderWalReader};
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
-  types::{KeyRef, Type, TypeRef},
+  types::{Type, TypeRef},
 };
 
 use super::*;
@@ -151,13 +151,13 @@ macro_rules! expand_unit_tests {
   };
 }
 
-type OrderWalAlternativeTable<K, V> = OrderWal<AlternativeTable<K, V>>;
-type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<AlternativeTable<K, V>>;
+// type OrderWalAlternativeTable<K, V> = OrderWal<AlternativeTable<K, V>>;
+// type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<AlternativeTable<K, V>>;
 
-type MultipleVersionOrderWalAlternativeTable<K, V> =
-  multiple_version::OrderWal<multiple_version::AlternativeTable<K, V>>;
-type MultipleVersionOrderWalReaderAlternativeTable<K, V> =
-  multiple_version::OrderWalReader<multiple_version::AlternativeTable<K, V>>;
+// type MultipleVersionOrderWalAlternativeTable<K, V> =
+//   multiple_version::OrderWal<multiple_version::AlternativeTable<K, V>>;
+// type MultipleVersionOrderWalReaderAlternativeTable<K, V> =
+//   multiple_version::OrderWalReader<multiple_version::AlternativeTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -253,28 +253,6 @@ impl Comparable<PersonRef<'_>> for Person {
   }
 }
 
-impl KeyRef<'_, Person> for PersonRef<'_> {
-  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-  where
-    Q: ?Sized + Comparable<Self>,
-  {
-    Comparable::compare(a, self).reverse()
-  }
-
-  unsafe fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
-    let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
-    let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
-    PersonRef {
-      id: this_id,
-      name: std::str::from_utf8(&this[this_id_size..]).unwrap(),
-    }
-    .cmp(&PersonRef {
-      id: other_id,
-      name: std::str::from_utf8(&other[other_id_size..]).unwrap(),
-    })
-  }
-}
-
 impl Type for Person {
   type Ref<'a> = PersonRef<'a>;
   type Error = dbutils::error::InsufficientBuffer;
@@ -319,10 +297,10 @@ impl PersonRef<'_> {
   }
 }
 
-#[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
-mod constructor;
+// #[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
+// mod constructor;
 
-#[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
+// #[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
 mod insert;
 
 #[cfg(all(test, any(test_swmr_iters, all_orderwal_tests)))]

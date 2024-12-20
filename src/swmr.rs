@@ -15,7 +15,8 @@ pub use writer::OrderWal;
 //     test_swmr_iters,
 //   )
 // ))]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 // /// The ordered write-ahead log without multiple version support.
 // pub mod unique {

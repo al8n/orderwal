@@ -219,10 +219,9 @@ impl BoundedKey {
 pub(crate) unsafe fn fetch_raw_key<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
-) -> (Option<u64>, &'a [u8]) {
+) -> (u64, &'a [u8]) {
   let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
-
   debug_assert!(
     !(flag.contains(EntryFlags::RANGE_SET)
       | flag.contains(EntryFlags::RANGE_DELETION)
@@ -236,7 +235,7 @@ pub(crate) unsafe fn fetch_raw_key<'a>(
         .try_into()
         .unwrap(),
     );
-    (1 + VERSION_SIZE, Some(version))
+    (1 + VERSION_SIZE, version)
   };
 
   let (readed, kvlen) = decode_u64_varint(&entry_buf[cursor..]).expect("");

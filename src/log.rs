@@ -710,11 +710,10 @@ pub trait Log: Sized {
 
             let entry_offset = cursor;
             buf.put_u8_unchecked(ent.flag.bits());
+            buf.put_u64_le_unchecked(ent.internal_version());
             let (ko, vo) = {
-              buf.put_u64_le_unchecked(ent.internal_version());
-              (cursor + meta.key_offset(), cursor + meta.value_offset())
+              (entry_offset + meta.key_offset(), entry_offset + meta.value_offset())
             };
-
             let ent_len_size = buf.put_u64_varint_unchecked(meta.packed_kvlen);
             debug_assert_eq!(
               ent_len_size, meta.packed_kvlen_size,
@@ -725,7 +724,7 @@ pub trait Log: Sized {
             let ptr = buf.as_mut_ptr();
             let kp = ptr.add(ko);
             let vp = ptr.add(vo);
-            buf.set_len(cursor + meta.value_offset());
+            buf.set_len(entry_offset + meta.value_offset());
 
             let (kb, vb) = (ent.key(), ent.value());
             let mut key_buf = VacantBuffer::new(meta.klen, NonNull::new_unchecked(kp));
@@ -736,7 +735,7 @@ pub trait Log: Sized {
               meta.klen, written,
             );
 
-            buf.set_len(cursor + meta.checksum_offset());
+            buf.set_len(entry_offset + meta.checksum_offset());
             if let Some(vb) = vb {
               let mut value_buf = VacantBuffer::new(meta.vlen, NonNull::new_unchecked(vp));
               let written = vb.write(&mut value_buf).map_err(Among::Middle)?;
@@ -747,9 +746,8 @@ pub trait Log: Sized {
                 meta.vlen, written,
               );
             }
-
             let entry_size = meta.entry_size as usize;
-            ent.set_pointer(RecordPointer::new(entry_offset as u32, meta.entry_size));
+            ent.set_pointer(RecordPointer::new(entry_offset as u32 + buf.offset() as u32, meta.entry_size));
             cursor += entry_size;
           }
           Either::Right(meta) => {
@@ -778,9 +776,9 @@ pub trait Log: Sized {
             );
 
             let ptr = buf.as_mut_ptr();
-            let start_key_ptr = ptr.add(meta.start_key_offset());
-            let end_key_ptr = ptr.add(meta.end_key_offset());
-            let value_ptr = ptr.add(meta.value_offset());
+            let start_key_ptr = ptr.add(cursor + meta.start_key_offset());
+            let end_key_ptr = ptr.add(cursor + meta.end_key_offset());
+            let value_ptr = ptr.add(cursor + meta.value_offset());
             buf.set_len(cursor + meta.checksum_offset());
 
             let (start_bound, end_bound) = ent.bounds();

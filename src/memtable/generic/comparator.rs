@@ -21,6 +21,9 @@ where
   _k: PhantomData<K>,
 }
 
+unsafe impl<K: ?Sized, C: ?Sized> Send for MemtableComparator<K, C> {}
+unsafe impl<K: ?Sized, C: ?Sized> Sync for MemtableComparator<K, C> {}
+
 impl<K, C> crate::types::sealed::ComparatorConstructor<C> for MemtableComparator<K, C>
 where
   K: ?Sized,
