@@ -55,7 +55,7 @@ where
       data: Data::InsertPoint {
         key,
         value,
-        meta: EncodedEntryMeta::batch_zero(),
+        meta: EncodedEntryMeta::placeholder(),
       },
       flag: EntryFlags::empty(),
       pointers: None,
@@ -70,7 +70,7 @@ where
     Self {
       data: Data::RemovePoint {
         key,
-        meta: EncodedEntryMeta::batch_zero(),
+        meta: EncodedEntryMeta::placeholder(),
       },
       flag: EntryFlags::REMOVED,
       pointers: None,
@@ -86,7 +86,7 @@ where
       data: Data::RangeRemove {
         start_bound,
         end_bound,
-        meta: EncodedRangeEntryMeta::batch_zero(),
+        meta: EncodedRangeEntryMeta::placeholder(),
       },
       flag: EntryFlags::RANGE_DELETION,
       pointers: None,
@@ -102,7 +102,7 @@ where
       data: Data::RangeUnset {
         start_bound,
         end_bound,
-        meta: EncodedRangeEntryMeta::batch_zero(),
+        meta: EncodedRangeEntryMeta::placeholder(),
       },
       flag: EntryFlags::RANGE_UNSET,
       pointers: None,
@@ -119,7 +119,7 @@ where
         start_bound,
         end_bound,
         value,
-        meta: EncodedRangeEntryMeta::batch_zero(),
+        meta: EncodedRangeEntryMeta::placeholder(),
       },
       flag: EntryFlags::RANGE_SET,
       pointers: None,

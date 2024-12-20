@@ -1,4 +1,7 @@
-use core::ops::{Bound, RangeBounds};
+use core::{
+  cell::OnceCell,
+  ops::{Bound, RangeBounds},
+};
 
 use skl::{
   generic::{
@@ -19,11 +22,11 @@ where
   S: State,
   T: TypeMode,
 {
-  pub(crate) ent: Entry<'a, RecordPointer, (), S, T::RangeComparator<C>>,
-  data: core::cell::OnceCell<RawRangeUpdateRef<'a>>,
-  start_bound: core::cell::OnceCell<Bound<T::Key<'a>>>,
-  end_bound: core::cell::OnceCell<Bound<T::Key<'a>>>,
-  value: core::cell::OnceCell<S::Data<'a, T::Value<'a>>>,
+  pub(crate) ent: Entry<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
+  data: OnceCell<RawRangeUpdateRef<'a>>,
+  start_bound: OnceCell<Bound<T::Key<'a>>>,
+  end_bound: OnceCell<Bound<T::Key<'a>>>,
+  value: OnceCell<S::Data<'a, T::Value<'a>>>,
 }
 
 impl<S, C, T> core::fmt::Debug for RangeUpdateEntry<'_, S, C, T>
@@ -45,7 +48,7 @@ where
 impl<'a, S, C, T> Clone for RangeUpdateEntry<'a, S, C, T>
 where
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Clone,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   S::Data<'a, T::Value<'a>>: Clone,
   T::Key<'a>: Clone,
@@ -68,14 +71,14 @@ where
   T: TypeMode,
 {
   pub(in crate::memtable) fn new(
-    ent: Entry<'a, RecordPointer, (), S, T::RangeComparator<C>>,
+    ent: Entry<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
   ) -> Self {
     Self {
       ent,
-      data: core::cell::OnceCell::new(),
-      start_bound: core::cell::OnceCell::new(),
-      end_bound: core::cell::OnceCell::new(),
-      value: core::cell::OnceCell::new(),
+      data: OnceCell::new(),
+      start_bound: OnceCell::new(),
+      end_bound: OnceCell::new(),
+      value: OnceCell::new(),
     }
   }
 }
@@ -84,12 +87,13 @@ impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeUpdateEntry<'a, S, C,
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
+
   #[inline]
   fn start_bound(&self) -> Bound<Self::Key> {
     let start_bound = self.start_bound.get_or_init(|| {
@@ -111,10 +115,12 @@ where
     });
     end_bound.as_ref().map(|k| k.output())
   }
+
   #[inline]
   fn next(&mut self) -> Option<Self> {
     self.ent.next().map(Self::new)
   }
+
   #[inline]
   fn prev(&mut self) -> Option<Self> {
     self.ent.prev().map(Self::new)
@@ -137,7 +143,7 @@ impl<'a, S, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a,
 where
   C: 'static,
   S: State + 'a,
-  S::Data<'a, LazyRef<'a, ()>>: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Sized + Transformable<Input = Option<&'a [u8]>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
@@ -164,15 +170,14 @@ impl<'a, S, C, T> RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
   S: State + 'a,
-  S::Data<'a, LazyRef<'a, ()>>: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Sized + Transformable<Input = Option<&'a [u8]>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
 {
   #[inline]
-  pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> {
-    use RangeComparator;
+  pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> { 
     self.value.get_or_init(|| {
       let ent = self
         .data
@@ -189,7 +194,7 @@ where
   S: State,
   T: TypeMode,
 {
-  iter: Iter<'a, RecordPointer, (), S, T::RangeComparator<C>>,
+  iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
 }
 
 impl<'a, S, C, T> IterBulkUpdates<'a, S, C, T>
@@ -199,7 +204,7 @@ where
 {
   #[inline]
   pub(in crate::memtable) const fn new(
-    iter: Iter<'a, RecordPointer, (), S, T::RangeComparator<C>>,
+    iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
   ) -> Self {
     Self { iter }
   }
@@ -209,7 +214,7 @@ impl<'a, S, C, T> Iterator for IterBulkUpdates<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'a,
 {
@@ -224,7 +229,7 @@ impl<'a, S, C, T> DoubleEndedIterator for IterBulkUpdates<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'a,
 {
@@ -241,7 +246,8 @@ where
   Q: ?Sized,
   T: TypeMode,
 {
-  range: Range<'a, RecordPointer, (), S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
+  range:
+    Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
 }
 
 impl<'a, S, Q, R, C, T> RangeBulkUpdates<'a, S, Q, R, C, T>
@@ -252,7 +258,15 @@ where
 {
   #[inline]
   pub(in crate::memtable) const fn new(
-    range: Range<'a, RecordPointer, (), S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
+    range: Range<
+      'a,
+      RecordPointer,
+      RecordPointer,
+      S,
+      Query<Q>,
+      QueryRange<Q, R>,
+      T::RangeComparator<C>,
+    >,
   ) -> Self {
     Self { range }
   }
@@ -262,7 +276,7 @@ impl<'a, S, Q, R, C, T> Iterator for RangeBulkUpdates<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -279,7 +293,7 @@ impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkUpdates<'a, S, Q, R, C,
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

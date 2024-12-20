@@ -6,7 +6,6 @@ use core::{
 
 use dbutils::{
   error::InsufficientBuffer,
-  leb128::encoded_u64_varint_len,
   types::{Type, TypeRef},
 };
 use ref_cast::RefCast as _;
@@ -14,7 +13,7 @@ use sealed::Pointee;
 
 use crate::utils::split_lengths;
 
-use super::{utils::merge_lengths, CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
+use super::{CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
 
 pub use dbutils::buffer::{BufWriter, VacantBuffer};
 
@@ -124,29 +123,7 @@ pub(crate) struct EncodedEntryMeta {
 
 impl EncodedEntryMeta {
   #[inline]
-  pub(crate) const fn batch(key_len: usize, value_len: usize) -> Self {
-    // Cast to u32 is safe, because we already checked those values before calling this function.
-
-    let len = merge_lengths(key_len as u32, value_len as u32);
-    let len_size = encoded_u64_varint_len(len);
-    let elen = EntryFlags::SIZE as u32
-      + VERSION_SIZE as u32
-      + len_size as u32
-      + key_len as u32
-      + value_len as u32;
-
-    Self {
-      packed_kvlen_size: len_size,
-      packed_kvlen: len,
-      entry_size: elen,
-      klen: key_len,
-      vlen: value_len,
-      batch: true,
-    }
-  }
-
-  #[inline]
-  pub(crate) const fn batch_zero() -> Self {
+  pub(crate) const fn placeholder() -> Self {
     Self {
       packed_kvlen_size: 0,
       packed_kvlen: 0,
@@ -209,7 +186,7 @@ pub(crate) struct EncodedRangeEntryMeta {
 
 impl EncodedRangeEntryMeta {
   #[inline]
-  pub(crate) const fn batch_zero() -> Self {
+  pub(crate) const fn placeholder() -> Self {
     Self {
       packed_kvlen_size: 0,
       packed_kvlen: 0,

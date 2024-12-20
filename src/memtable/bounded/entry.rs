@@ -39,7 +39,7 @@ impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   <S::Data<'a, T::Value<'a>> as Transformable>::Output: core::fmt::Debug,
   T: TypeMode,
@@ -83,7 +83,7 @@ impl<'a, S, C, T> MemtableEntry<'a> for Entry<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
   T: TypeMode,
@@ -171,7 +171,7 @@ impl<'a, S, C, T> Entry<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, ()>>: skl::Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,

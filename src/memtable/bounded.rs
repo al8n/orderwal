@@ -128,9 +128,11 @@ pub struct Table<C, T>
 where
   T: TypeMode,
 {
-  pub(in crate::memtable) skl: SkipMap<RecordPointer, (), T::Comparator<C>>,
-  pub(in crate::memtable) range_deletions_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
-  pub(in crate::memtable) range_updates_skl: SkipMap<RecordPointer, (), T::RangeComparator<C>>,
+  pub(in crate::memtable) skl: SkipMap<RecordPointer, RecordPointer, T::Comparator<C>>,
+  pub(in crate::memtable) range_deletions_skl:
+    SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
+  pub(in crate::memtable) range_updates_skl:
+    SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
 }
 impl<C, T> Memtable for Table<C, T>
 where
@@ -193,7 +195,7 @@ where
   fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .skl
-      .get_or_insert(version, &pointer, &())
+      .get_or_insert(version, &pointer, &pointer)
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
@@ -209,7 +211,7 @@ where
   fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_deletions_skl
-      .get_or_insert(version, &pointer, &())
+      .get_or_insert(version, &pointer, &pointer)
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
@@ -217,7 +219,7 @@ where
   fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
       .range_updates_skl
-      .get_or_insert(version, &pointer, &())
+      .get_or_insert(version, &pointer, &pointer)
       .map(|_| ())
       .map_err(Among::unwrap_right)
   }
@@ -254,7 +256,7 @@ where
   ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
   where
     S: State,
-    S::Data<'a, LazyRef<'a, ()>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+    S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
     RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<

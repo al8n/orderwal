@@ -71,13 +71,10 @@ pub enum Error<T: Memtable> {
     /// The maximum entry size.
     maximum_entry_size: u64,
   },
-
   /// Returned when the expected batch encoding size does not match the actual size.
   Batch(BatchError),
-
   /// The WAL is read-only.
   ReadOnly,
-
   /// I/O error.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
