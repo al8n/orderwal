@@ -53,7 +53,9 @@ pub(crate) mod swmr;
 mod builder;
 mod log;
 mod options;
-mod types;
+
+/// Types 
+pub mod types;
 
 /// Dynamic ordered write-ahead log implementation.
 pub mod dynamic;

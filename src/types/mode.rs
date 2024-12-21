@@ -1,3 +1,4 @@
+/// The type mode of the memtable, either dynamic key-value or generic structured key-value.
 pub trait TypeMode: sealed::Sealed {}
 
 #[doc(hidden)]

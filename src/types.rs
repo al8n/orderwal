@@ -4,10 +4,7 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::{
-  error::InsufficientBuffer,
-  types::{Type, TypeRef},
-};
+use dbutils::error::InsufficientBuffer;
 use ref_cast::RefCast as _;
 use sealed::Pointee;
 
@@ -15,7 +12,7 @@ use crate::utils::split_lengths;
 
 use super::{CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
 
-pub use dbutils::buffer::{BufWriter, VacantBuffer};
+pub use dbutils::{buffer::{BufWriter, VacantBuffer}, types::{Type, TypeRef}};
 
 mod mode;
 mod raw;
@@ -28,7 +25,7 @@ pub(crate) use raw::*;
 #[repr(transparent)]
 pub struct Query<Q: ?Sized>(pub(crate) Q);
 
-pub struct QueryRange<Q: ?Sized, R> {
+pub(crate) struct QueryRange<Q: ?Sized, R> {
   r: R,
   _m: PhantomData<Q>,
 }
@@ -290,13 +287,15 @@ impl RecordPointer {
     Self { offset, len }
   }
 
+  /// Returns the offset of the record.
   #[inline]
   pub const fn offset(&self) -> usize {
     self.offset as usize
   }
 
+  /// Returns the size of the record.
   #[inline]
-  pub const fn len(&self) -> usize {
+  pub const fn size(&self) -> usize {
     self.len as usize
   }
 }
@@ -329,12 +328,14 @@ impl<'a> TypeRef<'a> for RecordPointer {
   }
 }
 
+/// A pointer points to a byte slice in the WAL.
 pub struct Pointer {
   offset: u32,
   len: u32,
 }
 
 impl Pointer {
+  /// The encoded size of the pointer.
   pub const SIZE: usize = U32_SIZE * 2;
 
   #[inline]
@@ -342,22 +343,16 @@ impl Pointer {
     Self { offset, len }
   }
 
+  /// Returns the offset to the underlying file of the pointer.
   #[inline]
   pub const fn offset(&self) -> usize {
     self.offset as usize
   }
 
+  /// Returns the size of the byte slice of the pointer.
   #[inline]
-  pub const fn len(&self) -> usize {
+  pub const fn size(&self) -> usize {
     self.len as usize
-  }
-
-  #[inline]
-  pub(crate) fn as_array(&self) -> [u8; Self::SIZE] {
-    let mut array = [0; Self::SIZE];
-    array[..4].copy_from_slice(&self.offset.to_le_bytes());
-    array[4..].copy_from_slice(&self.len.to_le_bytes());
-    array
   }
 
   /// # Panics

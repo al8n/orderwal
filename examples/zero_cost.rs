@@ -1,10 +1,8 @@
 use std::{cmp, sync::Arc, thread::spawn};
 
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
-use orderwal::{
-  base::{OrderWal, Reader, Writer},
-  types::{KeyRef, Type, TypeRef},
-  Builder, Comparable, Equivalent,
+use orderwal::{ 
+  generic::{ArenaTable, OrderWal, Reader, Writer}, memtable::MemtableEntry, types::{Type, TypeRef, VacantBuffer}, Builder, Comparable, Equivalent
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -22,33 +20,10 @@ impl Person {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct PersonRef<'a> {
   id: u64,
   name: &'a str,
-}
-
-impl PartialEq for PersonRef<'_> {
-  fn eq(&self, other: &Self) -> bool {
-    self.id == other.id && self.name == other.name
-  }
-}
-
-impl Eq for PersonRef<'_> {}
-
-impl PartialOrd for PersonRef<'_> {
-  fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl Ord for PersonRef<'_> {
-  fn cmp(&self, other: &Self) -> cmp::Ordering {
-    self
-      .id
-      .cmp(&other.id)
-      .then_with(|| self.name.cmp(other.name))
-  }
 }
 
 impl Equivalent<Person> for PersonRef<'_> {
@@ -78,29 +53,6 @@ impl Comparable<PersonRef<'_>> for Person {
   }
 }
 
-impl<'a> KeyRef<'a, Person> for PersonRef<'a> {
-  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-  where
-    Q: ?Sized + Comparable<Self>,
-  {
-    Comparable::compare(a, self).reverse()
-  }
-
-  unsafe fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
-    let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
-    let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
-
-    PersonRef {
-      id: this_id,
-      name: std::str::from_utf8(&this[this_id_size..]).unwrap(),
-    }
-    .cmp(&PersonRef {
-      id: other_id,
-      name: std::str::from_utf8(&other[other_id_size..]).unwrap(),
-    })
-  }
-}
-
 impl Type for Person {
   type Ref<'a> = PersonRef<'a>;
   type Error = dbutils::error::InsufficientBuffer;
@@ -119,7 +71,7 @@ impl Type for Person {
   #[inline]
   fn encode_to_buffer(
     &self,
-    buf: &mut orderwal::types::VacantBuffer<'_>,
+    buf: &mut VacantBuffer<'_>,
   ) -> Result<usize, Self::Error> {
     let id_size = buf.put_u64_varint(self.id)?;
     buf.put_slice_unchecked(self.name.as_bytes());
@@ -153,7 +105,7 @@ fn main() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<OrderWal<Person, String>, _>(&path)
+      .map_mut::<OrderWal<ArenaTable<Person, String>>, _>(&path)
       .unwrap()
   };
 
@@ -166,19 +118,19 @@ fn main() {
   let handles = readers.into_iter().enumerate().map(|(i, reader)| {
     let people = people.clone();
     spawn(move || loop {
-      let (person, hello) = &people[i];
+      let (person, hello) = people[i].clone();
       let person_ref = PersonRef {
         id: person.id,
         name: &person.name,
       };
-      if let Some(p) = reader.get(person) {
+      if let Some(p) = reader.get(1, &person) {
         assert_eq!(p.key().id, person.id);
         assert_eq!(p.key().name, person.name);
         assert_eq!(p.value(), hello);
         break;
       }
 
-      if let Some(p) = reader.get(&person_ref) {
+      if let Some(p) = reader.get(1, &person_ref) {
         assert_eq!(p.key().id, person.id);
         assert_eq!(p.key().name, person.name);
         assert_eq!(p.value(), hello);
@@ -189,7 +141,7 @@ fn main() {
 
   // Insert 100 people into the wal
   for (p, h) in people.iter() {
-    wal.insert(p, h).unwrap();
+    wal.insert(1, p, h).unwrap();
   }
 
   // Wait for all threads to finish

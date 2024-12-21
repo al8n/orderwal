@@ -12,9 +12,10 @@ use among::Among;
 use core::{ops::Bound, ptr::NonNull};
 use dbutils::{
   buffer::{BufWriter, BufWriterOnce, VacantBuffer},
+  error::InsufficientBuffer,
   leb128::encoded_u64_varint_len,
 };
-use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer, InsufficientBuffer};
+use rarena_allocator::{either::Either, Allocator, ArenaPosition, Buffer};
 
 pub trait Log: Sized {
   type Allocator: Allocator + 'static;

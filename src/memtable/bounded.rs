@@ -134,6 +134,7 @@ where
   pub(in crate::memtable) range_updates_skl:
     SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
 }
+
 impl<C, T> Memtable for Table<C, T>
 where
   C: 'static,
@@ -143,6 +144,7 @@ where
 {
   type Options = TableOptions<C>;
   type Error = skl::error::Error;
+
   #[inline]
   fn new<A>(arena: A, opts: Self::Options) -> Result<Self, Self::Error>
   where

@@ -1,6 +1,6 @@
 [package]
 name = "orderwal"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
@@ -43,6 +43,7 @@ paste = "1"
 zerocopy = { version = "0.8", features = ["derive"] }
 tracing = { version = "0.1", default-features = false, optional = true }
 triomphe = "0.1"
+
 
 [dev-dependencies]
 criterion = "0.5"

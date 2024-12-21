@@ -217,7 +217,7 @@ impl BoundedKey {
 /// - `kp` must be pointing to key which is stored in the data_ptr.
 #[inline]
 pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) -> (u64, &'a [u8]) {
-  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
+  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.size());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
   debug_assert!(
     !(flag.contains(EntryFlags::RANGE_SET)
@@ -247,14 +247,14 @@ pub(crate) unsafe fn fetch_raw_key<'a>(data_ptr: *const u8, kp: &RecordPointer) 
   let pointer = Pointer::from_slice(k);
   let k = slice::from_raw_parts(
     data_ptr.add(pointer.offset() as usize),
-    pointer.len() as usize,
+    pointer.size() as usize,
   );
   (version, k)
 }
 
 #[inline]
 pub(crate) unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointer) -> RawEntryRef<'a> {
-  let entry_buf = slice::from_raw_parts(data_ptr.add(p.offset()), p.len());
+  let entry_buf = slice::from_raw_parts(data_ptr.add(p.offset()), p.size());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   debug_assert!(
@@ -282,7 +282,7 @@ pub(crate) unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointer) -> 
     let pointer = Pointer::from_slice(&entry_buf[cursor..cursor + klen as usize]);
     slice::from_raw_parts(
       data_ptr.add(pointer.offset() as usize),
-      pointer.len() as usize,
+      pointer.size() as usize,
     )
   };
   cursor += klen as usize;
@@ -295,7 +295,7 @@ pub(crate) unsafe fn fetch_entry<'a>(data_ptr: *const u8, p: &RecordPointer) -> 
       let pointer = Pointer::from_slice(v);
       Some(slice::from_raw_parts(
         data_ptr.add(pointer.offset() as usize),
-        pointer.len() as usize,
+        pointer.size() as usize,
       ))
     } else {
       Some(v)
@@ -318,7 +318,7 @@ pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
 ) -> Bound<&'a [u8]> {
-  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
+  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.size());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   debug_assert!(
@@ -349,7 +349,7 @@ pub(crate) unsafe fn fetch_raw_range_key_start_bound<'a>(
     let pointer = Pointer::from_slice(raw_start_key);
     let key = slice::from_raw_parts(
       data_ptr.add(pointer.offset() as usize),
-      pointer.len() as usize,
+      pointer.size() as usize,
     );
     key
   } else {
@@ -375,7 +375,7 @@ unsafe fn fetch_raw_range_key_helper<'a>(
   kp: &RecordPointer,
   f: impl FnOnce(&EntryFlags),
 ) -> FetchRangeKey<'a> {
-  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.len());
+  let entry_buf = slice::from_raw_parts(data_ptr.add(kp.offset()), kp.size());
   let flag = EntryFlags::from_bits_retain(entry_buf[0]);
 
   #[cfg(debug_assertions)]
@@ -412,7 +412,7 @@ unsafe fn fetch_raw_range_key_helper<'a>(
     let pointer = Pointer::from_slice(raw_start_key);
     let key = slice::from_raw_parts(
       data_ptr.add(pointer.offset() as usize),
-      pointer.len() as usize,
+      pointer.size() as usize,
     );
     key
   } else {
@@ -426,7 +426,7 @@ unsafe fn fetch_raw_range_key_helper<'a>(
     let pointer = Pointer::from_slice(raw_end_key);
     let key = slice::from_raw_parts(
       data_ptr.add(pointer.offset() as usize),
-      pointer.len() as usize,
+      pointer.size() as usize,
     );
     key
   } else {
@@ -501,12 +501,12 @@ pub(crate) unsafe fn fetch_raw_range_update_entry<'a>(
   });
 
   let value = value.map(|pointer| {
-    let v = slice::from_raw_parts(data_ptr.add(pointer.offset()), pointer.len());
+    let v = slice::from_raw_parts(data_ptr.add(pointer.offset()), pointer.size());
     if !flag.contains(EntryFlags::VALUE_POINTER) {
       let pointer = Pointer::from_slice(v);
       slice::from_raw_parts(
         data_ptr.add(pointer.offset() as usize),
-        pointer.len() as usize,
+        pointer.size() as usize,
       )
     } else {
       v

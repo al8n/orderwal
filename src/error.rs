@@ -1,5 +1,5 @@
 use among::Among;
-use dbutils::error::InsufficientBuffer;
+pub use dbutils::error::*;
 use derive_where::derive_where;
 
 use crate::memtable::Memtable;
