@@ -203,6 +203,36 @@ where
   }
 
   #[inline]
+  fn upper_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
+  {
+    self
+      .range_all::<Q, _>(version, (Bound::Unbounded, bound))
+      .next_back()
+  }
+
+  #[inline]
+  fn lower_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
+  {
+    self
+      .range_all::<Q, _>(version, (bound, Bound::Unbounded))
+      .next()
+  }
+
+  #[inline]
   fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
     self.iter(version).next()
   }
@@ -210,6 +240,16 @@ where
   #[inline]
   fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
     self.iter(version).next_back()
+  }
+
+  #[inline]
+  fn first_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>> {
+    self.iter_all(version).next()
+  }
+
+  #[inline]
+  fn last_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>> {
+    self.iter_all(version).next_back()
   }
 
   #[inline]
@@ -226,8 +266,30 @@ where
   }
 
   #[inline]
+  fn get_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
+  {
+    let ent = self.skl.get_with_tombstone(version, Query::ref_cast(key))?;
+    match self.validate(version, PointEntry::new(ent)) {
+      ControlFlow::Break(entry) => entry,
+      ControlFlow::Continue(_) => None,
+    }
+  }
+
+  #[inline]
   fn iter(&self, version: u64) -> Self::Iterator<'_, Active> {
     Iter::new(version, self)
+  }
+
+  #[inline]
+  fn iter_all(&self, version: u64) -> Self::Iterator<'_, MaybeTombstone> {
+    Iter::with_tombstone(version, self)
   }
 
   #[inline]
@@ -238,6 +300,16 @@ where
     Self::Comparator: TypeRefQueryComparator<K, Q>,
   {
     Range::new(version, self, range)
+  }
+
+  #[inline]
+  fn range_all<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, MaybeTombstone, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
+  {
+    Range::with_tombstone(version, self, range)
   }
 
   #[inline]

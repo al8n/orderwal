@@ -4,12 +4,12 @@ use core::{
 };
 
 use ref_cast::RefCast as _;
-use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active};
+use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active, MaybeTombstone};
 
 use crate::{
   memtable::bounded,
   types::{Dynamic, Query},
-  State, WithVersion,
+  State,
 };
 
 use super::DynamicMemtable;
@@ -56,7 +56,6 @@ pub type RangeBulkUpdates<'a, S, Q, R, C> = bounded::RangeBulkUpdates<'a, S, Q, 
 impl<C> DynamicMemtable for Table<C>
 where
   C: BytesComparator + 'static,
-  for<'a> PointEntry<'a, Active, C>: WithVersion,
 {
   type Entry<'a, S>
     = Entry<'a, S, C>
@@ -192,6 +191,34 @@ where
   }
 
   #[inline]
+  fn upper_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    self
+      .range_all::<Q, _>(version, (Bound::Unbounded, bound))
+      .next_back()
+  }
+
+  #[inline]
+  fn lower_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    self
+      .range_all::<Q, _>(version, (bound, Bound::Unbounded))
+      .next()
+  }
+
+  #[inline]
   fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
     self.iter(version).next()
   }
@@ -201,11 +228,34 @@ where
     self.iter(version).next_back()
   }
 
+  #[inline]
+  fn first_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>> {
+    self.iter_all(version).next()
+  }
+
+  #[inline]
+  fn last_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>> {
+    self.iter_all(version).next_back()
+  }
+
+  #[inline]
   fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_, Active>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
     let ent = self.skl.get(version, Query::ref_cast(key))?;
+    match self.validate(version, PointEntry::new(ent)) {
+      ControlFlow::Break(entry) => entry,
+      ControlFlow::Continue(_) => None,
+    }
+  }
+
+  #[inline]
+  fn get_with_tombstone<Q>(&self, version: u64, key: &Q) -> Option<Self::Entry<'_, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    let ent = self.skl.get_with_tombstone(version, Query::ref_cast(key))?;
     match self.validate(version, PointEntry::new(ent)) {
       ControlFlow::Break(entry) => entry,
       ControlFlow::Continue(_) => None,
@@ -227,12 +277,26 @@ where
   }
 
   #[inline]
+  fn iter_all(&self, version: u64) -> Self::Iterator<'_, MaybeTombstone> {
+    Iter::with_tombstone(version, self)
+  }
+
+  #[inline]
+  fn range_all<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, MaybeTombstone, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>,
+  {
+    Range::with_tombstone(version, self, range)
+  }
+
+  #[inline]
   fn iter_points(&self, version: u64) -> Self::PointsIterator<'_, skl::Active> {
     IterPoints::new(self.skl.iter(version))
   }
 
   #[inline]
-  fn iter_all_points(&self, version: u64) -> Self::PointsIterator<'_, skl::MaybeTombstone> {
+  fn iter_all_points(&self, version: u64) -> Self::PointsIterator<'_, MaybeTombstone> {
     IterPoints::new(self.skl.iter_all(version))
   }
 
@@ -254,7 +318,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::RangePoints<'a, skl::MaybeTombstone, Q, R>
+  ) -> Self::RangePoints<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -271,7 +335,7 @@ where
   fn iter_all_bulk_deletions(
     &self,
     version: u64,
-  ) -> Self::BulkDeletionsIterator<'_, skl::MaybeTombstone> {
+  ) -> Self::BulkDeletionsIterator<'_, MaybeTombstone> {
     IterBulkDeletions::new(self.range_deletions_skl.iter_all(version))
   }
 
@@ -293,7 +357,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkDeletionsRange<'a, skl::MaybeTombstone, Q, R>
+  ) -> Self::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -307,10 +371,7 @@ where
   }
 
   #[inline]
-  fn iter_all_bulk_updates(
-    &self,
-    version: u64,
-  ) -> Self::BulkUpdatesIterator<'_, skl::MaybeTombstone> {
+  fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkUpdatesIterator<'_, MaybeTombstone> {
     IterBulkUpdates::new(self.range_updates_skl.iter_all(version))
   }
 
@@ -332,7 +393,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdatesRange<'a, skl::MaybeTombstone, Q, R>
+  ) -> Self::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,

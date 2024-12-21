@@ -244,6 +244,7 @@ where
   C: 'static,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Transformable,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
@@ -264,11 +265,10 @@ where
     S: State,
     S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+    PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
-        'a,
-        Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>,
-      > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
+      + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   {
     let key = ent.key();
     let cmp = ent.ent.comparator();

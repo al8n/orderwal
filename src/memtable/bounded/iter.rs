@@ -9,7 +9,7 @@ use skl::{
 
 use crate::{
   memtable::{
-    RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
     RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
@@ -23,7 +23,7 @@ use super::{
   point::{IterPoints, RangePoints},
   range_deletion::RangeDeletionEntry,
   range_update::RangeUpdateEntry,
-  Table,
+  PointEntry, Table,
 };
 
 /// An iterator over the entries of a `Memtable`.
@@ -76,7 +76,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Transformable,
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
@@ -87,9 +87,14 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
@@ -115,7 +120,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Transformable,
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
@@ -126,9 +131,14 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
@@ -202,7 +212,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Transformable,
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
@@ -214,9 +224,14 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
@@ -244,7 +259,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Transformable,
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
@@ -256,9 +271,14 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {

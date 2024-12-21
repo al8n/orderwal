@@ -148,6 +148,33 @@ pub trait Reader: Log {
     self.memtable().range(version, range)
   }
 
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  fn iter_all(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::Iterator<'_, MaybeTombstone>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter_all(version)
+  }
+
+  /// Returns an iterator over a subset of entries in the WAL.
+  #[inline]
+  fn range_all<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::Range<'_, MaybeTombstone, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_all(version, range)
+  }
+
   /// Returns an iterator over point entries in the memtable.
   #[inline]
   fn iter_points(
@@ -328,6 +355,30 @@ pub trait Reader: Log {
     self.memtable().last(version)
   }
 
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  #[inline]
+  fn first_with_tombstone(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, MaybeTombstone>>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().first_with_tombstone(version)
+  }
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  #[inline]
+  fn last_with_tombstone(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, MaybeTombstone>>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().last_with_tombstone(version)
+  }
+
   /// Returns `true` if the key exists in the WAL.
   #[inline]
   fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
@@ -350,6 +401,30 @@ pub trait Reader: Log {
     Self::Memtable: DynamicMemtable,
   {
     self.memtable().get(version, key)
+  }
+
+  /// Returns `true` if the key exists in the WAL.
+  #[inline]
+  fn contains_key_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().contains_with_tombsone(version, key)
+  }
+
+  /// Gets the value associated with the key.
+  #[inline]
+  fn get_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().get_with_tombstone(version, key)
   }
 
   /// Returns a value associated to the highest element whose key is below the given bound.
@@ -380,6 +455,36 @@ pub trait Reader: Log {
     Self::Memtable: DynamicMemtable,
   {
     self.memtable().lower_bound(version, bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn upper_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().upper_bound_with_tombstone(version, bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn lower_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().lower_bound_with_tombstone(version, bound)
   }
 }
 

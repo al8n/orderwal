@@ -1,11 +1,11 @@
-use core::ops::RangeBounds;
+use core::{cell::OnceCell, ops::RangeBounds};
 
 use skl::{
   generic::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  State, Transformable,
+  Active, MaybeTombstone, State, Transformable,
 };
 
 use crate::types::{
@@ -20,9 +20,9 @@ where
   T: TypeMode,
 {
   pub(in crate::memtable) ent: Entry<'a, RecordPointer, RecordPointer, S, T::Comparator<C>>,
-  data: core::cell::OnceCell<RawEntryRef<'a>>,
-  key: core::cell::OnceCell<T::Key<'a>>,
-  pub(in crate::memtable) value: core::cell::OnceCell<S::Data<'a, T::Value<'a>>>,
+  data: OnceCell<RawEntryRef<'a>>,
+  key: OnceCell<T::Key<'a>>,
+  pub(in crate::memtable) value: OnceCell<S::Data<'a, T::Value<'a>>>,
 }
 
 impl<S, C, T> core::fmt::Debug for PointEntry<'_, S, C, T>
@@ -68,35 +68,32 @@ where
   ) -> Self {
     Self {
       ent,
-      data: core::cell::OnceCell::new(),
-      key: core::cell::OnceCell::new(),
-      value: core::cell::OnceCell::new(),
+      data: OnceCell::new(),
+      key: OnceCell::new(),
+      value: OnceCell::new(),
     }
   }
 }
-impl<'a, S, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, S, C, T>
+
+impl<'a, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, Active, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
-  type Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output;
+  type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
 
   #[inline]
   fn key(&self) -> Self::Key {
-    use PointComparator;
-    use Pointee;
     self
       .key
       .get_or_init(|| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.key()));
+          .get_or_init(|| self.ent.comparator().fetch_entry(&self.ent.value()));
         <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
       })
       .output()
@@ -104,15 +101,73 @@ where
 
   #[inline]
   fn value(&self) -> Self::Value {
-    use PointComparator;
-    use Transformable;
     self
       .value
       .get_or_init(|| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.key()));
-        <S::Data<'a, _> as Transformable>::from_input(ent.value())
+          .get_or_init(|| self.ent.comparator().fetch_entry(&self.ent.value()));
+        <<Active as State>::Data<'a, _> as Transformable>::from_input(ent.value())
+      })
+      .transform()
+  }
+
+  #[inline]
+  fn next(&self) -> Option<Self> {
+    self.ent.next().map(Self::new)
+  }
+
+  #[inline]
+  fn prev(&self) -> Option<Self> {
+    self.ent.prev().map(Self::new)
+  }
+}
+
+impl<'a, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, MaybeTombstone, C, T>
+where
+  C: 'static,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::Value<'a>: 'a,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+{
+  type Key = <T::Key<'a> as Pointee<'a>>::Output;
+  type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
+
+  #[inline]
+  fn key(&self) -> Self::Key {
+    self
+      .key
+      .get_or_init(|| match self.ent.value() {
+        Some(value) => {
+          let ent = self
+            .data
+            .get_or_init(|| self.ent.comparator().fetch_entry(&value));
+          <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
+        }
+        None => {
+          let ent = self
+            .data
+            .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.key()));
+          <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
+        }
+      })
+      .output()
+  }
+
+  #[inline]
+  fn value(&self) -> Self::Value {
+    self
+      .value
+      .get_or_init(|| match self.ent.value() {
+        Some(value) => {
+          let ent = self
+            .data
+            .get_or_init(|| self.ent.comparator().fetch_entry(&value));
+          <<MaybeTombstone as State>::Data<'a, _> as Transformable>::from_input(ent.value())
+        }
+        None => None,
       })
       .transform()
   }

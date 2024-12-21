@@ -712,7 +712,10 @@ pub trait Log: Sized {
             buf.put_u8_unchecked(ent.flag.bits());
             buf.put_u64_le_unchecked(ent.internal_version());
             let (ko, vo) = {
-              (entry_offset + meta.key_offset(), entry_offset + meta.value_offset())
+              (
+                entry_offset + meta.key_offset(),
+                entry_offset + meta.value_offset(),
+              )
             };
             let ent_len_size = buf.put_u64_varint_unchecked(meta.packed_kvlen);
             debug_assert_eq!(
@@ -747,7 +750,10 @@ pub trait Log: Sized {
               );
             }
             let entry_size = meta.entry_size as usize;
-            ent.set_pointer(RecordPointer::new(entry_offset as u32 + buf.offset() as u32, meta.entry_size));
+            ent.set_pointer(RecordPointer::new(
+              entry_offset as u32 + buf.offset() as u32,
+              meta.entry_size,
+            ));
             cursor += entry_size;
           }
           Either::Right(meta) => {

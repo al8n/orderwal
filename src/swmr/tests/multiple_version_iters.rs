@@ -102,7 +102,9 @@ where
   let upper_bound = wal.upper_bound(1, Bound::Included("b")).unwrap();
   assert_eq!(upper_bound.value(), "a1");
 
-  let upper_bound = wal.upper_bound_with_tombstone(1, Bound::Included("b")).unwrap();
+  let upper_bound = wal
+    .upper_bound_with_tombstone(1, Bound::Included("b"))
+    .unwrap();
   assert_eq!(upper_bound.value().unwrap(), "a1");
 
   let upper_bound = unsafe { wal.upper_bound_by_bytes(1, Bound::Included(b"b")).unwrap() };
@@ -118,7 +120,9 @@ where
   let lower_bound = wal.lower_bound(1, Bound::Included("b")).unwrap();
   assert_eq!(lower_bound.value(), "c1");
 
-  let lower_bound = wal.lower_bound_with_tombstone(1, Bound::Included("b")).unwrap();
+  let lower_bound = wal
+    .lower_bound_with_tombstone(1, Bound::Included("b"))
+    .unwrap();
   assert_eq!(lower_bound.value().unwrap(), "c1");
 
   let lower_bound = unsafe { wal.lower_bound_by_bytes(1, Bound::Included(b"b")).unwrap() };

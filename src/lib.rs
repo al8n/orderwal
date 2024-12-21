@@ -73,9 +73,6 @@ pub trait WithVersion {
   fn version(&self) -> u64;
 }
 
-/// A marker trait which indicates that such pointer does not have a version.
-pub trait WithoutVersion {}
-
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
 

@@ -8,7 +8,7 @@ use skl::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  State, Transformable,
+  Active, MaybeTombstone, State, Transformable,
 };
 
 use crate::types::{
@@ -139,28 +139,55 @@ where
   }
 }
 
-impl<'a, S, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, S, C, T>
+impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, Active, C, T>
 where
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Sized + Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
 {
-  type Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output;
+  type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
+
   #[inline]
   fn value(&self) -> Self::Value {
-    use RangeComparator;
-    use Transformable;
     self
       .value
       .get_or_init(|| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-        <S::Data<'a, T::Value<'a>> as Transformable>::from_input(ent.value())
+          .get_or_init(|| self.ent.comparator().fetch_range_update(&self.ent.value()));
+        <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::from_input(ent.value())
+      })
+      .transform()
+  }
+}
+
+impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, MaybeTombstone, C, T>
+where
+  C: 'static,
+  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::Value<'a>: 'a,
+  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
+{
+  type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
+
+  #[inline]
+  fn value(&self) -> Self::Value {
+    self
+      .value
+      .get_or_init(|| match self.ent.value() {
+        Some(value) => {
+          let ent = self
+            .data
+            .get_or_init(|| self.ent.comparator().fetch_range_update(&value));
+          <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::from_input(
+            ent.value(),
+          )
+        }
+        None => None,
       })
       .transform()
   }
@@ -177,7 +204,7 @@ where
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
 {
   #[inline]
-  pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> { 
+  pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> {
     self.value.get_or_init(|| {
       let ent = self
         .data
@@ -219,6 +246,7 @@ where
   T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'a,
 {
   type Item = RangeUpdateEntry<'a, S, C, T>;
+
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     self.iter.next().map(RangeUpdateEntry::new)

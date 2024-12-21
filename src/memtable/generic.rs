@@ -144,11 +144,37 @@ where
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<K, Q>;
 
+  /// Returns the upper bound of the memtable.
+  fn upper_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
+
+  /// Returns the lower bound of the memtable.
+  fn lower_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
+
   /// Returns the first pointer in the memtable.
   fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>>;
 
   /// Returns the last pointer in the memtable.
   fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>>;
+
+  /// Returns the first pointer in the memtable.
+  fn first_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>>;
+
+  /// Returns the last pointer in the memtable.
+  fn last_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>>;
 
   /// Returns the pointer associated with the key.
   fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<Self::Entry<'a, Active>>
@@ -165,11 +191,40 @@ where
     self.get(version, key).is_some()
   }
 
+  /// Returns the pointer associated with the key.
+  fn get_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
+
+  /// Returns `true` if the memtable contains the specified pointer.
+  fn contains_with_tombsone<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>,
+  {
+    self.get_with_tombstone(version, key).is_some()
+  }
+
   /// Returns an iterator over the memtable.
   fn iter(&self, version: u64) -> Self::Iterator<'_, Active>;
 
+  /// Returns an iterator over all the entries(including tombstone entries and all versions) in the memtable.
+  fn iter_all(&self, version: u64) -> Self::Iterator<'_, MaybeTombstone>;
+
   /// Returns an iterator over a subset of the memtable.
   fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Active, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized,
+    Self::Comparator: TypeRefQueryComparator<K, Q>;
+
+  /// Returns an iterator over all the entries(including tombstone entries and all versions) in a subset of the memtable.
+  fn range_all<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,

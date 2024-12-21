@@ -4,13 +4,14 @@ use skl::generic::Type;
 use std::thread::spawn;
 
 use crate::{
-  batch::BatchEntry, generic::{ArenaTable, OrderWal, OrderWalReader, Reader, Writer}, memtable::{
-    bounded::Table,
-    MemtableEntry,
-  }, types::{KeyBuilder, ValueBuilder}, Builder
+  batch::BatchEntry,
+  generic::{ArenaTable, OrderWal, OrderWalReader, Reader, Writer},
+  memtable::{bounded::Table, MemtableEntry},
+  types::{KeyBuilder, ValueBuilder},
+  Builder,
 };
 
-use super::{MB, Person};
+use super::{Person, MB};
 
 #[cfg(feature = "std")]
 fn concurrent_basic(mut w: OrderWal<ArenaTable<u32, [u8; 4]>>) {
@@ -58,8 +59,7 @@ fn concurrent_one_key(mut w: OrderWal<ArenaTable<u32, [u8; 4]>>) {
   }
 }
 
-fn apply(mut wal: OrderWal<ArenaTable<Person, String>>) -> (Person, Vec<(Person, String)>, Person)
-{
+fn apply(mut wal: OrderWal<ArenaTable<Person, String>>) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -111,8 +111,7 @@ fn apply(mut wal: OrderWal<ArenaTable<Person, String>>) -> (Person, Vec<(Person,
 
 fn apply_with_key_builder(
   mut wal: OrderWal<ArenaTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person)
-{
+) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -167,8 +166,7 @@ fn apply_with_key_builder(
 
 fn apply_with_value_builder(
   mut wal: OrderWal<ArenaTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person)
-{
+) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -222,8 +220,7 @@ fn apply_with_value_builder(
 
 fn apply_with_builders(
   mut wal: OrderWal<ArenaTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person)
-{
+) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 1;
 
   let mut batch = vec![];

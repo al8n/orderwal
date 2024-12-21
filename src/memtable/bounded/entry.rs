@@ -46,6 +46,11 @@ where
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Entry")
@@ -88,6 +93,7 @@ where
   <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Value<'a>: Transformable,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
@@ -96,9 +102,14 @@ where
     + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<S::Data<'a, T::Value<'a>> as Transformable>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
@@ -176,6 +187,11 @@ where
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+  PointEntry<'a, S, C, T>: MemtableEntry<
+    'a,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
+  >,
 {
   #[inline]
   fn value_in(&self) -> <S::Data<'a, T::Value<'a>> as Transformable>::Output {

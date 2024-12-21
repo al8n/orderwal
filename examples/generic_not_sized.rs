@@ -34,4 +34,9 @@ fn main() {
 
   assert_eq!(a.value(), b"a3");
   assert_eq!(c.value(), b"c3");
+
+  wal.insert(3, "a", b"a5".as_slice()).unwrap();
+
+  let a = wal.get(3, "a").unwrap();
+  assert_eq!(a.value(), b"a5");
 }
