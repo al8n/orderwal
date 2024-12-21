@@ -132,7 +132,7 @@ where
   }
 }
 
-impl<C> TypeRefEquivalentor<RecordPointer> for MemtableComparator<C>
+impl<C> TypeRefEquivalentor<'_, RecordPointer> for MemtableComparator<C>
 where
   C: BytesEquivalentor + ?Sized,
 {
@@ -147,7 +147,7 @@ where
   }
 }
 
-impl<Q, C> TypeRefQueryEquivalentor<RecordPointer, Q> for MemtableComparator<C>
+impl<Q, C> TypeRefQueryEquivalentor<'_, RecordPointer, Q> for MemtableComparator<C>
 where
   C: BytesEquivalentor + ?Sized,
   Q: ?Sized + Borrow<[u8]>,
@@ -168,7 +168,7 @@ where
   }
 }
 
-impl<C> TypeRefComparator<RecordPointer> for MemtableComparator<C>
+impl<C> TypeRefComparator<'_, RecordPointer> for MemtableComparator<C>
 where
   C: BytesComparator + ?Sized,
 {
@@ -183,7 +183,7 @@ where
   }
 }
 
-impl<Q, C> TypeRefQueryEquivalentor<RecordPointer, Query<Q>> for MemtableComparator<C>
+impl<Q, C> TypeRefQueryEquivalentor<'_, RecordPointer, Query<Q>> for MemtableComparator<C>
 where
   C: BytesEquivalentor + ?Sized,
   Q: ?Sized + Borrow<[u8]>,
@@ -194,7 +194,7 @@ where
   }
 }
 
-impl<Q, C> TypeRefQueryComparator<RecordPointer, Query<Q>> for MemtableComparator<C>
+impl<Q, C> TypeRefQueryComparator<'_, RecordPointer, Query<Q>> for MemtableComparator<C>
 where
   C: BytesComparator + ?Sized,
   Q: ?Sized + Borrow<[u8]>,

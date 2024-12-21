@@ -81,7 +81,7 @@ where
   <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
   type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
@@ -130,7 +130,7 @@ where
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Value<'a>: 'a,
-  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
   type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
@@ -223,7 +223,7 @@ where
   S: State,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
-  T::Comparator<C>: TypeRefComparator<RecordPointer> + 'a,
+  T::Comparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
   type Item = PointEntry<'a, S, C, T>;
   #[inline]
@@ -238,7 +238,7 @@ where
   S: State,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
-  T::Comparator<C>: TypeRefComparator<RecordPointer> + 'a,
+  T::Comparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -278,7 +278,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::Comparator<C>: TypeRefQueryComparator<RecordPointer, Query<Q>> + 'a,
+  T::Comparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
 {
   type Item = PointEntry<'a, S, C, T>;
   #[inline]
@@ -295,7 +295,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::Comparator<C>: TypeRefQueryComparator<RecordPointer, Query<Q>> + 'a,
+  T::Comparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

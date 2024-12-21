@@ -80,11 +80,11 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<RecordPointer>
+    + TypeRefComparator<'a, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   PointEntry<'a, S, C, T>: MemtableEntry<
@@ -124,11 +124,11 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<RecordPointer>
+    + TypeRefComparator<'a, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   PointEntry<'a, S, C, T>: MemtableEntry<
@@ -216,12 +216,12 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, Query<Q>>
+    + TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   PointEntry<'a, S, C, T>: MemtableEntry<
@@ -263,12 +263,12 @@ where
   <T::Key<'a> as Pointee<'a>>::Output: 'a,
   <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, Query<Q>>
+    + TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   PointEntry<'a, S, C, T>: MemtableEntry<

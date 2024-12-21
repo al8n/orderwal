@@ -16,7 +16,7 @@ use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::{dynamic::bounded, Memtable},
+  memtable::{dynamic::bounded, Memtable, MutableMemtable},
   swmr,
   types::{BufWriter, KeyBuilder, ValueBuilder},
 };
@@ -551,7 +551,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::insert::<_, &[u8]>(self, version, kb, value).map_err(Among::into_left_right)
   }
@@ -561,7 +561,7 @@ where
   ///
   /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
-  fn insert_with_value_builder<'a, E>(
+  fn insert_with_value_builder<E>(
     &mut self,
     version: u64,
     key: &[u8],
@@ -569,7 +569,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable + 'a,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::insert::<&[u8], _>(self, version, key, vb).map_err(Among::into_middle_right)
   }
@@ -585,7 +585,7 @@ where
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::insert(self, version, kb, vb)
   }
@@ -595,7 +595,7 @@ where
   fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::insert(self, version, key, value).map_err(Among::unwrap_right)
   }
@@ -610,7 +610,7 @@ where
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::remove(self, version, kb)
   }
@@ -620,7 +620,7 @@ where
   fn remove(&mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::remove(self, version, key).map_err(Either::unwrap_right)
   }
@@ -638,7 +638,7 @@ where
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound, end_bound).map_err(Among::unwrap_right)
   }
@@ -655,7 +655,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound, end_bound).map_err(|e| match e {
       Among::Left(e) => Either::Left(e),
@@ -676,7 +676,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound, end_bound).map_err(|e| match e {
       Among::Left(_) => unreachable!(),
@@ -697,7 +697,7 @@ where
   ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound, end_bound)
   }
@@ -713,7 +713,7 @@ where
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(Among::unwrap_right)
   }
@@ -731,7 +731,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
       Among::Left(e) => Either::Left(e.unwrap_left()),
@@ -753,7 +753,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
       Among::Left(e) => Either::Left(e.unwrap_right()),
@@ -775,7 +775,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
       Among::Left(_) => unreachable!(),
@@ -797,7 +797,7 @@ where
   ) -> Result<(), Among<S, V, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
       Among::Left(e) => Among::Left(e.unwrap_left()),
@@ -819,7 +819,7 @@ where
   ) -> Result<(), Among<E, V, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
       Among::Left(e) => Among::Left(e.unwrap_right()),
@@ -841,7 +841,7 @@ where
   ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
       Among::Left(Either::Left(e)) => Among::Left(e),
@@ -864,7 +864,7 @@ where
   ) -> Result<(), Among<Either<S, E>, V, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value)
   }
@@ -881,7 +881,7 @@ where
   ) -> Result<(), Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound, end_bound).map_err(Among::unwrap_right)
   }
@@ -898,7 +898,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound, end_bound).map_err(|e| match e {
       Among::Left(e) => Either::Left(e),
@@ -919,7 +919,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound, end_bound).map_err(|e| match e {
       Among::Left(_) => unreachable!(),
@@ -940,7 +940,7 @@ where
   ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound, end_bound)
   }
@@ -953,7 +953,7 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::apply(self, batch).map_err(Among::unwrap_right)
   }
@@ -969,7 +969,7 @@ where
     B::Key: BufWriter,
     B::Value: AsRef<[u8]>,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::apply::<B>(self, batch).map_err(Among::into_left_right)
   }
@@ -985,7 +985,7 @@ where
     B::Key: AsRef<[u8]>,
     B::Value: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::apply::<B>(self, batch).map_err(Among::into_middle_right)
   }
@@ -1001,7 +1001,7 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: DynamicMemtable,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
   {
     Log::apply::<B>(self, batch)
   }

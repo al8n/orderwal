@@ -45,7 +45,7 @@ where
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
-  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
   PointEntry<'a, S, C, T>: MemtableEntry<
     'a,
     Key = <T::Key<'a> as Pointee<'a>>::Output,
@@ -95,11 +95,11 @@ where
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Transformable,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<RecordPointer>
+    + TypeRefComparator<'a, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   PointEntry<'a, S, C, T>: MemtableEntry<
@@ -186,7 +186,7 @@ where
   S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::Comparator<C>: PointComparator<C> + TypeRefComparator<RecordPointer>,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
   PointEntry<'a, S, C, T>: MemtableEntry<
     'a,
     Key = <T::Key<'a> as Pointee<'a>>::Output,

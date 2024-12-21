@@ -2,7 +2,6 @@ use core::ops::{Bound, RangeBounds};
 
 use crate::types::{Query, RecordPointer};
 
-#[macro_use]
 pub(crate) mod bounded;
 
 /// Memtables for dynamic(bytes) key-value order WALs.
@@ -124,7 +123,10 @@ pub trait Memtable {
   fn is_empty(&self) -> bool {
     self.len() == 0
   }
+}
 
+/// A memory table which is used to store pointers to the underlying entries.
+pub trait MutableMemtable: Memtable {
   /// Inserts a pointer into the memtable.
   fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 

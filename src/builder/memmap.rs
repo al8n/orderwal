@@ -1,5 +1,5 @@
 use super::*;
-use crate::{options::ArenaOptionsExt, Immutable};
+use crate::{options::ArenaOptionsExt, Immutable, memtable::MutableMemtable};
 use dbutils::checksum::BuildChecksumer;
 use skl::either::Either;
 
@@ -528,6 +528,7 @@ where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     L: Log<Memtable = M, Checksumer = S> + Immutable,
+    M: MutableMemtable,
   {
     self
       .map_with_path_builder::<L, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -574,6 +575,7 @@ where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
     L: Log<Memtable = M, Checksumer = S> + Immutable,
+    M: MutableMemtable,
   {
     let Self {
       opts,
@@ -626,6 +628,7 @@ where
     S: BuildChecksumer,
     P: AsRef<std::path::Path>,
     L: Log<Memtable = M, Checksumer = S>,
+    M: MutableMemtable,
   {
     self
       .map_mut_with_path_builder::<L, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -671,6 +674,7 @@ where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
     S: BuildChecksumer,
     L: Log<Memtable = M, Checksumer = S>,
+    M: MutableMemtable,
   {
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();

@@ -2,14 +2,16 @@ use crate::{
   batch::{Batch, Data},
   checksum::{BuildChecksumer, Checksumer},
   error::Error,
-  memtable::Memtable,
+  memtable::{Memtable, MutableMemtable},
   options::Options,
   types::{BoundedKey, EncodedEntryMeta, EncodedRangeEntryMeta, EntryFlags, Flags, RecordPointer},
   utils::merge_lengths,
   CHECKSUM_SIZE, HEADER_SIZE, MAGIC_TEXT, MAGIC_TEXT_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE,
 };
-use among::Among;
+
 use core::{ops::Bound, ptr::NonNull};
+
+use among::Among;
 use dbutils::{
   buffer::{BufWriter, BufWriterOnce, VacantBuffer},
   error::InsufficientBuffer,
@@ -188,7 +190,7 @@ pub trait Log: Sized {
     kp: RecordPointer,
   ) -> Result<(), Error<Self::Memtable>>
   where
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     let t = self.memtable();
     match () {
@@ -212,7 +214,7 @@ pub trait Log: Sized {
     mut ptrs: impl Iterator<Item = (u64, EntryFlags, RecordPointer)>,
   ) -> Result<(), Error<Self::Memtable>>
   where
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     ptrs.try_for_each(|(version, flag, p)| self.insert_pointer(version, flag, p))
   }
@@ -227,7 +229,7 @@ pub trait Log: Sized {
     S: BufWriterOnce,
     E: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     self
       .range_update::<_, _, Noop>(
@@ -254,7 +256,7 @@ pub trait Log: Sized {
     S: BufWriterOnce,
     E: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     self
       .range_update::<_, _, Noop>(
@@ -283,7 +285,7 @@ pub trait Log: Sized {
     E: BufWriterOnce,
     V: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     self.range_update(
       version,
@@ -304,7 +306,7 @@ pub trait Log: Sized {
     KE: BufWriterOnce,
     VE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     self.update(version, EntryFlags::empty(), kb, Some(vb))
   }
@@ -313,7 +315,7 @@ pub trait Log: Sized {
   where
     KE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     self
       .update::<KE, Noop>(version, EntryFlags::REMOVED, kb, None)
@@ -333,7 +335,7 @@ pub trait Log: Sized {
     E: BufWriterOnce,
     VE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -488,7 +490,7 @@ pub trait Log: Sized {
     KE: BufWriterOnce,
     VE: BufWriterOnce,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -611,7 +613,7 @@ pub trait Log: Sized {
     B::Key: BufWriter,
     B::Value: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: Memtable,
+    Self::Memtable: MutableMemtable,
   {
     if self.read_only() {
       return Err(Among::Right(Error::read_only()));
@@ -887,6 +889,7 @@ pub trait Log: Sized {
   ) -> Result<Self, Error<Self::Memtable>>
   where
     Self::Checksumer: BuildChecksumer,
+    Self::Memtable: MutableMemtable,
   {
     use crate::utils::split_lengths;
     use dbutils::leb128::decode_u64_varint;

@@ -29,12 +29,12 @@ where
   value: OnceCell<S::Data<'a, T::Value<'a>>>,
 }
 
-impl<S, C, T> core::fmt::Debug for RangeUpdateEntry<'_, S, C, T>
+impl<'a, S, C, T> core::fmt::Debug for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     use RangeComparator;
@@ -90,7 +90,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
@@ -145,7 +145,7 @@ where
   <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
   type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
 
@@ -170,7 +170,7 @@ where
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Value<'a>: 'a,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
   type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
 
@@ -201,7 +201,7 @@ where
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
   #[inline]
   pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> {
@@ -243,7 +243,7 @@ where
   S: State,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'a,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
   type Item = RangeUpdateEntry<'a, S, C, T>;
 
@@ -259,7 +259,7 @@ where
   S: State,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'a,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -308,7 +308,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefQueryComparator<RecordPointer, Query<Q>> + 'a,
+  T::RangeComparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
 {
   type Item = RangeUpdateEntry<'a, S, C, T>;
   #[inline]
@@ -325,7 +325,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefQueryComparator<RecordPointer, Query<Q>> + 'a,
+  T::RangeComparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

@@ -32,6 +32,8 @@ pub use point::*;
 pub use range_deletion::*;
 pub use range_update::*;
 
+use super::MutableMemtable;
+
 mod entry;
 mod iter;
 mod point;
@@ -139,8 +141,10 @@ impl<C, T> Memtable for Table<C, T>
 where
   C: 'static,
   T: TypeMode,
-  T::Comparator<C>: TypeRefComparator<RecordPointer> + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer> + 'static,
+  T::Comparator<C>: 'static,
+  T::RangeComparator<C>: 'static,
+  // T::Comparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + 'static,
+  // T::RangeComparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + 'static,
 {
   type Options = TableOptions<C>;
   type Error = skl::error::Error;
@@ -194,7 +198,15 @@ where
   fn len(&self) -> usize {
     self.skl.len() + self.range_deletions_skl.len() + self.range_updates_skl.len()
   }
+}
 
+impl<C, T> MutableMemtable for Table<C, T>
+where
+  C: 'static,
+  T: TypeMode,
+  T::Comparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + 'static,
+  T::RangeComparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + 'static,
+{
   #[inline]
   fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self
@@ -248,11 +260,11 @@ where
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Transformable,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<RecordPointer>
+    + TypeRefComparator<'a, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<RecordPointer>
-    + TypeRefQueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
   RangeDeletionEntry<'a, Active, C, T>:

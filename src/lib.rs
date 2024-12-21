@@ -54,7 +54,7 @@ mod builder;
 mod log;
 mod options;
 
-/// Types 
+/// Types
 pub mod types;
 
 /// Dynamic ordered write-ahead log implementation.

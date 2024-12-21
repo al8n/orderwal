@@ -12,7 +12,10 @@ use crate::utils::split_lengths;
 
 use super::{CHECKSUM_SIZE, RECORD_FLAG_SIZE, VERSION_SIZE};
 
-pub use dbutils::{buffer::{BufWriter, VacantBuffer}, types::{Type, TypeRef}};
+pub use dbutils::{
+  buffer::{BufWriter, VacantBuffer},
+  types::{Type, TypeRef},
+};
 
 mod mode;
 mod raw;

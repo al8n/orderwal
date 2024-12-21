@@ -59,7 +59,7 @@ impl<K, V, C> GenericMemtable<K, V> for Table<K, V, C>
 where
   K: Type + ?Sized + 'static,
   V: Type + ?Sized + 'static,
-  C: TypeRefComparator<K> + 'static,
+  C: 'static,
 {
   type Comparator = C;
 
@@ -97,7 +97,7 @@ where
     = Range<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     S: State + 'a;
@@ -112,7 +112,7 @@ where
     = RangePoints<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
@@ -127,7 +127,7 @@ where
     = RangeBulkDeletions<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
@@ -142,7 +142,7 @@ where
     = RangeBulkUpdates<'a, K, V, S, Q, R, C>
   where
     Self: 'a,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     S: State + 'a,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
@@ -180,7 +180,7 @@ where
   ) -> Option<Self::Entry<'a, Active>>
   where
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self
       .range::<Q, _>(version, (Bound::Unbounded, bound))
@@ -195,7 +195,7 @@ where
   ) -> Option<Self::Entry<'a, Active>>
   where
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self
       .range::<Q, _>(version, (bound, Bound::Unbounded))
@@ -210,7 +210,7 @@ where
   ) -> Option<Self::Entry<'a, MaybeTombstone>>
   where
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self
       .range_all::<Q, _>(version, (Bound::Unbounded, bound))
@@ -225,7 +225,7 @@ where
   ) -> Option<Self::Entry<'a, MaybeTombstone>>
   where
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self
       .range_all::<Q, _>(version, (bound, Bound::Unbounded))
@@ -233,22 +233,34 @@ where
   }
 
   #[inline]
-  fn first(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
+  fn first<'a>(&'a self, version: u64) -> Option<Self::Entry<'a, Active>>
+  where
+    Self::Comparator: TypeRefComparator<'a, K>,
+  {
     self.iter(version).next()
   }
 
   #[inline]
-  fn last(&self, version: u64) -> Option<Self::Entry<'_, Active>> {
+  fn last<'a>(&'a self, version: u64) -> Option<Self::Entry<'a, Active>>
+  where
+    Self::Comparator: TypeRefComparator<'a, K>,
+  {
     self.iter(version).next_back()
   }
 
   #[inline]
-  fn first_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>> {
+  fn first_with_tombstone<'a>(&'a self, version: u64) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Self::Comparator: TypeRefComparator<'a, K>,
+  {
     self.iter_all(version).next()
   }
 
   #[inline]
-  fn last_with_tombstone(&self, version: u64) -> Option<Self::Entry<'_, MaybeTombstone>> {
+  fn last_with_tombstone<'a>(&'a self, version: u64) -> Option<Self::Entry<'a, MaybeTombstone>>
+  where
+    Self::Comparator: TypeRefComparator<'a, K>,
+  {
     self.iter_all(version).next_back()
   }
 
@@ -256,7 +268,7 @@ where
   fn get<'a, Q>(&'a self, version: u64, key: &Q) -> Option<Self::Entry<'a, Active>>
   where
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     let ent = self.skl.get(version, Query::ref_cast(key))?;
     match self.validate(version, PointEntry::new(ent)) {
@@ -273,7 +285,7 @@ where
   ) -> Option<Self::Entry<'a, MaybeTombstone>>
   where
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     let ent = self.skl.get_with_tombstone(version, Query::ref_cast(key))?;
     match self.validate(version, PointEntry::new(ent)) {
@@ -297,7 +309,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     Range::new(version, self, range)
   }
@@ -307,7 +319,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     Range::with_tombstone(version, self, range)
   }
@@ -327,7 +339,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     RangePoints::new(self.skl.range(version, range.into()))
   }
@@ -341,7 +353,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     RangePoints::new(self.skl.range_all(version, range.into()))
   }
@@ -368,7 +380,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     RangeBulkDeletions::new(self.range_deletions_skl.range(version, range.into()))
   }
@@ -382,7 +394,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     RangeBulkDeletions::new(self.range_deletions_skl.range_all(version, range.into()))
   }
@@ -406,7 +418,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     RangeBulkUpdates::new(self.range_updates_skl.range(version, range.into()))
   }
@@ -420,7 +432,7 @@ where
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
-    Self::Comparator: TypeRefQueryComparator<K, Q>,
+    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     RangeBulkUpdates::new(self.range_updates_skl.range_all(version, range.into()))
   }

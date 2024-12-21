@@ -52,9 +52,9 @@ where
   C: ?Sized,
 {
   #[inline]
-  fn query_equivalent_key<Q>(&self, a: &RecordPointer, b: &Q) -> bool
+  fn query_equivalent_key<'a, Q>(&self, a: &RecordPointer, b: &Q) -> bool
   where
-    C: TypeRefQueryEquivalentor<K, Q>,
+    C: TypeRefQueryEquivalentor<'a, K, Q>,
     K: Type,
     Q: ?Sized,
   {
@@ -66,9 +66,9 @@ where
   }
 
   #[inline]
-  fn equivalent_in(&self, a: &RecordPointer, b: &RecordPointer) -> bool
+  fn equivalent_in<'a>(&self, a: &RecordPointer, b: &RecordPointer) -> bool
   where
-    C: TypeRefEquivalentor<K>,
+    C: TypeRefEquivalentor<'a, K>,
     K: Type,
   {
     unsafe {
@@ -81,9 +81,9 @@ where
   }
 
   #[inline]
-  fn compare_key<Q>(&self, a: &RecordPointer, b: &Q) -> cmp::Ordering
+  fn compare_key<'a, Q>(&self, a: &RecordPointer, b: &Q) -> cmp::Ordering
   where
-    C: TypeRefQueryComparator<K, Q>,
+    C: TypeRefQueryComparator<'a, K, Q>,
     K: Type,
     Q: ?Sized,
   {
@@ -95,9 +95,9 @@ where
   }
 
   #[inline]
-  fn compare_in(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering
+  fn compare_in<'a>(&self, a: &RecordPointer, b: &RecordPointer) -> cmp::Ordering
   where
-    C: TypeRefComparator<K>,
+    C: TypeRefComparator<'a, K>,
     K: Type,
   {
     unsafe {
@@ -139,9 +139,9 @@ where
   }
 }
 
-impl<K, C> Equivalentor<RecordPointer> for MemtableComparator<K, C>
+impl<'a, K, C> Equivalentor<RecordPointer> for MemtableComparator<K, C>
 where
-  C: TypeRefEquivalentor<K> + ?Sized,
+  C: TypeRefEquivalentor<'a, K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -150,9 +150,9 @@ where
   }
 }
 
-impl<K, C> TypeRefEquivalentor<RecordPointer> for MemtableComparator<K, C>
+impl<'a, K, C> TypeRefEquivalentor<'a, RecordPointer> for MemtableComparator<K, C>
 where
-  C: TypeRefEquivalentor<K> + ?Sized,
+  C: TypeRefEquivalentor<'a, K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -166,9 +166,9 @@ where
   }
 }
 
-impl<K, C> Comparator<RecordPointer> for MemtableComparator<K, C>
+impl<'a, K, C> Comparator<RecordPointer> for MemtableComparator<K, C>
 where
-  C: TypeRefComparator<K> + ?Sized,
+  C: TypeRefComparator<'a, K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -179,7 +179,7 @@ where
 
 impl<'a, K, C> Equivalentor<Query<K::Ref<'a>>> for MemtableComparator<K, C>
 where
-  C: TypeRefEquivalentor<K> + ?Sized,
+  C: TypeRefEquivalentor<'a, K> + ?Sized,
   K: Type + ?Sized,
 {
   fn equivalent(&self, a: &Query<K::Ref<'a>>, b: &Query<K::Ref<'a>>) -> bool {
@@ -189,7 +189,7 @@ where
 
 impl<'a, K, C> Comparator<Query<K::Ref<'a>>> for MemtableComparator<K, C>
 where
-  C: TypeRefComparator<K> + ?Sized,
+  C: TypeRefComparator<'a, K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -198,9 +198,9 @@ where
   }
 }
 
-impl<K, C> TypeRefComparator<RecordPointer> for MemtableComparator<K, C>
+impl<'a, K, C> TypeRefComparator<'a, RecordPointer> for MemtableComparator<K, C>
 where
-  C: TypeRefComparator<K> + ?Sized,
+  C: TypeRefComparator<'a, K> + ?Sized,
   K: Type + ?Sized,
 {
   #[inline]
@@ -214,9 +214,9 @@ where
   }
 }
 
-impl<K, Q, C> TypeRefQueryEquivalentor<RecordPointer, Query<Q>> for MemtableComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>> for MemtableComparator<K, C>
 where
-  C: TypeRefQueryEquivalentor<K, Q> + ?Sized,
+  C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
   Q: ?Sized,
   K: Type + ?Sized,
 {
@@ -226,9 +226,9 @@ where
   }
 }
 
-impl<K, Q, C> TypeRefQueryComparator<RecordPointer, Query<Q>> for MemtableComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>> for MemtableComparator<K, C>
 where
-  C: TypeRefQueryComparator<K, Q> + ?Sized,
+  C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
   Q: ?Sized,
   K: Type + ?Sized,
 {

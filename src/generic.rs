@@ -9,7 +9,7 @@ use dbutils::{
 use rarena_allocator::Allocator;
 use skl::{
   either::Either,
-  generic::{Ascend, MaybeStructured, Type, TypeRefQueryComparator},
+  generic::{MaybeStructured, Type, TypeRefComparator, TypeRefQueryComparator},
   Active, MaybeTombstone,
 };
 
@@ -17,12 +17,13 @@ use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::{generic::bounded, Memtable},
+  memtable::{self, generic::bounded, Memtable, MutableMemtable},
   swmr,
   types::{BufWriter, KeyBuilder, ValueBuilder},
 };
 
 pub use crate::memtable::generic::GenericMemtable;
+pub use skl::generic::{Ascend, Descend};
 
 /// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
 pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
@@ -32,6 +33,9 @@ pub type OrderWalReader<M, S = Crc32> = swmr::OrderWalReader<M, S>;
 
 /// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
 pub type ArenaTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
+
+/// The options for the [`ArenaTable`].
+pub type ArenaTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K, V>
@@ -146,18 +150,18 @@ where
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range<Q, R>(
-    &self,
+  fn range<'a, Q, R>(
+    &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'a, Active, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized,
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range(version, range)
   }
@@ -178,18 +182,18 @@ where
 
   /// Returns an iterator over a subset of entries in the WAL.
   #[inline]
-  fn range_all<Q, R>(
-    &self,
+  fn range_all<'a, Q, R>(
+    &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'_, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::Range<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized,
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_all(version, range)
   }
@@ -224,18 +228,18 @@ where
 
   /// Returns an iterator over a subset of point entries in the memtable.
   #[inline]
-  fn range_points<Q, R>(
-    &self,
+  fn range_points<'a, Q, R>(
+    &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::RangePoints<'_, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::RangePoints<'a, Active, Q, R>
   where
     R: RangeBounds<Q>,
     Q: ?Sized,
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_points(version, range)
   }
@@ -253,7 +257,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_all_points(version, range)
   }
@@ -299,7 +303,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_bulk_deletions(version, range)
   }
@@ -317,7 +321,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_all_bulk_deletions(version, range)
   }
@@ -363,7 +367,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_bulk_updates(version, range)
   }
@@ -381,76 +385,80 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().range_all_bulk_updates(version, range)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first(
-    &self,
+  fn first<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
   where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefComparator<'a, K>,
   {
     self.memtable().first(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last(
-    &self,
+  fn last<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, Active>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, Active>>
   where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefComparator<'a, K>,
   {
     self.memtable().last(version)
   }
 
   /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
   #[inline]
-  fn first_with_tombstone(
-    &self,
+  fn first_with_tombstone<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, MaybeTombstone>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, MaybeTombstone>>
   where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefComparator<'a, K>,
   {
     self.memtable().first_with_tombstone(version)
   }
 
   /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
   #[inline]
-  fn last_with_tombstone(
-    &self,
+  fn last_with_tombstone<'a>(
+    &'a self,
     version: u64,
-  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'_, MaybeTombstone>>
+  ) -> Option<<Self::Memtable as GenericMemtable<K, V>>::Entry<'a, MaybeTombstone>>
   where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefComparator<'a, K>,
   {
     self.memtable().last_with_tombstone(version)
   }
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized,
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().contains(version, key)
   }
@@ -467,20 +475,20 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().get(version, key)
   }
 
   /// Returns `true` if the key exists in the WAL.
   #[inline]
-  fn contains_key_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
+  fn contains_key_with_tombstone<'a, Q>(&'a self, version: u64, key: &Q) -> bool
   where
     Q: ?Sized,
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().contains_with_tombsone(version, key)
   }
@@ -497,7 +505,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().get_with_tombstone(version, key)
   }
@@ -515,7 +523,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().upper_bound(version, bound)
   }
@@ -533,7 +541,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().lower_bound(version, bound)
   }
@@ -551,7 +559,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().upper_bound_with_tombstone(version, bound)
   }
@@ -569,7 +577,7 @@ where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
-    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<K, Q>,
+    <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
     self.memtable().lower_bound_with_tombstone(version, bound)
   }
@@ -643,7 +651,7 @@ where
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::insert::<_, &[u8]>(self, version, kb, value).map_err(Among::into_left_right)
   }
@@ -654,16 +662,16 @@ where
   /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
   fn insert_with_value_builder<'a, E>(
-    &mut self,
+    &'a mut self,
     version: u64,
-    key: MaybeStructured<'a, K>,
+    key: impl Into<MaybeStructured<'a, K>>,
     vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
   ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V> + 'a,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
-    Log::insert(self, version, key, vb)
+    Log::insert(self, version, key.into(), vb)
   }
 
   /// Inserts a key-value pair into the WAL. This method
@@ -677,7 +685,7 @@ where
   ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::insert(self, version, kb, vb)
   }
@@ -692,7 +700,7 @@ where
   ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::insert(self, version, key.into(), value.into())
   }
@@ -707,7 +715,7 @@ where
   ) -> Result<(), Either<KE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::remove(self, version, kb)
   }
@@ -721,7 +729,7 @@ where
   ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::remove(self, version, key.into())
   }
@@ -739,7 +747,7 @@ where
   ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_remove(
       self,
@@ -766,7 +774,7 @@ where
   ) -> Result<(), Among<E, K::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound, end_bound.map(Into::into)).map_err(|e| match e {
       Among::Left(e) => Among::Left(e),
@@ -787,7 +795,7 @@ where
   ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound.map(Into::into), end_bound).map_err(|e| match e {
       Among::Left(e) => Among::Left(e),
@@ -808,7 +816,7 @@ where
   ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_remove(self, version, start_bound, end_bound)
   }
@@ -824,7 +832,7 @@ where
   ) -> Result<(), Among<K::Error, V::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(
       self,
@@ -853,7 +861,7 @@ where
   ) -> Result<(), Among<Either<E, K::Error>, V::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(
       self,
@@ -882,7 +890,7 @@ where
   ) -> Result<(), Among<Either<K::Error, E>, V::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(
       self,
@@ -911,7 +919,7 @@ where
   ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(
       self,
@@ -940,7 +948,7 @@ where
   ) -> Result<(), Among<Either<S, K::Error>, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound.map(Into::into), value).map_err(
       |e| match e {
@@ -964,7 +972,7 @@ where
   ) -> Result<(), Among<Either<K::Error, E>, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(self, version, start_bound.map(Into::into), end_bound, value).map_err(
       |e| match e {
@@ -988,7 +996,7 @@ where
   ) -> Result<(), Among<Either<S, E>, V::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value.into()).map_err(|e| match e {
       Among::Left(e) => Among::Left(e),
@@ -1010,7 +1018,7 @@ where
   ) -> Result<(), Among<Either<S, E>, VE, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_set(self, version, start_bound, end_bound, value)
   }
@@ -1027,7 +1035,7 @@ where
   ) -> Result<(), Either<K::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_unset(
       self,
@@ -1054,7 +1062,7 @@ where
   ) -> Result<(), Among<E, K::Error, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound, end_bound.map(Into::into)).map_err(|e| match e {
       Among::Left(e) => Among::Left(e),
@@ -1075,7 +1083,7 @@ where
   ) -> Result<(), Among<K::Error, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound.map(Into::into), end_bound).map_err(|e| match e {
       Among::Left(e) => Among::Left(e),
@@ -1096,7 +1104,7 @@ where
   ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::range_unset(self, version, start_bound, end_bound)
   }
@@ -1112,7 +1120,7 @@ where
     KB: BufWriter,
     VB: BufWriter,
     Self::Checksumer: BuildChecksumer,
-    Self::Memtable: GenericMemtable<K, V>,
+    Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
     Log::apply::<B>(self, batch)
   }

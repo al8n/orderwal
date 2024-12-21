@@ -1,8 +1,11 @@
-use std::{cmp, sync::Arc, thread::spawn};
+use std::{sync::Arc, thread::spawn};
 
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
-use orderwal::{ 
-  generic::{ArenaTable, OrderWal, Reader, Writer}, memtable::MemtableEntry, types::{Type, TypeRef, VacantBuffer}, Builder, Comparable, Equivalent
+use orderwal::{
+  generic::{ArenaTable, OrderWal, Reader, Writer},
+  memtable::MemtableEntry,
+  types::{Type, TypeRef, VacantBuffer},
+  Builder, Comparable, Equivalent,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -16,6 +19,13 @@ impl Person {
     Self {
       id: rand::random(),
       name: names::Generator::default().next().unwrap(),
+    }
+  }
+
+  fn as_person_ref(&self) -> PersonRef<'_> {
+    PersonRef {
+      id: self.id,
+      name: &self.name,
     }
   }
 }
@@ -69,10 +79,7 @@ impl Type for Person {
   }
 
   #[inline]
-  fn encode_to_buffer(
-    &self,
-    buf: &mut VacantBuffer<'_>,
-  ) -> Result<usize, Self::Error> {
+  fn encode_to_buffer(&self, buf: &mut VacantBuffer<'_>) -> Result<usize, Self::Error> {
     let id_size = buf.put_u64_varint(self.id)?;
     buf.put_slice_unchecked(self.name.as_bytes());
     Ok(id_size + self.name.len())
@@ -119,10 +126,7 @@ fn main() {
     let people = people.clone();
     spawn(move || loop {
       let (person, hello) = people[i].clone();
-      let person_ref = PersonRef {
-        id: person.id,
-        name: &person.name,
-      };
+      let person_ref = person.as_person_ref();
       if let Some(p) = reader.get(1, &person) {
         assert_eq!(p.key().id, person.id);
         assert_eq!(p.key().name, person.name);
@@ -135,7 +139,7 @@ fn main() {
         assert_eq!(p.key().name, person.name);
         assert_eq!(p.value(), hello);
         break;
-      };
+      }
     })
   });
 
