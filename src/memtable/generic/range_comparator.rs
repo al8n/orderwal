@@ -261,7 +261,8 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>> for MemtableRangeComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryEquivalentor<'a, RecordPointer, Query<Q>>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
   Q: ?Sized,
@@ -273,7 +274,8 @@ where
   }
 }
 
-impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>> for MemtableRangeComparator<K, C>
+impl<'a, K, Q, C> TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
+  for MemtableRangeComparator<K, C>
 where
   C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
   Q: ?Sized,

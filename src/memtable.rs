@@ -3,6 +3,7 @@ use core::ops::{Bound, RangeBounds};
 use crate::types::{Query, RecordPointer};
 
 pub(crate) mod bounded;
+pub(crate) mod unbounded;
 
 /// Memtables for dynamic(bytes) key-value order WALs.
 pub mod dynamic;
@@ -145,4 +146,175 @@ pub trait MutableMemtable: Memtable {
 
   /// Unset a range from the memtable, this is a contra operation to [`range_set`](MultipleVersionMemtable::range_set).
   fn range_unset(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
+}
+
+/// Transformable
+pub trait Transformable: sealed::Sealed {
+  /// The output type of this transform.
+  type Output;
+
+  /// Returns the output after transformring.
+  fn transform(&self) -> <Self as Transformable>::Output;
+}
+
+impl<T> Transformable for T
+where
+  T: sealed::Sealed,
+{
+  type Output = <T as sealed::Sealed>::Output;
+  
+  #[inline]
+  fn transform(&self) -> <Self as Transformable>::Output {
+    <T as sealed::Sealed>::transform(self)
+  }
+}
+
+mod sealed {
+  pub trait Sealed {
+    type Input;
+    type Output;
+
+    /// Returns the input state.
+    fn input(&self) -> Self::Input;
+
+    /// Converts the input state to the state.
+    fn from_input(input: Self::Input) -> Self
+    where
+      Self: Sized;
+
+    /// Returns the output after transformring.
+    fn transform(&self) -> Self::Output;
+  }
+
+  #[cfg(not(feature = "skl"))]
+  const _: () = {
+    use dbutils::types::{Type, LazyRef};
+
+    impl Sealed for &[u8] {
+      type Input = Option<Self>;
+      type Output = Self;
+  
+      #[inline]
+      fn input(&self) -> Self::Input {
+        Some(self)
+      }
+  
+      #[inline]
+      fn from_input(input: Self::Input) -> Self {
+        input.expect("entry in Active state must have value")
+      }
+  
+      #[inline]
+      fn transform(&self) -> Self::Output {
+        self
+      }
+    }
+  
+    impl<'a, T> Sealed for LazyRef<'a, T>
+    where
+      T: Type + ?Sized,
+    {
+      type Input = Option<&'a [u8]>;
+      type Output = T::Ref<'a>;
+  
+      #[inline]
+      fn input(&self) -> Self::Input {
+        Some(self.raw().expect("entry in Active state must have value"))
+      }
+  
+      #[inline]
+      fn from_input(input: Self::Input) -> Self {
+        unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
+      }
+  
+      #[inline]
+      fn transform(&self) -> Self::Output {
+        *self.get()
+      }
+    }
+  
+    impl Sealed for Option<&[u8]> {
+      type Input = Self;
+      type Output = Self;
+  
+      #[inline]
+      fn input(&self) -> Self::Input {
+        *self
+      }
+  
+      #[inline]
+      fn from_input(input: Self::Input) -> Self {
+        input
+      }
+  
+      #[inline]
+      fn transform(&self) -> Self::Output {
+        self.as_ref().copied()
+      }
+    }
+  
+    impl<'a, T> Sealed for Option<LazyRef<'a, T>>
+    where
+      T: Type + ?Sized,
+    {
+      type Input = Option<&'a [u8]>;
+      type Output = Option<T::Ref<'a>>;
+  
+      #[inline]
+      fn input(&self) -> Self::Input {
+        self
+          .as_ref()
+          .map(|v| v.raw().expect("entry must have a raw value"))
+      }
+  
+      #[inline]
+      fn from_input(input: Self::Input) -> Self {
+        input.map(|v| unsafe { LazyRef::from_raw(v) })
+      }
+  
+      #[inline]
+      fn transform(&self) -> Self::Output {
+        self.as_ref().map(|v| *v.get())
+      }
+    }
+  };
+
+  #[cfg(feature = "skl")]
+  impl<T> Sealed for T
+  where
+    T: skl::Transformable
+  {
+    type Input = T::Input;
+  
+    type Output = T::Output;
+  
+    #[inline]
+    fn input(&self) -> Self::Input {
+      <T as skl::Transformable>::input(self)
+    }
+  
+    #[inline]
+    fn from_input(input: Self::Input) -> Self
+    where
+      Self: Sized {
+      <T as skl::Transformable>::from_input(input)
+    }
+  
+    #[inline]
+    fn transform(&self) -> Self::Output {
+      <T as skl::Transformable>::transform(self)
+    }
+  }
+
+  // #[cfg(feature = "skl")]
+  // impl<T> super::Transformable for T
+  // where
+  //   T: skl::Transformable
+  // {
+  //   type Output = T::Output;
+
+  //   fn transform(&self) -> <Self as super::Transformable>::Output {
+  //     <T as skl::Transformable>::transform(self)
+  //   }
+  // }
 }

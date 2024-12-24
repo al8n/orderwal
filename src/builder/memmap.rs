@@ -1,5 +1,5 @@
 use super::*;
-use crate::{options::ArenaOptionsExt, Immutable, memtable::MutableMemtable};
+use crate::{memtable::MutableMemtable, options::ArenaOptionsExt, Immutable};
 use dbutils::checksum::BuildChecksumer;
 use skl::either::Either;
 

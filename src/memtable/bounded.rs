@@ -143,8 +143,6 @@ where
   T: TypeMode,
   T::Comparator<C>: 'static,
   T::RangeComparator<C>: 'static,
-  // T::Comparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + 'static,
-  // T::RangeComparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + 'static,
 {
   type Options = TableOptions<C>;
   type Error = skl::error::Error;

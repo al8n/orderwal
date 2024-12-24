@@ -1,5 +1,5 @@
 use orderwal::{
-  generic::{ArenaTable, OrderWal, Reader, Writer, Descend},
+  generic::{ArenaTable, Descend, OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   Builder,
 };

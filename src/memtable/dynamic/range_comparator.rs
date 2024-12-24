@@ -263,7 +263,8 @@ where
   }
 }
 
-impl<'a, C> TypeRefQueryComparator<'a, RecordPointer, RefQuery<&'a [u8]>> for MemtableRangeComparator<C>
+impl<'a, C> TypeRefQueryComparator<'a, RecordPointer, RefQuery<&'a [u8]>>
+  for MemtableRangeComparator<C>
 where
   C: BytesComparator + ?Sized,
 {

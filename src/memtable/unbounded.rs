@@ -1,0 +1,209 @@
+use core::convert::Infallible;
+
+use crossbeam_skiplist_mvcc::flatten::SkipMap;
+use skl::generic::TypeRefComparator;
+use triomphe::Arc;
+
+use crate::types::{sealed::ComparatorConstructor, RecordPointer, TypeMode};
+
+use super::{Memtable, MutableMemtable};
+
+// pub use entry::*;
+// pub use iter::*;
+pub use point::*;
+// pub use range_deletion::*;
+// pub use range_update::*;
+
+// mod entry;
+// mod iter;
+mod point;
+// mod range_deletion;
+// mod range_update;
+
+/// A memory table implementation based on ARENA [`SkipMap`](crossbeam_skiplist_mvcc::nested::SkipMap).
+pub struct Table<C, T>
+where
+  T: TypeMode,
+{
+  pub(in crate::memtable) skl: SkipMap<RecordPointer, RecordPointer, T::Comparator<C>>,
+  pub(in crate::memtable) range_deletions_skl:
+    SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
+  pub(in crate::memtable) range_updates_skl:
+    SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
+}
+
+impl<C, T> Memtable for Table<C, T>
+where
+  C: 'static,
+  T: TypeMode,
+  T::Comparator<C>: 'static,
+  T::RangeComparator<C>: 'static,
+{
+  type Options = C;
+  type Error = Infallible;
+
+  #[inline]
+  fn new<A>(arena: A, opts: Self::Options) -> Result<Self, Self::Error>
+  where
+    Self: Sized,
+    A: rarena_allocator::Allocator,
+  {
+    let cmp = Arc::new(opts);
+    let ptr = arena.raw_ptr();
+    let points_cmp = <T::Comparator<C> as ComparatorConstructor<_>>::new(ptr, cmp.clone());
+    let range_del_cmp = <T::RangeComparator<C> as ComparatorConstructor<_>>::new(ptr, cmp.clone());
+    let range_update_cmp =
+      <T::RangeComparator<C> as ComparatorConstructor<_>>::new(ptr, cmp.clone());
+
+    Ok(Self {
+      skl: SkipMap::with_comparator(points_cmp),
+      range_deletions_skl: SkipMap::with_comparator(range_del_cmp),
+      range_updates_skl: SkipMap::with_comparator(range_update_cmp),
+    })
+  }
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.skl.len() + self.range_deletions_skl.len() + self.range_updates_skl.len()
+  }
+}
+
+impl<C, T> MutableMemtable for Table<C, T>
+where
+  C: 'static,
+  T: TypeMode,
+  T::Comparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + Send + 'static,
+  T::RangeComparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + Send + 'static,
+{
+  #[inline]
+  fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self.skl.insert_unchecked(version, pointer, pointer);
+    Ok(())
+  }
+
+  #[inline]
+  fn remove(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
+    self.skl.remove_unchecked(version, key);
+    Ok(())
+  }
+
+  #[inline]
+  fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_deletions_skl
+      .insert_unchecked(version, pointer, pointer);
+    Ok(())
+  }
+
+  #[inline]
+  fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
+    self
+      .range_updates_skl
+      .insert_unchecked(version, pointer, pointer);
+    Ok(())
+  }
+
+  #[inline]
+  fn range_unset(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
+    self.range_updates_skl.remove_unchecked(version, key);
+    Ok(())
+  }
+}
+
+// impl<'a, C, T> Table<C, T>
+// where
+//   C: 'static,
+//   T: TypeMode,
+//   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+//   T::Value<'a>: Transformable,
+//   T::Comparator<C>: PointComparator<C>
+//     + TypeRefComparator<'a, RecordPointer>
+//     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
+//     + 'static,
+//   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
+//     + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+//     + RangeComparator<C>
+//     + 'static,
+//   RangeDeletionEntry<'a, Active, C, T>:
+//     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+// {
+//   pub(in crate::memtable) fn validate<S>(
+//     &'a self,
+//     query_version: u64,
+//     ent: PointEntry<'a, S, C, T>,
+//   ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
+//   where
+//     S: State,
+//     S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+//     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+//     PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+//     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+//     RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
+//       + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+//   {
+//     let key = ent.key();
+//     let cmp = ent.ent.comparator();
+//     let version = ent.ent.version();
+//     let query = RefQuery::new(key);
+//     let shadow = self
+//       .range_deletions_skl
+//       .range(query_version, ..=&query)
+//       .any(|ent| {
+//         let del_ent_version = ent.version();
+//         if !(version <= del_ent_version && del_ent_version <= query_version) {
+//           return false;
+//         }
+//         let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
+//         dbutils::equivalentor::RangeComparator::contains(
+//           cmp,
+//           &ent.query_range(),
+//           Query::ref_cast(&query.query),
+//         )
+//       });
+//     if shadow {
+//       return ControlFlow::Continue(ent);
+//     }
+//     let range_ent = self
+//       .range_updates_skl
+//       .range_all(query_version, ..=&query)
+//       .filter_map(|ent| {
+//         let range_ent_version = ent.version();
+//         if !(version <= range_ent_version && range_ent_version <= query_version) {
+//           return None;
+//         }
+//         let ent = RangeUpdateEntry::<MaybeTombstone, C, T>::new(ent);
+//         if dbutils::equivalentor::RangeComparator::contains(
+//           cmp,
+//           &ent.query_range(),
+//           Query::ref_cast(&query.query),
+//         ) {
+//           Some(ent)
+//         } else {
+//           None
+//         }
+//       })
+//       .max_by_key(|e| e.version());
+//     if let Some(range_ent) = range_ent {
+//       let version = range_ent.version();
+//       if let Some(val) = range_ent.into_value() {
+//         return ControlFlow::Break(Some(Entry::new(
+//           self,
+//           query_version,
+//           ent,
+//           key,
+//           Some(S::data(val)),
+//           version,
+//         )));
+//       }
+//     }
+//     let version = ent.version();
+//     ControlFlow::Break(Some(Entry::new(
+//       self,
+//       query_version,
+//       ent,
+//       key,
+//       None,
+//       version,
+//     )))
+//   }
+// }

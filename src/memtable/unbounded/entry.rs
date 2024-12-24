@@ -2,13 +2,13 @@ use core::ops::ControlFlow;
 
 use skl::{
   generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
-  Active, MaybeTombstone, State,
-  Transformable,
+  Active, MaybeTombstone, State, Transformable,
 };
 
 use crate::{
   memtable::{
-    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry, RangeUpdateEntry as RangeUpdateEntryTrait,
+    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
@@ -183,7 +183,7 @@ where
   C: 'static,
   S: State,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S::Data<'a, T::Value<'a>>: skl::Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,

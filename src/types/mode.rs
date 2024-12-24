@@ -26,7 +26,7 @@ where
 }
 
 pub(crate) mod sealed {
-  use skl::generic::{LazyRef, Type};
+  use dbutils::types::{LazyRef, Type};
 
   use super::{
     super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
