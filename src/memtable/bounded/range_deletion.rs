@@ -8,7 +8,7 @@ use skl::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  State, Transformable,
+  State, Transfer,
 };
 
 use crate::{
@@ -81,8 +81,7 @@ where
 impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeDeletionEntry<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
@@ -136,8 +135,7 @@ where
 impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a> for RangeDeletionEntry<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
@@ -166,8 +164,8 @@ where
 impl<'a, S, C, T> Iterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -180,8 +178,8 @@ where
 impl<'a, S, C, T> DoubleEndedIterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -224,8 +222,8 @@ where
 impl<'a, S, Q, R, C, T> Iterator for RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -240,8 +238,8 @@ where
 impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

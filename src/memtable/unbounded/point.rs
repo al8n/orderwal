@@ -220,7 +220,7 @@ impl<'a, S, C, T> Iterator for IterPoints<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Comparator<C>: Comparator<RecordPointer>,
 {
@@ -235,7 +235,7 @@ impl<'a, S, C, T> DoubleEndedIterator for IterPoints<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Comparator<C>: Comparator<RecordPointer>,
 {
@@ -275,7 +275,7 @@ impl<'a, S, Q, R, C, T> Iterator for RangePoints<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -292,7 +292,7 @@ impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangePoints<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

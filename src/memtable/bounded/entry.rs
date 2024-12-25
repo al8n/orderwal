@@ -3,12 +3,12 @@ use core::ops::ControlFlow;
 use skl::{
   generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
   Active, MaybeTombstone, State,
-  Transformable,
+  Transfer,
 };
 
 use crate::{
   memtable::{
-    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry, RangeUpdateEntry as RangeUpdateEntryTrait,
+    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry, RangeUpdateEntry as RangeUpdateEntryTrait, Transformable,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
@@ -38,8 +38,7 @@ where
 impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   <S::Data<'a, T::Value<'a>> as Transformable>::Output: core::fmt::Debug,
   T: TypeMode,
@@ -88,7 +87,8 @@ impl<'a, S, C, T> MemtableEntry<'a> for Entry<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
   T: TypeMode,
@@ -182,7 +182,7 @@ impl<'a, S, C, T> Entry<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,

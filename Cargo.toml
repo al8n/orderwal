@@ -39,8 +39,8 @@ derive-where = "1"
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false }
 crossbeam-skiplist-mvcc = { version = "0.4", optional = true }
-# skl = { version = "0.22", default-features = false, features = ["alloc"] }
-skl = { version = "0.22", optional = true, default-features = false, features = ["alloc"] }
+# skl = { version = "0.22", default-features = false, optional = true, features = ["alloc"] }
+skl = { version = "0.22", optional = true, default-features = false, features = ["alloc"], path = "../skl-rs" }
 paste = "1"
 zerocopy = { version = "0.8", features = ["derive"] }
 tracing = { version = "0.1", default-features = false, optional = true }

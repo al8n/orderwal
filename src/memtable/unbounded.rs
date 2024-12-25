@@ -10,13 +10,13 @@ use super::{Memtable, MutableMemtable};
 
 // pub use entry::*;
 // pub use iter::*;
-pub use point::*;
+// pub use point::*;
 // pub use range_deletion::*;
 // pub use range_update::*;
 
 // mod entry;
 // mod iter;
-mod point;
+// mod point;
 // mod range_deletion;
 // mod range_update;
 
@@ -134,7 +134,7 @@ where
 //   ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
 //   where
 //     S: State,
-//     S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+//     S: Transfer<'a, LazyRef<'a, RecordPointer>>,
 //     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 //     PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 //     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,

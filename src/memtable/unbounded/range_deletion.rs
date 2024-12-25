@@ -167,7 +167,7 @@ impl<'a, S, C, T> Iterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -181,7 +181,7 @@ impl<'a, S, C, T> DoubleEndedIterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -225,7 +225,7 @@ impl<'a, S, Q, R, C, T> Iterator for RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -241,7 +241,7 @@ impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkDeletions<'a, S, Q, R, 
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

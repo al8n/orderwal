@@ -5,13 +5,13 @@ use skl::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  Active, MaybeTombstone, State, Transformable,
+  Active, MaybeTombstone, State, Transfer,
 };
 
-use crate::types::{
+use crate::{memtable::{sealed, Transformable}, types::{
   sealed::{PointComparator, Pointee},
   Query, QueryRange, RawEntryRef, RecordPointer, TypeMode,
-};
+}};
 
 /// Point entry.
 pub struct PointEntry<'a, S, C, T>
@@ -107,7 +107,7 @@ where
         let ent = self
           .data
           .get_or_init(|| self.ent.comparator().fetch_entry(&self.ent.value()));
-        <<Active as State>::Data<'a, _> as Transformable>::from_input(ent.value())
+        <<Active as State>::Data<'a, _> as sealed::Sealed>::from_input(ent.value())
       })
       .transform()
   }
@@ -165,7 +165,7 @@ where
           let ent = self
             .data
             .get_or_init(|| self.ent.comparator().fetch_entry(&value));
-          <<MaybeTombstone as State>::Data<'a, _> as Transformable>::from_input(ent.value())
+          <<MaybeTombstone as State>::Data<'a, _> as sealed::Sealed>::from_input(ent.value())
         }
         None => None,
       })
@@ -221,7 +221,8 @@ impl<'a, S, C, T> Iterator for IterPoints<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::Comparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -235,8 +236,8 @@ where
 impl<'a, S, C, T> DoubleEndedIterator for IterPoints<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::Comparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -273,8 +274,8 @@ where
 impl<'a, S, Q, R, C, T> Iterator for RangePoints<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -290,8 +291,8 @@ where
 impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangePoints<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

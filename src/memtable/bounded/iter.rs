@@ -4,13 +4,13 @@ use skl::{
   generic::{
     multiple_version::Map as _, Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  Active, MaybeTombstone, State, Transformable,
+  Active, MaybeTombstone, State, Transfer,
 };
 
 use crate::{
   memtable::{
     MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
-    RangeUpdateEntry as RangeUpdateEntryTrait,
+    RangeUpdateEntry as RangeUpdateEntryTrait, Transformable,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
@@ -71,9 +71,9 @@ where
 impl<'a, S, C, T> Iterator for Iter<'a, S, C, T>
 where
   C: 'static,
-  S: State + 'a,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>> + 'a,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Transformable,
@@ -115,9 +115,9 @@ where
 impl<'a, S, C, T> DoubleEndedIterator for Iter<'a, S, C, T>
 where
   C: 'static,
-  S: State + 'a,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>> + 'a,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Transformable,
@@ -207,9 +207,9 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   C: 'static,
-  S: State + 'a,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>> + 'a,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Transformable,
@@ -254,9 +254,9 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   C: 'static,
-  S: State + 'a,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>> + 'a,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Value<'a>: Transformable,

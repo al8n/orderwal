@@ -8,13 +8,13 @@ use skl::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  Active, MaybeTombstone, State, Transformable,
+  Active, MaybeTombstone, State, Transfer,
 };
 
-use crate::types::{
+use crate::{memtable::{sealed, Transformable}, types::{
   sealed::{Pointee, RangeComparator},
   Query, QueryRange, RawRangeUpdateRef, RecordPointer, TypeMode,
-};
+}};
 
 /// Range update entry.
 pub struct RangeUpdateEntry<'a, S, C, T>
@@ -86,8 +86,7 @@ where
 impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
@@ -157,7 +156,7 @@ where
         let ent = self
           .data
           .get_or_init(|| self.ent.comparator().fetch_range_update(&self.ent.value()));
-        <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::from_input(ent.value())
+        <<Active as State>::Data<'a, T::Value<'a>> as sealed::Sealed>::from_input(ent.value())
       })
       .transform()
   }
@@ -183,7 +182,7 @@ where
           let ent = self
             .data
             .get_or_init(|| self.ent.comparator().fetch_range_update(&value));
-          <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::from_input(
+          <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as sealed::Sealed>::from_input(
             ent.value(),
           )
         }
@@ -196,8 +195,7 @@ where
 impl<'a, S, C, T> RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
@@ -209,7 +207,7 @@ where
       let ent = self
         .data
         .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-      <S::Data<'a, T::Value<'a>> as Transformable>::from_input(ent.value())
+      <S::Data<'a, T::Value<'a>> as sealed::Sealed>::from_input(ent.value())
     });
     self.value.into_inner().unwrap()
   }
@@ -240,8 +238,8 @@ where
 impl<'a, S, C, T> Iterator for IterBulkUpdates<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -256,8 +254,8 @@ where
 impl<'a, S, C, T> DoubleEndedIterator for IterBulkUpdates<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
@@ -303,8 +301,8 @@ where
 impl<'a, S, Q, R, C, T> Iterator for RangeBulkUpdates<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -320,8 +318,8 @@ where
 impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkUpdates<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

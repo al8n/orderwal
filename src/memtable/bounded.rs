@@ -16,7 +16,7 @@ use core::ops::ControlFlow;
 use ref_cast::RefCast;
 use skl::{
   generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
-  Active, MaybeTombstone, Transformable,
+  Active, MaybeTombstone, Transfer,
 };
 
 use among::Among;
@@ -32,7 +32,7 @@ pub use point::*;
 pub use range_deletion::*;
 pub use range_update::*;
 
-use super::MutableMemtable;
+use super::{MutableMemtable, Transformable};
 
 mod entry;
 mod iter;
@@ -274,8 +274,8 @@ where
     ent: PointEntry<'a, S, C, T>,
   ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
   where
-    S: State,
-    S::Data<'a, LazyRef<'a, RecordPointer>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+    S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
     PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,

@@ -186,7 +186,6 @@ mod sealed {
     fn transform(&self) -> Self::Output;
   }
 
-  #[cfg(not(feature = "skl"))]
   const _: () = {
     use dbutils::types::{Type, LazyRef};
 
@@ -278,43 +277,4 @@ mod sealed {
       }
     }
   };
-
-  #[cfg(feature = "skl")]
-  impl<T> Sealed for T
-  where
-    T: skl::Transformable
-  {
-    type Input = T::Input;
-  
-    type Output = T::Output;
-  
-    #[inline]
-    fn input(&self) -> Self::Input {
-      <T as skl::Transformable>::input(self)
-    }
-  
-    #[inline]
-    fn from_input(input: Self::Input) -> Self
-    where
-      Self: Sized {
-      <T as skl::Transformable>::from_input(input)
-    }
-  
-    #[inline]
-    fn transform(&self) -> Self::Output {
-      <T as skl::Transformable>::transform(self)
-    }
-  }
-
-  // #[cfg(feature = "skl")]
-  // impl<T> super::Transformable for T
-  // where
-  //   T: skl::Transformable
-  // {
-  //   type Output = T::Output;
-
-  //   fn transform(&self) -> <Self as super::Transformable>::Output {
-  //     <T as skl::Transformable>::transform(self)
-  //   }
-  // }
 }
