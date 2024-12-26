@@ -16,13 +16,19 @@ use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::{self, generic::bounded, Memtable, MutableMemtable},
+  memtable::{self, Memtable, MutableMemtable},
   swmr,
   types::{BufWriter, KeyBuilder, ValueBuilder},
 };
 
 pub use crate::memtable::generic::GenericMemtable;
 pub use dbutils::equivalentor::{Ascend, Descend};
+
+#[cfg(feature = "bounded")]
+use crate::memtable::generic::bounded;
+
+#[cfg(feature = "unbounded")]
+use crate::memtable::generic::unbounded;
 
 /// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
 pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
@@ -31,10 +37,19 @@ pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
 pub type OrderWalReader<M, S = Crc32> = swmr::OrderWalReader<M, S>;
 
 /// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+#[cfg(feature = "skl")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
 pub type BoundedTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
 
 /// The options for the [`BoundedTable`].
+#[cfg(feature = "skl")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
 pub type BoundedTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
+
+/// The memory table based on unbounded linked-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+#[cfg(feature = "crossbeam-skiplist-mvcc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
+pub type UnboundedTable<K, V, C = Ascend> = unbounded::Table<K, V, C>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K, V>

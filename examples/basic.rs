@@ -1,5 +1,5 @@
 use orderwal::{
-  dynamic::{OrderWal, Reader, Writer},
+  dynamic::{BoundedTable, OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   Builder,
 };
@@ -14,7 +14,7 @@ fn main() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<OrderWal, _>(&path)
+      .map_mut::<OrderWal<BoundedTable>, _>(&path)
       .unwrap()
   };
 

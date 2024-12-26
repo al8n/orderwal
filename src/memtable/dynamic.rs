@@ -8,9 +8,13 @@ use dbutils::state::{Active, MaybeTombstone};
 use crate::{memtable::Memtable, State};
 
 /// Bounded memtable implementation based on ARNEA based [`SkipMap`](skl::generic::multiple_version::sync::SkipMap)s.
+#[cfg(feature = "skl")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
 pub mod bounded;
 
 /// Unbounded memtable implementation based on ARNEA based [`SkipMap`](crossbeam_skiplist_mvcc::nested::SkipMap)s.
+#[cfg(feature = "crossbeam-skiplist-mvcc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
 pub mod unbounded;
 
 mod comparator;

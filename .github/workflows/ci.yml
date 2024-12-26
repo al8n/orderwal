@@ -17,6 +17,8 @@ on:
       - 'LICENSE-*'
       - '**.md'
       - '**.txt'
+  workflow_dispatch:
+  schedule: [cron: "0 1 */7 * *"]
 
 env:
   CARGO_TERM_COLOR: always
