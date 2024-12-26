@@ -10,13 +10,13 @@ use crate::{
     sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
     Query, RecordPointer, RefQuery, TypeMode,
   },
-  State, WithVersion,
+  WithVersion,
 };
 use core::ops::ControlFlow;
 use ref_cast::RefCast;
 use skl::{
   generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
-  Active, MaybeTombstone, Transfer,
+  Active, MaybeTombstone,
 };
 
 use among::Among;
@@ -26,19 +26,19 @@ use skl::{
 };
 use triomphe::Arc;
 
-pub use entry::*;
-pub use iter::*;
-pub use point::*;
-pub use range_deletion::*;
-pub use range_update::*;
+pub use entry1::*;
+pub use iter1::*;
+pub use point1::*;
+pub use range_deletion1::*;
+pub use range_update1::*;
 
-use super::{MutableMemtable, Transformable};
+use super::{MutableMemtable, Transfer};
 
-mod entry;
-mod iter;
-mod point;
-mod range_deletion;
-mod range_update;
+mod entry1;
+mod iter1;
+mod point1;
+mod range_deletion1;
+mod range_update1;
 
 /// Options to configure the [`Table`] or [`MultipleVersionTable`].
 #[derive(Debug, Copy, Clone)]
@@ -256,7 +256,6 @@ where
   C: 'static,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Transformable,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
@@ -274,12 +273,12 @@ where
     ent: PointEntry<'a, S, C, T>,
   ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
   where
-    S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+    S: Transfer<'a, T::Value<'a>>,
     S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-    S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+    S::Data<'a, S::Output>: 'a,
     PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-    <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
+    MaybeTombstone: Transfer<'a, T::Value<'a>>,
+    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<S::Data<'a, S::Output>>>
       + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   {
     let key = ent.key();

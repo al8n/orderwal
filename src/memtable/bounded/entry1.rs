@@ -2,13 +2,13 @@ use core::ops::ControlFlow;
 
 use skl::{
   generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
-  Active, MaybeTombstone, State, Transfer,
+  Active, MaybeTombstone, State,
 };
 
 use crate::{
   memtable::{
-    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
-    RangeUpdateEntry as RangeUpdateEntryTrait, Transformable,
+    sealed1, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-  point::PointEntry, range_deletion::RangeDeletionEntry, range_update::RangeUpdateEntry, Table,
+  point1::PointEntry, range_deletion1::RangeDeletionEntry, range_update1::RangeUpdateEntry, Table,
 };
 
 /// Entry in the memtable.
@@ -38,18 +38,14 @@ where
 impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-  <S::Data<'a, T::Value<'a>> as Transformable>::Output: core::fmt::Debug,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Output>: core::fmt::Debug,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
+  PointEntry<'a, S, C, T>:
+    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Output>>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Entry")
@@ -63,8 +59,7 @@ where
 impl<'a, S, C, T> Clone for Entry<'a, S, C, T>
 where
   S: State,
-  S::Data<'a, T::Value<'a>>: Transformable + Clone,
-  <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
+  S::Data<'a, T::Value<'a>>: Clone,
   PointEntry<'a, S, C, T>: Clone,
   T: TypeMode,
   T::Key<'a>: Clone,
@@ -86,14 +81,12 @@ where
 impl<'a, S, C, T> MemtableEntry<'a> for Entry<'a, S, C, T>
 where
   C: 'static,
-  S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
+  MaybeTombstone: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Output>: 'a,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-  <S::Data<'a, T::Value<'a>> as Transformable>::Output: Clone,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Transformable,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
@@ -102,20 +95,16 @@ where
     + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
+  PointEntry<'a, S, C, T>:
+    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Output>>,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<S::Data<'a, S::Output>>>
     + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
-  type Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output;
+  type Value = S::Data<'a, S::Output>;
 
   #[inline]
   fn key(&self) -> Self::Key {
@@ -155,7 +144,6 @@ where
 impl<'a, S, C, T> Entry<'a, S, C, T>
 where
   S: State,
-  S::Data<'a, T::Value<'a>>: Transformable,
   T: TypeMode,
 {
   #[inline]
@@ -182,30 +170,25 @@ impl<'a, S, C, T> Entry<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S: Transfer<'a, T::Value<'a>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
+  PointEntry<'a, S, C, T>:
+    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Output>>,
 {
   #[inline]
-  fn value_in(&self) -> <S::Data<'a, T::Value<'a>> as Transformable>::Output {
+  fn value_in(&self) -> S::Data<'a, S::Output> {
     match self.val.as_ref() {
-      Some(val) => val.transform(),
+      Some(val) => <S as sealed1::Sealed<'_, T::Value<'_>>>::transfer(val),
       None => self.point_ent.value(),
     }
   }
 }
 
-impl<'a, S, C, T> WithVersion for Entry<'a, S, C, T>
+impl<S, C, T> WithVersion for Entry<'_, S, C, T>
 where
   S: State,
-  S::Data<'a, T::Value<'a>>: Transformable,
   T: TypeMode,
 {
   #[inline]

@@ -8,11 +8,11 @@ use skl::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  Active, MaybeTombstone, State, Transfer,
+  State,
 };
 
 use crate::{
-  memtable::{sealed, Transformable},
+  memtable::{sealed1, Transfer},
   types::{
     sealed::{Pointee, RangeComparator},
     Query, QueryRange, RawRangeUpdateRef, RecordPointer, TypeMode,
@@ -89,7 +89,7 @@ where
 impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
@@ -141,65 +141,40 @@ where
   }
 }
 
-impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, Active, C, T>
+impl<'a, S, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Output>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
-  type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
+  type Value = S::Data<'a, S::Output>;
 
   #[inline]
   fn value(&self) -> Self::Value {
-    self
-      .value
-      .get_or_init(|| {
+    let val = self.value.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      let data = ptr.map(|ptr| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(&self.ent.value()));
-        <<Active as State>::Data<'a, T::Value<'a>> as sealed::Sealed>::from_input(ent.value())
-      })
-      .transform()
-  }
-}
+          .get_or_init(|| self.ent.comparator().fetch_range_update(&ptr));
 
-impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, MaybeTombstone, C, T>
-where
-  C: 'static,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-  T: TypeMode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::Value<'a>: 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
-{
-  type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
-
-  #[inline]
-  fn value(&self) -> Self::Value {
-    self
-      .value
-      .get_or_init(|| match self.ent.value() {
-        Some(value) => {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().fetch_range_update(&value));
-          <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as sealed::Sealed>::from_input(
-            ent.value(),
-          )
-        }
-        None => None,
-      })
-      .transform()
+        <S as sealed1::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
+      });
+      S::into_state(data)
+    });
+    <S as sealed1::Sealed<'_, T::Value<'_>>>::transfer(val)
   }
 }
 
 impl<'a, S, C, T> RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Output>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
@@ -207,10 +182,16 @@ where
   #[inline]
   pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> {
     self.value.get_or_init(|| {
-      let ent = self
-        .data
-        .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-      <S::Data<'a, T::Value<'a>> as sealed::Sealed>::from_input(ent.value())
+      let ptr = S::leak(self.ent.value());
+
+      let data = ptr.map(|ptr| {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().fetch_range_update(&ptr));
+
+        <S as sealed1::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
+      });
+      S::into_state(data)
     });
     self.value.into_inner().unwrap()
   }

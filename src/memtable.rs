@@ -162,7 +162,7 @@ where
   T: sealed::Sealed,
 {
   type Output = <T as sealed::Sealed>::Output;
-  
+
   #[inline]
   fn transform(&self) -> <Self as Transformable>::Output {
     <T as sealed::Sealed>::transform(self)
@@ -187,94 +187,275 @@ mod sealed {
   }
 
   const _: () = {
-    use dbutils::types::{Type, LazyRef};
+    use dbutils::types::{LazyRef, Type};
 
     impl Sealed for &[u8] {
       type Input = Option<Self>;
       type Output = Self;
-  
+
       #[inline]
       fn input(&self) -> Self::Input {
         Some(self)
       }
-  
+
       #[inline]
       fn from_input(input: Self::Input) -> Self {
         input.expect("entry in Active state must have value")
       }
-  
+
       #[inline]
       fn transform(&self) -> Self::Output {
         self
       }
     }
-  
+
     impl<'a, T> Sealed for LazyRef<'a, T>
     where
       T: Type + ?Sized,
     {
       type Input = Option<&'a [u8]>;
       type Output = T::Ref<'a>;
-  
+
       #[inline]
       fn input(&self) -> Self::Input {
         Some(self.raw().expect("entry in Active state must have value"))
       }
-  
+
       #[inline]
       fn from_input(input: Self::Input) -> Self {
         unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
       }
-  
+
       #[inline]
       fn transform(&self) -> Self::Output {
         *self.get()
       }
     }
-  
+
     impl Sealed for Option<&[u8]> {
       type Input = Self;
       type Output = Self;
-  
+
       #[inline]
       fn input(&self) -> Self::Input {
         *self
       }
-  
+
       #[inline]
       fn from_input(input: Self::Input) -> Self {
         input
       }
-  
+
       #[inline]
       fn transform(&self) -> Self::Output {
         self.as_ref().copied()
       }
     }
-  
+
     impl<'a, T> Sealed for Option<LazyRef<'a, T>>
     where
       T: Type + ?Sized,
     {
       type Input = Option<&'a [u8]>;
       type Output = Option<T::Ref<'a>>;
-  
+
       #[inline]
       fn input(&self) -> Self::Input {
         self
           .as_ref()
           .map(|v| v.raw().expect("entry must have a raw value"))
       }
-  
+
       #[inline]
       fn from_input(input: Self::Input) -> Self {
         input.map(|v| unsafe { LazyRef::from_raw(v) })
       }
-  
+
       #[inline]
       fn transform(&self) -> Self::Output {
         self.as_ref().map(|v| *v.get())
       }
     }
   };
+}
+
+/// Transfer trait for converting between different states.
+pub trait Transfer<'a, D>: sealed1::Sealed<'a, D> {}
+
+impl<'a, D, T> Transfer<'a, D> for T where T: sealed1::Sealed<'a, D> {}
+
+mod sealed1 {
+  use dbutils::types::{LazyRef, Type};
+
+  #[cfg(feature = "skl")]
+  pub trait Sealed<'a, I>:
+    skl::Transfer<'a, LazyRef<'a, crate::types::RecordPointer>, To = crate::types::RecordPointer>
+  {
+    type Output;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Output>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  #[cfg(not(feature = "skl"))]
+  pub trait Sealed<'a, I>: dbutils::state::State {
+    type Output;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Output>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  impl<'a, I> Sealed<'a, LazyRef<'a, I>> for dbutils::state::Active
+  where
+    I: Type + ?Sized,
+  {
+    type Output = I::Ref<'a>;
+
+    #[inline]
+    fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, &'a [u8]> {
+      data.raw().expect("entry in Active state must have value")
+    }
+
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> LazyRef<'a, I>
+    where
+      Self: Sized,
+    {
+      unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
+    }
+
+    #[inline]
+    fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
+      *data.get()
+    }
+
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      Some(data)
+    }
+
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.expect("entry in Active state must have value")
+    }
+  }
+
+  impl<'a, I> Sealed<'a, LazyRef<'a, I>> for dbutils::state::MaybeTombstone
+  where
+    I: Type + ?Sized,
+  {
+    type Output = I::Ref<'a>;
+
+    #[inline]
+    fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Option<&'a [u8]> {
+      data
+        .as_ref()
+        .map(|v| v.raw().expect("entry in Active state must have value"))
+    }
+
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Option<LazyRef<'a, I>>
+    where
+      Self: Sized,
+    {
+      unsafe { input.map(|v| LazyRef::from_raw(v)) }
+    }
+
+    #[inline]
+    fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
+      data.as_ref().map(|v| *v.get())
+    }
+
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      data
+    }
+
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.flatten()
+    }
+  }
+
+  impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::Active {
+    type Output = &'a [u8];
+
+    #[inline]
+    fn input(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, &'a [u8]> {
+      *data
+    }
+
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
+    }
+
+    #[inline]
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Output> {
+      *data
+    }
+
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      Some(data)
+    }
+
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.expect("entry in Active state must have value")
+    }
+  }
+
+  impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::MaybeTombstone {
+    type Output = &'a [u8];
+
+    #[inline]
+    fn input(data: &Self::Data<'a, &'a [u8]>) -> Option<&'a [u8]> {
+      data.as_ref().copied()
+    }
+
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
+
+    #[inline]
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Output> {
+      data.as_ref().copied()
+    }
+
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      data
+    }
+
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.flatten()
+    }
+  }
 }
