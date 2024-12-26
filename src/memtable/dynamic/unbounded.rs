@@ -5,14 +5,13 @@ use core::{
 
 use dbutils::{
   equivalentor::BytesComparator,
-  state::{Active, MaybeTombstone},
+  state::{Active, MaybeTombstone, State},
 };
 use ref_cast::RefCast as _;
 
 use crate::{
   memtable::unbounded,
   types::{Dynamic, Query},
-  State,
 };
 
 use super::DynamicMemtable;

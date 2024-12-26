@@ -59,5 +59,3 @@ pub mod utils;
 
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}
-
-pub use dbutils::state::{Active, MaybeTombstone, State};

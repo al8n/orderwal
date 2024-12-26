@@ -8,8 +8,8 @@ use skl::{
 
 use crate::{
   memtable::bounded,
+  state::State,
   types::{Generic, Query},
-  State,
 };
 
 use super::GenericMemtable;

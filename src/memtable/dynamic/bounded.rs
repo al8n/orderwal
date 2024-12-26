@@ -8,8 +8,8 @@ use skl::{dynamic::BytesComparator, generic::multiple_version::Map as _, Active,
 
 use crate::{
   memtable::bounded,
+  state::State,
   types::{Dynamic, Query},
-  State,
 };
 
 use super::DynamicMemtable;

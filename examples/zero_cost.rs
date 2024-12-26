@@ -2,10 +2,11 @@ use std::{sync::Arc, thread::spawn};
 
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
 use orderwal::{
+  equivalent::{Comparable, Equivalent},
   generic::{BoundedTable, OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   types::{Type, TypeRef, VacantBuffer},
-  Builder, equivalent::{Comparable, Equivalent},
+  Builder,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

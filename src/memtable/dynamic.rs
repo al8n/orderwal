@@ -3,9 +3,9 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::state::{Active, MaybeTombstone};
+use dbutils::state::{Active, MaybeTombstone, State};
 
-use crate::{memtable::Memtable, State};
+use crate::memtable::Memtable;
 
 /// Bounded memtable implementation based on ARNEA based [`SkipMap`](skl::generic::multiple_version::sync::SkipMap)s.
 #[cfg(feature = "skl")]

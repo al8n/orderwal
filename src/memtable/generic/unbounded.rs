@@ -2,7 +2,7 @@ use core::ops::{Bound, ControlFlow, RangeBounds};
 
 use dbutils::{
   equivalentor::{TypeRefComparator, TypeRefQueryComparator},
-  state::{Active, MaybeTombstone},
+  state::{Active, MaybeTombstone, State},
   types::Type,
 };
 use ref_cast::RefCast;
@@ -10,7 +10,6 @@ use ref_cast::RefCast;
 use crate::{
   memtable::unbounded,
   types::{Generic, Query},
-  State,
 };
 
 use super::GenericMemtable;

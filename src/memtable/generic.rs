@@ -1,8 +1,12 @@
 use core::ops::{Bound, RangeBounds};
 
-use dbutils::{types::{Type, TypeRef}, equivalentor::{TypeRefComparator, TypeRefQueryComparator}, state::{Active, MaybeTombstone}};
+use dbutils::{
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  state::{Active, MaybeTombstone, State},
+  types::{Type, TypeRef},
+};
 
-use crate::{memtable::Memtable, State};
+use crate::memtable::Memtable;
 
 /// Bounded memtable implementation based on ARNEA based [`SkipMap`](skl::generic::multiple_version::sync::SkipMap)s.
 #[cfg(feature = "skl")]
