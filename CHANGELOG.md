@@ -5,6 +5,7 @@
 - Refactor the project to support both dynamic key-value types and generic key-value types
 - Allow users to implement their own memtable
 - Support `range_remove`, `range_set` and `range_unset` operations
+- Make the project comfortable with `-Z miri-strict-provenance`
 
 ## 0.5.0 (Oct 27th, 2024)
 
