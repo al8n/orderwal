@@ -1,12 +1,10 @@
 use core::{borrow::Borrow, cmp, ops::Bound};
 
-use skl::{
-  dynamic::{BytesComparator, BytesEquivalentor},
-  generic::{
-    Comparator, Equivalentor, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
-    TypeRefQueryEquivalentor,
-  },
+use dbutils::equivalentor::{
+  BytesComparator, BytesEquivalentor, Comparator, Equivalentor, QueryComparator, QueryEquivalentor,
+  TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor,
 };
+
 use triomphe::Arc;
 
 use crate::types::{
@@ -270,6 +268,26 @@ where
 {
   #[inline]
   fn query_compare_ref(&self, a: &RecordPointer, b: &RefQuery<&'a [u8]>) -> cmp::Ordering {
+    self.compare_start_key(a, b.query)
+  }
+}
+
+impl<'a, C> QueryEquivalentor<RecordPointer, RefQuery<&'a [u8]>> for MemtableRangeComparator<C>
+where
+  C: BytesEquivalentor + ?Sized,
+{
+  #[inline]
+  fn query_equivalent(&self, a: &RecordPointer, b: &RefQuery<&'a [u8]>) -> bool {
+    self.equivalent_start_key(a, b.query)
+  }
+}
+
+impl<'a, C> QueryComparator<RecordPointer, RefQuery<&'a [u8]>> for MemtableRangeComparator<C>
+where
+  C: BytesComparator + ?Sized,
+{
+  #[inline]
+  fn query_compare(&self, a: &RecordPointer, b: &RefQuery<&'a [u8]>) -> cmp::Ordering {
     self.compare_start_key(a, b.query)
   }
 }

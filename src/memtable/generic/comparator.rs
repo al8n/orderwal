@@ -1,8 +1,11 @@
 use core::{cmp, marker::PhantomData};
 
-use skl::generic::{
-  Comparator, Equivalentor, Type, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
-  TypeRefQueryEquivalentor,
+use dbutils::{
+  equivalentor::{
+    Comparator, Equivalentor, QueryComparator, QueryEquivalentor, TypeRefComparator,
+    TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor,
+  },
+  types::Type,
 };
 use triomphe::Arc;
 
@@ -234,6 +237,30 @@ where
 {
   #[inline]
   fn query_compare_ref(&self, a: &RecordPointer, b: &Query<Q>) -> cmp::Ordering {
+    self.compare_key(a, &b.0)
+  }
+}
+
+impl<'a, K, Q, C> QueryEquivalentor<RecordPointer, Query<Q>> for MemtableComparator<K, C>
+where
+  C: TypeRefQueryEquivalentor<'a, K, Q> + ?Sized,
+  Q: ?Sized,
+  K: Type + ?Sized,
+{
+  #[inline]
+  fn query_equivalent(&self, a: &RecordPointer, b: &Query<Q>) -> bool {
+    self.query_equivalent_key(a, &b.0)
+  }
+}
+
+impl<'a, K, Q, C> QueryComparator<RecordPointer, Query<Q>> for MemtableComparator<K, C>
+where
+  C: TypeRefQueryComparator<'a, K, Q> + ?Sized,
+  Q: ?Sized,
+  K: Type + ?Sized,
+{
+  #[inline]
+  fn query_compare(&self, a: &RecordPointer, b: &Query<Q>) -> cmp::Ordering {
     self.compare_key(a, &b.0)
   }
 }

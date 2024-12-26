@@ -3,20 +3,15 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use skl::{
-  generic::{
-    multiple_version::sync::{Entry, Iter, Range},
-    LazyRef, TypeRefComparator, TypeRefQueryComparator,
-  },
-  State, Transformable,
+use crossbeam_skiplist_mvcc::nested::{Entry, Iter, Range};
+use dbutils::{
+  equivalentor::{Comparator, QueryComparator},
+  state::State,
 };
 
-use crate::{
-  types::{
-    sealed::{Pointee, RangeComparator},
-    Query, QueryRange, RawRangeDeletionRef, RecordPointer, TypeMode,
-  },
-  WithVersion,
+use crate::types::{
+  sealed::{Pointee, RangeComparator},
+  Query, QueryRange, RawRangeDeletionRef, RecordPointer, TypeMode,
 };
 
 /// Range deletion entry.
@@ -30,12 +25,12 @@ where
   start_bound: OnceCell<Bound<T::Key<'a>>>,
   end_bound: OnceCell<Bound<T::Key<'a>>>,
 }
-impl<'a, S, C, T> core::fmt::Debug for RangeDeletionEntry<'a, S, C, T>
+impl<S, C, T> core::fmt::Debug for RangeDeletionEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     self
@@ -47,7 +42,7 @@ where
 impl<'a, S, C, T> Clone for RangeDeletionEntry<'a, S, C, T>
 where
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
+  // S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   S::Data<'a, T::Value<'a>>: Clone,
   T::Key<'a>: Clone,
@@ -82,10 +77,9 @@ impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeDeletionEntry<'a, S, 
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
@@ -121,14 +115,15 @@ where
     self.ent.prev().map(Self::new)
   }
 }
-impl<S, C, T> WithVersion for RangeDeletionEntry<'_, S, C, T>
+impl<S, C, T> RangeDeletionEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
 {
+  /// Returns the version of the entry.
   #[inline]
-  fn version(&self) -> u64 {
+  pub fn version(&self) -> u64 {
     self.ent.version()
   }
 }
@@ -137,12 +132,12 @@ impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a> for RangeDeletionEntry
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
 }
+
 /// The iterator for point entries.
 pub struct IterBulkDeletions<'a, S, C, T>
 where
@@ -167,9 +162,8 @@ impl<'a, S, C, T> Iterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
+  T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   type Item = RangeDeletionEntry<'a, S, C, T>;
   #[inline]
@@ -181,9 +175,8 @@ impl<'a, S, C, T> DoubleEndedIterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
+  T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -194,17 +187,20 @@ where
 pub struct RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   S: State,
-  Q: ?Sized,
   T: TypeMode,
+  Q: ?Sized,
+  R: RangeBounds<Q>,
 {
   range:
     Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
 }
+
 impl<'a, S, Q, R, C, T> RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   S: State,
-  Q: ?Sized,
   T: TypeMode,
+  Q: ?Sized,
+  R: RangeBounds<Q>,
 {
   #[inline]
   pub(in crate::memtable) const fn new(
@@ -225,11 +221,10 @@ impl<'a, S, Q, R, C, T> Iterator for RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
+  T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
   type Item = RangeDeletionEntry<'a, S, C, T>;
   #[inline]
@@ -241,11 +236,10 @@ impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkDeletions<'a, S, Q, R, 
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
+  T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

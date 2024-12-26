@@ -7,10 +7,12 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   checksum::{BuildChecksumer, Crc32},
+  equivalentor::Ascend,
+  state::{Active, MaybeTombstone},
 };
+use either::Either;
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::{either::Either, generic::Ascend, Active, MaybeTombstone};
 
 use crate::{
   batch::Batch,
@@ -30,10 +32,10 @@ pub type OrderWal<M = DefaultTable, S = Crc32> = swmr::OrderWal<M, S>;
 pub type OrderWalReader<M = DefaultTable, S = Crc32> = swmr::OrderWalReader<M, S>;
 
 /// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
-pub type ArenaTable<C> = bounded::Table<C>;
+pub type BoundedTable<C> = bounded::Table<C>;
 
 /// The default memory table.
-pub type DefaultTable = ArenaTable<Ascend>;
+pub type DefaultTable = BoundedTable<Ascend>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader: Log {

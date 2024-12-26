@@ -1,4 +1,3 @@
-use skl::generic::Ascend;
 pub use skl::Height;
 
 use crate::{
@@ -10,35 +9,36 @@ use crate::{
     sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
     Query, RecordPointer, RefQuery, TypeMode,
   },
-  WithVersion,
 };
 use core::ops::ControlFlow;
-use ref_cast::RefCast;
-use skl::{
-  generic::{Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator},
-  Active, MaybeTombstone,
-};
 
 use among::Among;
+use dbutils::state::State;
+use ref_cast::RefCast;
+
 use skl::{
   either::Either,
-  generic::multiple_version::{sync::SkipMap, Map},
+  generic::{
+    multiple_version::{sync::SkipMap, Map},
+    Ascend, Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator,
+  },
+  Active, MaybeTombstone,
 };
 use triomphe::Arc;
 
-pub use entry1::*;
-pub use iter1::*;
-pub use point1::*;
-pub use range_deletion1::*;
-pub use range_update1::*;
+pub use entry::*;
+pub use iter::*;
+pub use point::*;
+pub use range_deletion::*;
+pub use range_update::*;
 
-use super::{MutableMemtable, Transfer};
+use super::{sealed, MutableMemtable, Transfer};
 
-mod entry1;
-mod iter1;
-mod point1;
-mod range_deletion1;
-mod range_update1;
+mod entry;
+mod iter;
+mod point;
+mod range_deletion;
+mod range_update;
 
 /// Options to configure the [`Table`] or [`MultipleVersionTable`].
 #[derive(Debug, Copy, Clone)]
@@ -275,11 +275,16 @@ where
   where
     S: Transfer<'a, T::Value<'a>>,
     S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-    S::Data<'a, S::Output>: 'a,
+    S::Data<'a, S::Value>: 'a,
     PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
     MaybeTombstone: Transfer<'a, T::Value<'a>>,
-    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<S::Data<'a, S::Output>>>
-      + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+        'a,
+        Value = <MaybeTombstone as State>::Data<
+          'a,
+          <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+        >,
+      > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   {
     let key = ent.key();
     let cmp = ent.ent.comparator();

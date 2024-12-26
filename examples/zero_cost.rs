@@ -2,10 +2,10 @@ use std::{sync::Arc, thread::spawn};
 
 use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len};
 use orderwal::{
-  generic::{ArenaTable, OrderWal, Reader, Writer},
+  generic::{BoundedTable, OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   types::{Type, TypeRef, VacantBuffer},
-  Builder, Comparable, Equivalent,
+  Builder, equivalent::{Comparable, Equivalent},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -112,7 +112,7 @@ fn main() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<OrderWal<ArenaTable<Person, String>>, _>(&path)
+      .map_mut::<OrderWal<BoundedTable<Person, String>>, _>(&path)
       .unwrap()
   };
 

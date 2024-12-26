@@ -3,15 +3,17 @@ use core::{cell::OnceCell, ops::RangeBounds};
 use crossbeam_skiplist_mvcc::nested::{Entry, Iter, Range};
 
 use dbutils::{
-  equivalentor::{QueryComparator, Comparator},
-  state::{Active, MaybeTombstone, State},
-  types::LazyRef,
+  equivalentor::{Comparator, QueryComparator},
+  state::State,
 };
 
-use crate::{memtable::{sealed, Transformable}, types::{
-  sealed::{PointComparator, Pointee},
-  Query, QueryRange, RawEntryRef, RecordPointer, TypeMode,
-}};
+use crate::{
+  memtable::{sealed, Transfer},
+  types::{
+    sealed::{PointComparator, Pointee},
+    Query, QueryRange, RawEntryRef, RecordPointer, TypeMode,
+  },
+};
 
 /// Point entry.
 pub struct PointEntry<'a, S, C, T>
@@ -74,25 +76,34 @@ where
   }
 }
 
-impl<'a, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, Active, C, T>
+impl<'a, S, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, S, C, T>
 where
   C: 'static,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + Comparator<RecordPointer>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
-  type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
+  type Value = S::Data<'a, S::Value>;
 
   #[inline]
   fn key(&self) -> Self::Key {
     self
       .key
       .get_or_init(|| {
-        let ent = self
-          .data
-          .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.value()));
+        let ptr = S::leak(self.ent.value());
+
+        let ent = match ptr {
+          Some(ptr) => self
+            .data
+            .get_or_init(|| self.ent.comparator().fetch_entry(ptr)),
+          None => self
+            .data
+            .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.key())),
+        };
+
         <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
       })
       .output()
@@ -100,15 +111,19 @@ where
 
   #[inline]
   fn value(&self) -> Self::Value {
-    self
-      .value
-      .get_or_init(|| {
+    let val = self.value.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      let data = ptr.map(|ptr| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.value()));
-        <<Active as State>::Data<'a, _> as sealed::Sealed>::from_input(ent.value())
-      })
-      .transform()
+          .get_or_init(|| self.ent.comparator().fetch_entry(ptr));
+
+        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
+      });
+      S::into_state(data)
+    });
+    <S as sealed::Sealed<'_, T::Value<'_>>>::transfer(val)
   }
 
   #[inline]
@@ -122,74 +137,15 @@ where
   }
 }
 
-impl<'a, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, MaybeTombstone, C, T>
-where
-  C: 'static,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-  T: TypeMode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::Value<'a>: 'a,
-  T::Comparator<C>: PointComparator<C> + Comparator<RecordPointer>,
-{
-  type Key = <T::Key<'a> as Pointee<'a>>::Output;
-  type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
-
-  #[inline]
-  fn key(&self) -> Self::Key {
-    self
-      .key
-      .get_or_init(|| match self.ent.value() {
-        Some(value) => {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().fetch_entry(value));
-          <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
-        }
-        None => {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.key()));
-          <T::Key<'a> as Pointee<'a>>::from_input(ent.key())
-        }
-      })
-      .output()
-  }
-
-  #[inline]
-  fn value(&self) -> Self::Value {
-    self
-      .value
-      .get_or_init(|| match self.ent.value() {
-        Some(value) => {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().fetch_entry(value));
-          <<MaybeTombstone as State>::Data<'a, _> as sealed::Sealed>::from_input(ent.value())
-        }
-        None => None,
-      })
-      .transform()
-  }
-
-  #[inline]
-  fn next(&self) -> Option<Self> {
-    self.ent.next().map(Self::new)
-  }
-
-  #[inline]
-  fn prev(&self) -> Option<Self> {
-    self.ent.prev().map(Self::new)
-  }
-}
-
-impl<S, C, T> crate::WithVersion for PointEntry<'_, S, C, T>
+impl<S, C, T> PointEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
 {
+  /// Returns the version of the entry.
   #[inline]
-  fn version(&self) -> u64 {
+  pub fn version(&self) -> u64 {
     self.ent.version()
   }
 }
@@ -220,7 +176,6 @@ impl<'a, S, C, T> Iterator for IterPoints<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Comparator<C>: Comparator<RecordPointer>,
 {
@@ -231,11 +186,10 @@ where
   }
 }
 
-impl<'a, S, C, T> DoubleEndedIterator for IterPoints<'a, S, C, T>
+impl<S, C, T> DoubleEndedIterator for IterPoints<'_, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
   T::Comparator<C>: Comparator<RecordPointer>,
 {
@@ -275,7 +229,6 @@ impl<'a, S, Q, R, C, T> Iterator for RangePoints<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
@@ -292,7 +245,6 @@ impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangePoints<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,

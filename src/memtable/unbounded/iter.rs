@@ -1,16 +1,14 @@
 use core::ops::{ControlFlow, RangeBounds};
 
-use skl::{
-  generic::{
-    multiple_version::Map as _, Comparator, LazyRef, TypeRefComparator, TypeRefQueryComparator,
-  },
-  Active, MaybeTombstone, State, Transformable,
+use dbutils::{
+  equivalentor::{Comparator, QueryComparator},
+  state::{Active, MaybeTombstone, State},
 };
 
 use crate::{
   memtable::{
-    MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
-    RangeUpdateEntry as RangeUpdateEntryTrait,
+    sealed, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
@@ -71,32 +69,29 @@ where
 impl<'a, S, C, T> Iterator for Iter<'a, S, C, T>
 where
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Transformable,
-  <T::Key<'a> as Pointee<'a>>::Output: 'a,
-  <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
+    + Comparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  MaybeTombstone: Transfer<'a, T::Value<'a>>,
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+      'a,
+      Value = <MaybeTombstone as State>::Data<
+        'a,
+        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+      >,
+    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   type Item = Entry<'a, S, C, T>;
 
@@ -115,32 +110,29 @@ where
 impl<'a, S, C, T> DoubleEndedIterator for Iter<'a, S, C, T>
 where
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Transformable,
-  <T::Key<'a> as Pointee<'a>>::Output: 'a,
-  <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
+    + Comparator<RecordPointer>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  MaybeTombstone: Transfer<'a, T::Value<'a>>,
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+      'a,
+      Value = <MaybeTombstone as State>::Data<
+        'a,
+        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+      >,
+    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -207,33 +199,30 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Transformable,
-  <T::Key<'a> as Pointee<'a>>::Output: 'a,
-  <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
+    + Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, Query<Q>>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  MaybeTombstone: Transfer<'a, T::Value<'a>>,
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+      'a,
+      Value = <MaybeTombstone as State>::Data<
+        'a,
+        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+      >,
+    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   type Item = Entry<'a, S, C, T>;
 
@@ -254,33 +243,30 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>>,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-  T::Value<'a>: Transformable,
-  <T::Key<'a> as Pointee<'a>>::Output: 'a,
-  <T::Value<'a> as Pointee<'a>>::Output: 'a,
   T::Comparator<C>: PointComparator<C>
-    + TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, Query<Q>>
+    + Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, Query<Q>>
     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
     + 'static,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-    + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+  T::RangeComparator<C>: Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  PointEntry<'a, S, C, T>: MemtableEntry<
-    'a,
-    Key = <T::Key<'a> as Pointee<'a>>::Output,
-    Value = <S::Data<'a, T::Value<'a>> as Transformable>::Output,
-  >,
   RangeDeletionEntry<'a, Active, C, T>:
     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
-    + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  MaybeTombstone: Transfer<'a, T::Value<'a>>,
+  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+      'a,
+      Value = <MaybeTombstone as State>::Data<
+        'a,
+        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+      >,
+    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

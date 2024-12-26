@@ -5,7 +5,7 @@ use std::thread::spawn;
 
 use crate::{
   batch::BatchEntry,
-  generic::{ArenaTable, OrderWal, OrderWalReader, Reader, Writer},
+  generic::{BoundedTable, OrderWal, OrderWalReader, Reader, Writer},
   memtable::{bounded::Table, MemtableEntry},
   types::{KeyBuilder, ValueBuilder},
   Builder,
@@ -14,7 +14,7 @@ use crate::{
 use super::{Person, MB};
 
 #[cfg(feature = "std")]
-fn concurrent_basic(mut w: OrderWal<ArenaTable<u32, [u8; 4]>>) {
+fn concurrent_basic(mut w: OrderWal<BoundedTable<u32, [u8; 4]>>) {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
 
   let handles = readers.into_iter().map(|(i, reader)| {
@@ -40,7 +40,7 @@ fn concurrent_basic(mut w: OrderWal<ArenaTable<u32, [u8; 4]>>) {
 }
 
 #[cfg(feature = "std")]
-fn concurrent_one_key(mut w: OrderWal<ArenaTable<u32, [u8; 4]>>) {
+fn concurrent_one_key(mut w: OrderWal<BoundedTable<u32, [u8; 4]>>) {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
   let handles = readers.into_iter().map(|(_, reader)| {
     spawn(move || loop {
@@ -59,7 +59,9 @@ fn concurrent_one_key(mut w: OrderWal<ArenaTable<u32, [u8; 4]>>) {
   }
 }
 
-fn apply(mut wal: OrderWal<ArenaTable<Person, String>>) -> (Person, Vec<(Person, String)>, Person) {
+fn apply(
+  mut wal: OrderWal<BoundedTable<Person, String>>,
+) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -110,7 +112,7 @@ fn apply(mut wal: OrderWal<ArenaTable<Person, String>>) -> (Person, Vec<(Person,
 }
 
 fn apply_with_key_builder(
-  mut wal: OrderWal<ArenaTable<Person, String>>,
+  mut wal: OrderWal<BoundedTable<Person, String>>,
 ) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
@@ -165,7 +167,7 @@ fn apply_with_key_builder(
 }
 
 fn apply_with_value_builder(
-  mut wal: OrderWal<ArenaTable<Person, String>>,
+  mut wal: OrderWal<BoundedTable<Person, String>>,
 ) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 5;
 
@@ -219,7 +221,7 @@ fn apply_with_value_builder(
 }
 
 fn apply_with_builders(
-  mut wal: OrderWal<ArenaTable<Person, String>>,
+  mut wal: OrderWal<BoundedTable<Person, String>>,
 ) -> (Person, Vec<(Person, String)>, Person) {
   const N: u32 = 1;
 
@@ -294,11 +296,11 @@ fn apply_with_builders(
 
 // #[cfg(feature = "std")]
 // expand_unit_tests!(
-//   move "linked": OrderWal<ArenaTable<Person, String>> [TableOptions::Linked]: Table<_, _> {
+//   move "linked": OrderWal<BoundedTable<Person, String>> [TableOptions::Linked]: Table<_, _> {
 //     apply |p, (rp1, data, rp2)| {
 //       let map = unsafe {
 //         Builder::new()
-//           .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
 //           .unwrap()
 //       };
 
@@ -311,7 +313,7 @@ fn apply_with_builders(
 //     apply_with_key_builder |p, (rp1, data, rp2)| {
 //       let map = unsafe {
 //         Builder::new()
-//           .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
 //           .unwrap()
 //       };
 
@@ -324,7 +326,7 @@ fn apply_with_builders(
 //     apply_with_value_builder |p, (rp1, data, rp2)| {
 //       let map = unsafe {
 //         Builder::new()
-//           .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
 //           .unwrap()
 //       };
 
@@ -337,7 +339,7 @@ fn apply_with_builders(
 //     apply_with_builders |p, (rp1, data, rp2)| {
 //       let map = unsafe {
 //         Builder::new()
-//           .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
 //           .unwrap()
 //       };
 
@@ -352,27 +354,27 @@ fn apply_with_builders(
 
 #[cfg(feature = "std")]
 expand_unit_tests!(
-  move "arena": OrderWal<ArenaTable<u32, [u8; 4]>> [Default::default()]: Table<_, _> {
+  move "arena": OrderWal<BoundedTable<u32, [u8; 4]>> [Default::default()]: Table<_, _> {
     concurrent_basic |p, _res| {
-      let wal = unsafe { Builder::new().map::<OrderWalReader<ArenaTable<u32, [u8; 4]>>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReader<BoundedTable<u32, [u8; 4]>>, _>(p).unwrap() };
 
       for i in 0..100u32 {
         assert!(wal.contains_key(1, &i));
       }
     },
     concurrent_one_key |p, _res| {
-      let wal = unsafe { Builder::new().map::<OrderWalReader<ArenaTable<u32, [u8; 4]>>, _>(p).unwrap() };
+      let wal = unsafe { Builder::new().map::<OrderWalReader<BoundedTable<u32, [u8; 4]>>, _>(p).unwrap() };
       assert!(wal.contains_key(1, &1));
     },
   }
 );
 
 expand_unit_tests!(
-  move "arena": OrderWal<ArenaTable<Person, String>> [Default::default()]: Table<_, _> {
+  move "arena": OrderWal<BoundedTable<Person, String>> [Default::default()]: Table<_, _> {
     apply |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+          .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
           .unwrap()
       };
 
@@ -385,7 +387,7 @@ expand_unit_tests!(
     apply_with_key_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+          .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
           .unwrap()
       };
 
@@ -398,7 +400,7 @@ expand_unit_tests!(
     apply_with_value_builder |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+          .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
           .unwrap()
       };
 
@@ -411,7 +413,7 @@ expand_unit_tests!(
     apply_with_builders |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()
-          .map::<OrderWalReader<ArenaTable<Person, String>>, _>(&p)
+          .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
           .unwrap()
       };
 

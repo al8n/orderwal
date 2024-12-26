@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, ops::Bound};
 
-use skl::either::Either;
+use either::Either;
 
 use crate::{
   memtable::Memtable,

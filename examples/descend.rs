@@ -1,5 +1,5 @@
 use orderwal::{
-  generic::{ArenaTable, Descend, OrderWal, Reader, Writer},
+  generic::{BoundedTable, Descend, OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   Builder,
 };
@@ -9,12 +9,12 @@ fn main() {
   let path = dir.path().join("descend.wal");
 
   let mut wal = unsafe {
-    Builder::<ArenaTable<u64, u64, Descend>>::new()
+    Builder::<BoundedTable<u64, u64, Descend>>::new()
       .with_capacity(1024 * 1024)
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<OrderWal<ArenaTable<u64, u64, Descend>>, _>(&path)
+      .map_mut::<OrderWal<BoundedTable<u64, u64, Descend>>, _>(&path)
       .unwrap()
   };
 

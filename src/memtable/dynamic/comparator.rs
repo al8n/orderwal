@@ -1,11 +1,8 @@
 use core::{borrow::Borrow, cmp};
 
-use skl::{
-  dynamic::{BytesComparator, BytesEquivalentor},
-  generic::{
-    Comparator, Equivalentor, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
-    TypeRefQueryEquivalentor,
-  },
+use dbutils::equivalentor::{
+  BytesComparator, BytesEquivalentor, Comparator, Equivalentor, QueryComparator, QueryEquivalentor,
+  TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator, TypeRefQueryEquivalentor,
 };
 use triomphe::Arc;
 
@@ -201,6 +198,28 @@ where
 {
   #[inline]
   fn query_compare_ref(&self, a: &RecordPointer, b: &Query<Q>) -> cmp::Ordering {
+    self.compare_key(a, b.0.borrow())
+  }
+}
+
+impl<Q, C> QueryEquivalentor<RecordPointer, Query<Q>> for MemtableComparator<C>
+where
+  C: BytesEquivalentor + ?Sized,
+  Q: ?Sized + Borrow<[u8]>,
+{
+  #[inline]
+  fn query_equivalent(&self, a: &RecordPointer, b: &Query<Q>) -> bool {
+    self.equivalent_key(a, b.0.borrow())
+  }
+}
+
+impl<Q, C> QueryComparator<RecordPointer, Query<Q>> for MemtableComparator<C>
+where
+  C: BytesComparator + ?Sized,
+  Q: ?Sized + Borrow<[u8]>,
+{
+  #[inline]
+  fn query_compare(&self, a: &RecordPointer, b: &Query<Q>) -> cmp::Ordering {
     self.compare_key(a, b.0.borrow())
   }
 }

@@ -6,8 +6,6 @@
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity)]
 
-use core::mem;
-
 #[cfg(feature = "std")]
 extern crate std;
 
@@ -16,21 +14,11 @@ extern crate alloc as std;
 
 pub use among;
 pub use builder::Builder;
-pub use dbutils::{
-  checksum::{self, Crc32},
-  equivalent::{Comparable, ComparableRangeBounds, Equivalent},
-};
-
-#[cfg(feature = "xxhash3")]
-#[cfg_attr(docsrs, doc(cfg(feature = "xxhash3")))]
-pub use dbutils::checksum::XxHash3;
-
-#[cfg(feature = "xxhash64")]
-#[cfg_attr(docsrs, doc(cfg(feature = "xxhash64")))]
-pub use dbutils::checksum::XxHash64;
+pub use dbutils::{checksum, equivalent, equivalentor, state};
 
 pub use options::Options;
-pub use skl::KeySize;
+
+use core::mem;
 
 const RECORD_FLAG_SIZE: usize = mem::size_of::<types::Flags>();
 const CHECKSUM_SIZE: usize = mem::size_of::<u64>();
@@ -68,12 +56,6 @@ pub mod generic;
 
 /// The utilities functions.
 pub mod utils;
-
-/// A marker trait which indicates that such pointer has a version.
-pub trait WithVersion {
-  /// The version.
-  fn version(&self) -> u64;
-}
 
 /// A marker trait which indicates that such WAL is immutable.
 pub trait Immutable {}

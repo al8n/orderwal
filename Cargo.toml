@@ -19,7 +19,7 @@ harness = false
 [features]
 default = ["bounded", "unbounded", "memmap"]
 alloc = ["rarena-allocator/alloc", "skl?/alloc", "dbutils/alloc"]
-std = ["rarena-allocator/default", "crossbeam-skiplist-mvcc?/default", "bitflags/std", "dbutils/default", "among/default", "skl?/std"]
+std = ["rarena-allocator/default", "crossbeam-skiplist-mvcc?/default", "either/default", "bitflags/std", "dbutils/default", "among/default", "skl?/std"]
 memmap = ["std", "rarena-allocator/memmap", "skl?/memmap"]
 
 bounded = ["skl", "alloc"]
@@ -36,6 +36,7 @@ bitflags = { version = "2", default-features = false }
 dbutils = { version = "0.12", default-features = false, features = ["crc32fast", "triomphe01"] }
 # dbutils = { version = "0.12", path = "../layer0/dbutils", default-features = false, features = ["crc32fast", "triomphe01"] }
 derive-where = "1"
+either = { version = "1", default-features = false }
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false }
 crossbeam-skiplist-mvcc = { version = "0.4", optional = true }

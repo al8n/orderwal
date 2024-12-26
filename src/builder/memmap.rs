@@ -1,7 +1,7 @@
 use super::*;
 use crate::{memtable::MutableMemtable, options::ArenaOptionsExt, Immutable};
 use dbutils::checksum::BuildChecksumer;
-use skl::either::Either;
+use either::Either;
 
 impl<M, S> Builder<M, S>
 where

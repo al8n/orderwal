@@ -92,9 +92,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::{ArenaTable, ArenaTableOptions}};
+  /// use orderwal::{Builder, multiple_version::{BoundedTable, BoundedTableOptions}};
   ///
-  /// let opts = Builder::<ArenaTable<[u8], [u8]>>::new().with_memtable_options(ArenaTableOptions::default());
+  /// let opts = Builder::<BoundedTable<[u8], [u8]>>::new().with_memtable_options(BoundedTableOptions::default());
   /// ```
   #[inline]
   pub fn with_memtable_options(self, opts: M::Options) -> Self {
@@ -110,9 +110,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::{DefaultTable, ArenaTable}};
+  /// use orderwal::{Builder, multiple_version::{DefaultTable, BoundedTable}};
   ///
-  /// let opts = Builder::<ArenaTable<[u8], [u8]>>::new().change_memtable::<DefaultTable<[u8], [u8]>>();
+  /// let opts = Builder::<BoundedTable<[u8], [u8]>>::new().change_memtable::<DefaultTable<[u8], [u8]>>();
   /// ```
   #[inline]
   pub fn change_memtable<NM>(self) -> Builder<NM, S>
@@ -132,9 +132,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::{DefaultTable, ArenaTable, ArenaTableOptions}};
+  /// use orderwal::{Builder, multiple_version::{DefaultTable, BoundedTable, BoundedTableOptions}};
   ///
-  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().change_memtable_with_options::<ArenaTable<[u8], [u8]>>(ArenaTableOptions::default().with_capacity(1000));
+  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().change_memtable_with_options::<BoundedTable<[u8], [u8]>>(BoundedTableOptions::default().with_capacity(1000));
   /// ```
   #[inline]
   pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, S>

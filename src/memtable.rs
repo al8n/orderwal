@@ -2,7 +2,9 @@ use core::ops::{Bound, RangeBounds};
 
 use crate::types::{Query, RecordPointer};
 
+#[cfg(feature = "skl")]
 pub(crate) mod bounded;
+#[cfg(feature = "crossbeam-skiplist-mvcc")]
 pub(crate) mod unbounded;
 
 /// Memtables for dynamic(bytes) key-value order WALs.
@@ -137,161 +139,34 @@ pub trait MutableMemtable: Memtable {
   /// Inserts a range deletion pointer into the memtable, a range deletion is a deletion of a range of keys,
   /// which means that keys in the range are marked as deleted.
   ///
-  /// This is not a contra operation to [`range_set`](MultipleVersionMemtable::range_set).
-  /// See also [`range_set`](MultipleVersionMemtable::range_set) and [`range_set`](MultipleVersionMemtable::range_unset).
+  /// This is not a contra operation to [`range_set`](MutableMemtable::range_set).
+  /// See also [`range_set`](MutableMemtable::range_set) and [`range_set`](MutableMemtable::range_unset).
   fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 
   /// Inserts an range update pointer into the memtable.
   fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 
-  /// Unset a range from the memtable, this is a contra operation to [`range_set`](MultipleVersionMemtable::range_set).
+  /// Unset a range from the memtable, this is a contra operation to [`range_set`](MutableMemtable::range_set).
   fn range_unset(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
 }
 
-/// Transformable
-pub trait Transformable: sealed::Sealed {
-  /// The output type of this transform.
-  type Output;
+/// Transfer trait for converting data between different states.
+pub trait Transfer<'a, D>: sealed::Sealed<'a, D> {}
 
-  /// Returns the output after transformring.
-  fn transform(&self) -> <Self as Transformable>::Output;
-}
-
-impl<T> Transformable for T
-where
-  T: sealed::Sealed,
-{
-  type Output = <T as sealed::Sealed>::Output;
-
-  #[inline]
-  fn transform(&self) -> <Self as Transformable>::Output {
-    <T as sealed::Sealed>::transform(self)
-  }
-}
+impl<'a, D, T> Transfer<'a, D> for T where T: sealed::Sealed<'a, D> {}
 
 mod sealed {
-  pub trait Sealed {
-    type Input;
-    type Output;
-
-    /// Returns the input state.
-    fn input(&self) -> Self::Input;
-
-    /// Converts the input state to the state.
-    fn from_input(input: Self::Input) -> Self
-    where
-      Self: Sized;
-
-    /// Returns the output after transformring.
-    fn transform(&self) -> Self::Output;
-  }
-
-  const _: () = {
-    use dbutils::types::{LazyRef, Type};
-
-    impl Sealed for &[u8] {
-      type Input = Option<Self>;
-      type Output = Self;
-
-      #[inline]
-      fn input(&self) -> Self::Input {
-        Some(self)
-      }
-
-      #[inline]
-      fn from_input(input: Self::Input) -> Self {
-        input.expect("entry in Active state must have value")
-      }
-
-      #[inline]
-      fn transform(&self) -> Self::Output {
-        self
-      }
-    }
-
-    impl<'a, T> Sealed for LazyRef<'a, T>
-    where
-      T: Type + ?Sized,
-    {
-      type Input = Option<&'a [u8]>;
-      type Output = T::Ref<'a>;
-
-      #[inline]
-      fn input(&self) -> Self::Input {
-        Some(self.raw().expect("entry in Active state must have value"))
-      }
-
-      #[inline]
-      fn from_input(input: Self::Input) -> Self {
-        unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
-      }
-
-      #[inline]
-      fn transform(&self) -> Self::Output {
-        *self.get()
-      }
-    }
-
-    impl Sealed for Option<&[u8]> {
-      type Input = Self;
-      type Output = Self;
-
-      #[inline]
-      fn input(&self) -> Self::Input {
-        *self
-      }
-
-      #[inline]
-      fn from_input(input: Self::Input) -> Self {
-        input
-      }
-
-      #[inline]
-      fn transform(&self) -> Self::Output {
-        self.as_ref().copied()
-      }
-    }
-
-    impl<'a, T> Sealed for Option<LazyRef<'a, T>>
-    where
-      T: Type + ?Sized,
-    {
-      type Input = Option<&'a [u8]>;
-      type Output = Option<T::Ref<'a>>;
-
-      #[inline]
-      fn input(&self) -> Self::Input {
-        self
-          .as_ref()
-          .map(|v| v.raw().expect("entry must have a raw value"))
-      }
-
-      #[inline]
-      fn from_input(input: Self::Input) -> Self {
-        input.map(|v| unsafe { LazyRef::from_raw(v) })
-      }
-
-      #[inline]
-      fn transform(&self) -> Self::Output {
-        self.as_ref().map(|v| *v.get())
-      }
-    }
-  };
-}
-
-/// Transfer trait for converting between different states.
-pub trait Transfer<'a, D>: sealed1::Sealed<'a, D> {}
-
-impl<'a, D, T> Transfer<'a, D> for T where T: sealed1::Sealed<'a, D> {}
-
-mod sealed1 {
   use dbutils::types::{LazyRef, Type};
 
-  #[cfg(feature = "skl")]
+  #[cfg(all(feature = "crossbeam-skiplist-mvcc", not(feature = "skl")))]
   pub trait Sealed<'a, I>:
-    skl::Transfer<'a, LazyRef<'a, crate::types::RecordPointer>, To = crate::types::RecordPointer>
+    crossbeam_skiplist_mvcc::Transfer<
+    'a,
+    crate::types::RecordPointer,
+    To = <Self as dbutils::state::State>::Data<'a, &'a crate::types::RecordPointer>,
+  >
   {
-    type Output;
+    type Value;
 
     fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
 
@@ -299,14 +174,57 @@ mod sealed1 {
     where
       Self: Sized;
 
-    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Output>;
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
 
     fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
 
     fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
   }
 
-  #[cfg(not(feature = "skl"))]
+  #[cfg(all(feature = "skl", not(feature = "crossbeam-skiplist-mvcc")))]
+  pub trait Sealed<'a, I>:
+    skl::Transfer<'a, LazyRef<'a, crate::types::RecordPointer>, To = crate::types::RecordPointer>
+  {
+    type Value;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  #[cfg(all(feature = "skl", feature = "crossbeam-skiplist-mvcc"))]
+  pub trait Sealed<'a, I>:
+    skl::Transfer<'a, LazyRef<'a, crate::types::RecordPointer>, To = crate::types::RecordPointer>
+    + crossbeam_skiplist_mvcc::Transfer<
+      'a,
+      crate::types::RecordPointer,
+      To = <Self as dbutils::state::State>::Data<'a, &'a crate::types::RecordPointer>,
+    >
+  {
+    type Value;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  #[cfg(not(any(feature = "skl", feature = "crossbeam-skiplist-mvcc")))]
   pub trait Sealed<'a, I>: dbutils::state::State {
     type Output;
 
@@ -327,7 +245,7 @@ mod sealed1 {
   where
     I: Type + ?Sized,
   {
-    type Output = I::Ref<'a>;
+    type Value = I::Ref<'a>;
 
     #[inline]
     fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, &'a [u8]> {
@@ -362,7 +280,7 @@ mod sealed1 {
   where
     I: Type + ?Sized,
   {
-    type Output = I::Ref<'a>;
+    type Value = I::Ref<'a>;
 
     #[inline]
     fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Option<&'a [u8]> {
@@ -396,7 +314,7 @@ mod sealed1 {
   }
 
   impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::Active {
-    type Output = &'a [u8];
+    type Value = &'a [u8];
 
     #[inline]
     fn input(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, &'a [u8]> {
@@ -412,7 +330,7 @@ mod sealed1 {
     }
 
     #[inline]
-    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Output> {
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Value> {
       *data
     }
 
@@ -428,7 +346,7 @@ mod sealed1 {
   }
 
   impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::MaybeTombstone {
-    type Output = &'a [u8];
+    type Value = &'a [u8];
 
     #[inline]
     fn input(data: &Self::Data<'a, &'a [u8]>) -> Option<&'a [u8]> {
@@ -444,7 +362,7 @@ mod sealed1 {
     }
 
     #[inline]
-    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Output> {
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Value> {
       data.as_ref().copied()
     }
 

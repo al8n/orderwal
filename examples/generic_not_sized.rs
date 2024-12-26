@@ -1,5 +1,5 @@
 use orderwal::{
-  generic::{ArenaTable, OrderWal, Reader, Writer},
+  generic::{BoundedTable, OrderWal, Reader, Writer},
   memtable::MemtableEntry,
   Builder,
 };
@@ -14,7 +14,7 @@ fn main() {
       .with_create_new(true)
       .with_read(true)
       .with_write(true)
-      .map_mut::<OrderWal<ArenaTable<str, [u8]>>, _>(&path)
+      .map_mut::<OrderWal<BoundedTable<str, [u8]>>, _>(&path)
       .unwrap()
   };
 

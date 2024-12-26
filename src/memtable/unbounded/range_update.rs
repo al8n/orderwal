@@ -3,17 +3,18 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use skl::{
-  generic::{
-    multiple_version::sync::{Entry, Iter, Range},
-    LazyRef, TypeRefComparator, TypeRefQueryComparator,
-  },
-  Active, MaybeTombstone, State, Transformable,
+use crossbeam_skiplist_mvcc::nested::{Entry, Iter, Range};
+use dbutils::{
+  equivalentor::{Comparator, QueryComparator},
+  state::State,
 };
 
-use crate::types::{
-  sealed::{Pointee, RangeComparator},
-  Query, QueryRange, RawRangeUpdateRef, RecordPointer, TypeMode,
+use crate::{
+  memtable::{sealed, Transfer},
+  types::{
+    sealed::{Pointee, RangeComparator},
+    Query, QueryRange, RawRangeUpdateRef, RecordPointer, TypeMode,
+  },
 };
 
 /// Range update entry.
@@ -29,12 +30,12 @@ where
   value: OnceCell<S::Data<'a, T::Value<'a>>>,
 }
 
-impl<'a, S, C, T> core::fmt::Debug for RangeUpdateEntry<'a, S, C, T>
+impl<S, C, T> core::fmt::Debug for RangeUpdateEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     use RangeComparator;
@@ -48,7 +49,6 @@ where
 impl<'a, S, C, T> Clone for RangeUpdateEntry<'a, S, C, T>
 where
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   S::Data<'a, T::Value<'a>>: Clone,
   T::Key<'a>: Clone,
@@ -87,10 +87,9 @@ impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeUpdateEntry<'a, S, C,
 where
   C: 'static,
   S: State,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Transformable<Input = Option<&'a [u8]>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
@@ -127,89 +126,70 @@ where
   }
 }
 
-impl<S, C, T> crate::WithVersion for RangeUpdateEntry<'_, S, C, T>
+impl<S, C, T> RangeUpdateEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
 {
+  /// Returns the version of the entry.
   #[inline]
-  fn version(&self) -> u64 {
+  pub fn version(&self) -> u64 {
     self.ent.version()
   }
 }
 
-impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, Active, C, T>
+impl<'a, S, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  <Active as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
-  type Value = <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
+  type Value = S::Data<'a, S::Value>;
 
   #[inline]
   fn value(&self) -> Self::Value {
-    self
-      .value
-      .get_or_init(|| {
+    let val = self.value.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      let data = ptr.map(|ptr| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(&self.ent.value()));
-        <<Active as State>::Data<'a, T::Value<'a>> as Transformable>::from_input(ent.value())
-      })
-      .transform()
-  }
-}
+          .get_or_init(|| self.ent.comparator().fetch_range_update(ptr));
 
-impl<'a, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, MaybeTombstone, C, T>
-where
-  C: 'static,
-  <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-  T: TypeMode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::Value<'a>: 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
-{
-  type Value = <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::Output;
-
-  #[inline]
-  fn value(&self) -> Self::Value {
-    self
-      .value
-      .get_or_init(|| match self.ent.value() {
-        Some(value) => {
-          let ent = self
-            .data
-            .get_or_init(|| self.ent.comparator().fetch_range_update(&value));
-          <<MaybeTombstone as State>::Data<'a, T::Value<'a>> as Transformable>::from_input(
-            ent.value(),
-          )
-        }
-        None => None,
-      })
-      .transform()
+        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
+      });
+      S::into_state(data)
+    });
+    <S as sealed::Sealed<'_, T::Value<'_>>>::transfer(val)
   }
 }
 
 impl<'a, S, C, T> RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  S: State + 'a,
-  S::Data<'a, LazyRef<'a, RecordPointer>>: Sized + Transformable<Input = Option<&'a [u8]>>,
-  S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   #[inline]
   pub(in crate::memtable) fn into_value(self) -> S::Data<'a, T::Value<'a>> {
     self.value.get_or_init(|| {
-      let ent = self
-        .data
-        .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-      <S::Data<'a, T::Value<'a>> as Transformable>::from_input(ent.value())
+      let ptr = S::leak(self.ent.value());
+
+      let data = ptr.map(|ptr| {
+        let ent = self
+          .data
+          .get_or_init(|| self.ent.comparator().fetch_range_update(ptr));
+
+        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
+      });
+      S::into_state(data)
     });
     self.value.into_inner().unwrap()
   }
@@ -241,9 +221,8 @@ impl<'a, S, C, T> Iterator for IterBulkUpdates<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
+  T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   type Item = RangeUpdateEntry<'a, S, C, T>;
 
@@ -257,9 +236,8 @@ impl<'a, S, C, T> DoubleEndedIterator for IterBulkUpdates<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
+  T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -273,6 +251,7 @@ where
   S: State,
   Q: ?Sized,
   T: TypeMode,
+  R: RangeBounds<Q>,
 {
   range:
     Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
@@ -283,6 +262,7 @@ where
   S: State,
   Q: ?Sized,
   T: TypeMode,
+  R: RangeBounds<Q>,
 {
   #[inline]
   pub(in crate::memtable) const fn new(
@@ -304,11 +284,10 @@ impl<'a, S, Q, R, C, T> Iterator for RangeBulkUpdates<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
+  T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
   type Item = RangeUpdateEntry<'a, S, C, T>;
   #[inline]
@@ -321,11 +300,10 @@ impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkUpdates<'a, S, Q, R, C,
 where
   C: 'static,
   S: State,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: TypeMode,
-  T::RangeComparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
+  T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

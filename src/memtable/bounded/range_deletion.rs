@@ -8,15 +8,15 @@ use skl::{
     multiple_version::sync::{Entry, Iter, Range},
     LazyRef, TypeRefComparator, TypeRefQueryComparator,
   },
-  State, Transfer,
+  State,
 };
 
 use crate::{
+  memtable::Transfer,
   types::{
     sealed::{Pointee, RangeComparator},
     Query, QueryRange, RawRangeDeletionRef, RecordPointer, TypeMode,
   },
-  WithVersion,
 };
 
 /// Range deletion entry.
@@ -81,7 +81,7 @@ where
 impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeDeletionEntry<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
@@ -120,14 +120,16 @@ where
     self.ent.prev().map(Self::new)
   }
 }
-impl<S, C, T> WithVersion for RangeDeletionEntry<'_, S, C, T>
+
+impl<S, C, T> RangeDeletionEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
   T: TypeMode,
 {
+  /// Returns the version of the entry.
   #[inline]
-  fn version(&self) -> u64 {
+  pub fn version(&self) -> u64 {
     self.ent.version()
   }
 }
@@ -135,12 +137,13 @@ where
 impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a> for RangeDeletionEntry<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
 }
+
 /// The iterator for point entries.
 pub struct IterBulkDeletions<'a, S, C, T>
 where
@@ -164,7 +167,7 @@ where
 impl<'a, S, C, T> Iterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
@@ -178,7 +181,7 @@ where
 impl<'a, S, C, T> DoubleEndedIterator for IterBulkDeletions<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   T: TypeMode,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
@@ -222,7 +225,7 @@ where
 impl<'a, S, Q, R, C, T> Iterator for RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
@@ -235,10 +238,11 @@ where
     self.range.next().map(RangeDeletionEntry::new)
   }
 }
+
 impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkDeletions<'a, S, Q, R, C, T>
 where
   C: 'static,
-  S: Transfer<'a, LazyRef<'a, RecordPointer>>,
+  S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,

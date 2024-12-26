@@ -4,14 +4,13 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   checksum::{BuildChecksumer, Crc32},
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  state::{Active, MaybeTombstone},
+  types::{MaybeStructured, Type},
 };
+use either::Either;
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
-use skl::{
-  either::Either,
-  generic::{MaybeStructured, Type, TypeRefComparator, TypeRefQueryComparator},
-  Active, MaybeTombstone,
-};
 
 use crate::{
   batch::Batch,
@@ -23,7 +22,7 @@ use crate::{
 };
 
 pub use crate::memtable::generic::GenericMemtable;
-pub use skl::generic::{Ascend, Descend};
+pub use dbutils::equivalentor::{Ascend, Descend};
 
 /// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
 pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
@@ -32,10 +31,10 @@ pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
 pub type OrderWalReader<M, S = Crc32> = swmr::OrderWalReader<M, S>;
 
 /// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
-pub type ArenaTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
+pub type BoundedTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
 
-/// The options for the [`ArenaTable`].
-pub type ArenaTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
+/// The options for the [`BoundedTable`].
+pub type BoundedTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K, V>

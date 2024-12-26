@@ -1,24 +1,38 @@
-use core::convert::Infallible;
+use core::{
+  convert::Infallible,
+  ops::ControlFlow,
+  sync::atomic::{AtomicUsize, Ordering},
+};
 
-use crossbeam_skiplist_mvcc::flatten::SkipMap;
-use skl::generic::TypeRefComparator;
+use crossbeam_skiplist_mvcc::nested::SkipMap;
+use dbutils::{
+  equivalentor::{Comparator, QueryComparator},
+  state::{Active, MaybeTombstone, State},
+};
+use ref_cast::RefCast;
 use triomphe::Arc;
 
-use crate::types::{sealed::ComparatorConstructor, RecordPointer, TypeMode};
+use crate::types::{
+  sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
+  Query, RecordPointer, RefQuery, TypeMode,
+};
 
-use super::{Memtable, MutableMemtable};
+use super::{
+  sealed, Memtable, MemtableEntry, MutableMemtable, RangeDeletionEntry as RangeDeletionEntryTrait,
+  RangeEntry, RangeEntryExt, RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
+};
 
-// pub use entry::*;
-// pub use iter::*;
-// pub use point::*;
-// pub use range_deletion::*;
-// pub use range_update::*;
+pub use entry::*;
+pub use iter::*;
+pub use point::*;
+pub use range_deletion::*;
+pub use range_update::*;
 
-// mod entry;
-// mod iter;
-// mod point;
-// mod range_deletion;
-// mod range_update;
+mod entry;
+mod iter;
+mod point;
+mod range_deletion;
+mod range_update;
 
 /// A memory table implementation based on ARENA [`SkipMap`](crossbeam_skiplist_mvcc::nested::SkipMap).
 pub struct Table<C, T>
@@ -30,6 +44,7 @@ where
     SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
   pub(in crate::memtable) range_updates_skl:
     SkipMap<RecordPointer, RecordPointer, T::RangeComparator<C>>,
+  len: AtomicUsize,
 }
 
 impl<C, T> Memtable for Table<C, T>
@@ -59,12 +74,13 @@ where
       skl: SkipMap::with_comparator(points_cmp),
       range_deletions_skl: SkipMap::with_comparator(range_del_cmp),
       range_updates_skl: SkipMap::with_comparator(range_update_cmp),
+      len: AtomicUsize::new(0),
     })
   }
 
   #[inline]
   fn len(&self) -> usize {
-    self.skl.len() + self.range_deletions_skl.len() + self.range_updates_skl.len()
+    self.len.load(Ordering::Acquire)
   }
 }
 
@@ -72,18 +88,20 @@ impl<C, T> MutableMemtable for Table<C, T>
 where
   C: 'static,
   T: TypeMode,
-  T::Comparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + Send + 'static,
-  T::RangeComparator<C>: for<'a> TypeRefComparator<'a, RecordPointer> + Send + 'static,
+  T::Comparator<C>: Comparator<RecordPointer> + Send + 'static,
+  T::RangeComparator<C>: Comparator<RecordPointer> + Send + 'static,
 {
   #[inline]
   fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error> {
     self.skl.insert_unchecked(version, pointer, pointer);
+    self.len.fetch_add(1, Ordering::Release);
     Ok(())
   }
 
   #[inline]
   fn remove(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
     self.skl.remove_unchecked(version, key);
+    self.len.fetch_add(1, Ordering::Release);
     Ok(())
   }
 
@@ -92,6 +110,7 @@ where
     self
       .range_deletions_skl
       .insert_unchecked(version, pointer, pointer);
+    self.len.fetch_add(1, Ordering::Release);
     Ok(())
   }
 
@@ -100,110 +119,115 @@ where
     self
       .range_updates_skl
       .insert_unchecked(version, pointer, pointer);
+    self.len.fetch_add(1, Ordering::Release);
     Ok(())
   }
 
   #[inline]
   fn range_unset(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error> {
     self.range_updates_skl.remove_unchecked(version, key);
+    self.len.fetch_add(1, Ordering::Release);
     Ok(())
   }
 }
 
-// impl<'a, C, T> Table<C, T>
-// where
-//   C: 'static,
-//   T: TypeMode,
-//   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
-//   T::Value<'a>: Transformable,
-//   T::Comparator<C>: PointComparator<C>
-//     + TypeRefComparator<'a, RecordPointer>
-//     + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
-//     + 'static,
-//   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer>
-//     + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
-//     + RangeComparator<C>
-//     + 'static,
-//   RangeDeletionEntry<'a, Active, C, T>:
-//     RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-// {
-//   pub(in crate::memtable) fn validate<S>(
-//     &'a self,
-//     query_version: u64,
-//     ent: PointEntry<'a, S, C, T>,
-//   ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
-//   where
-//     S: State,
-//     S: Transfer<'a, LazyRef<'a, RecordPointer>>,
-//     S::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-//     PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-//     <MaybeTombstone as State>::Data<'a, T::Value<'a>>: Transformable<Input = Option<&'a [u8]>> + 'a,
-//     RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<'a, Value = Option<<T::Value<'a> as Transformable>::Output>>
-//       + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-//   {
-//     let key = ent.key();
-//     let cmp = ent.ent.comparator();
-//     let version = ent.ent.version();
-//     let query = RefQuery::new(key);
-//     let shadow = self
-//       .range_deletions_skl
-//       .range(query_version, ..=&query)
-//       .any(|ent| {
-//         let del_ent_version = ent.version();
-//         if !(version <= del_ent_version && del_ent_version <= query_version) {
-//           return false;
-//         }
-//         let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
-//         dbutils::equivalentor::RangeComparator::contains(
-//           cmp,
-//           &ent.query_range(),
-//           Query::ref_cast(&query.query),
-//         )
-//       });
-//     if shadow {
-//       return ControlFlow::Continue(ent);
-//     }
-//     let range_ent = self
-//       .range_updates_skl
-//       .range_all(query_version, ..=&query)
-//       .filter_map(|ent| {
-//         let range_ent_version = ent.version();
-//         if !(version <= range_ent_version && range_ent_version <= query_version) {
-//           return None;
-//         }
-//         let ent = RangeUpdateEntry::<MaybeTombstone, C, T>::new(ent);
-//         if dbutils::equivalentor::RangeComparator::contains(
-//           cmp,
-//           &ent.query_range(),
-//           Query::ref_cast(&query.query),
-//         ) {
-//           Some(ent)
-//         } else {
-//           None
-//         }
-//       })
-//       .max_by_key(|e| e.version());
-//     if let Some(range_ent) = range_ent {
-//       let version = range_ent.version();
-//       if let Some(val) = range_ent.into_value() {
-//         return ControlFlow::Break(Some(Entry::new(
-//           self,
-//           query_version,
-//           ent,
-//           key,
-//           Some(S::data(val)),
-//           version,
-//         )));
-//       }
-//     }
-//     let version = ent.version();
-//     ControlFlow::Break(Some(Entry::new(
-//       self,
-//       query_version,
-//       ent,
-//       key,
-//       None,
-//       version,
-//     )))
-//   }
-// }
+impl<'a, C, T> Table<C, T>
+where
+  C: 'static,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
+  T::Comparator<C>: PointComparator<C>
+    + Comparator<RecordPointer>
+    + Comparator<Query<<T::Key<'a> as Pointee<'a>>::Output>>
+    + 'static,
+  T::RangeComparator<C>: Comparator<RecordPointer>
+    + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
+    + RangeComparator<C>
+    + 'static,
+  RangeDeletionEntry<'a, Active, C, T>:
+    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+{
+  pub(in crate::memtable) fn validate<S>(
+    &'a self,
+    query_version: u64,
+    ent: PointEntry<'a, S, C, T>,
+  ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
+  where
+    S: Transfer<'a, T::Value<'a>>,
+    S::Data<'a, S::Value>: 'a,
+    PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+    MaybeTombstone: Transfer<'a, T::Value<'a>>,
+    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+        'a,
+        Value = <MaybeTombstone as State>::Data<
+          'a,
+          <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+        >,
+      > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  {
+    let key = ent.key();
+    let cmp = ent.ent.comparator();
+    let version = ent.ent.version();
+    let query = RefQuery::new(key);
+    let shadow = self
+      .range_deletions_skl
+      .range(query_version, ..=&query)
+      .any(|ent| {
+        let del_ent_version = ent.version();
+        if !(version <= del_ent_version && del_ent_version <= query_version) {
+          return false;
+        }
+        let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
+        dbutils::equivalentor::RangeComparator::contains(
+          cmp,
+          &ent.query_range(),
+          Query::ref_cast(&query.query),
+        )
+      });
+    if shadow {
+      return ControlFlow::Continue(ent);
+    }
+    let range_ent = self
+      .range_updates_skl
+      .range_all(query_version, ..=&query)
+      .filter_map(|ent| {
+        let range_ent_version = ent.version();
+        if !(version <= range_ent_version && range_ent_version <= query_version) {
+          return None;
+        }
+        let ent = RangeUpdateEntry::<MaybeTombstone, C, T>::new(ent);
+        if dbutils::equivalentor::RangeComparator::contains(
+          cmp,
+          &ent.query_range(),
+          Query::ref_cast(&query.query),
+        ) {
+          Some(ent)
+        } else {
+          None
+        }
+      })
+      .max_by_key(|e| e.version());
+    if let Some(range_ent) = range_ent {
+      let version = range_ent.version();
+      if let Some(val) = range_ent.into_value() {
+        return ControlFlow::Break(Some(Entry::new(
+          self,
+          query_version,
+          ent,
+          key,
+          Some(S::data(val)),
+          version,
+        )));
+      }
+    }
+    let version = ent.version();
+    ControlFlow::Break(Some(Entry::new(
+      self,
+      query_version,
+      ent,
+      key,
+      None,
+      version,
+    )))
+  }
+}
