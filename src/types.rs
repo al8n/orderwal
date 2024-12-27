@@ -367,3 +367,24 @@ impl Pointer {
     Self { offset, len }
   }
 }
+
+/// The range operation.
+pub trait RangeOperation: range_operation::Sealed {}
+
+impl<T: range_operation::Sealed> RangeOperation for T {}
+
+mod range_operation {
+  pub trait Sealed {}
+}
+
+/// The range update operation.
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+pub struct RangeUpdate;
+
+impl range_operation::Sealed for RangeUpdate {}
+
+/// The range remove operation.
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+pub struct RangeRemove;
+
+impl range_operation::Sealed for RangeRemove {}
