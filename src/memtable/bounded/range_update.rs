@@ -242,7 +242,7 @@ where
 }
 
 /// The iterator for point entries.
-pub struct IterBulkUpdates<'a, S, C, T>
+pub struct IterRangeUpdate<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -250,7 +250,7 @@ where
   iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
 }
 
-impl<'a, S, C, T> IterBulkUpdates<'a, S, C, T>
+impl<'a, S, C, T> IterRangeUpdate<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -263,7 +263,7 @@ where
   }
 }
 
-impl<'a, S, C, T> Iterator for IterBulkUpdates<'a, S, C, T>
+impl<'a, S, C, T> Iterator for IterRangeUpdate<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, LazyRef<'a, RecordPointer>>,
@@ -279,7 +279,7 @@ where
   }
 }
 
-impl<'a, S, C, T> DoubleEndedIterator for IterBulkUpdates<'a, S, C, T>
+impl<'a, S, C, T> DoubleEndedIterator for IterRangeUpdate<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, LazyRef<'a, RecordPointer>>,
@@ -294,7 +294,7 @@ where
 }
 
 /// The iterator over a subset of point entries.
-pub struct RangeBulkUpdates<'a, S, Q, R, C, T>
+pub struct RangeRangeUpdate<'a, S, Q, R, C, T>
 where
   S: State,
   Q: ?Sized,
@@ -304,7 +304,7 @@ where
     Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
 }
 
-impl<'a, S, Q, R, C, T> RangeBulkUpdates<'a, S, Q, R, C, T>
+impl<'a, S, Q, R, C, T> RangeRangeUpdate<'a, S, Q, R, C, T>
 where
   S: State,
   Q: ?Sized,
@@ -326,7 +326,7 @@ where
   }
 }
 
-impl<'a, S, Q, R, C, T> Iterator for RangeBulkUpdates<'a, S, Q, R, C, T>
+impl<'a, S, Q, R, C, T> Iterator for RangeRangeUpdate<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: Transfer<'a, LazyRef<'a, RecordPointer>>,
@@ -343,7 +343,7 @@ where
   }
 }
 
-impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkUpdates<'a, S, Q, R, C, T>
+impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeRangeUpdate<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: Transfer<'a, LazyRef<'a, RecordPointer>>,

@@ -15,7 +15,7 @@ use crate::{
   generic::{
     BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
   },
-  memtable::{MemtableEntry, MutableMemtable},
+  memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -26,7 +26,7 @@ fn iter<M>(wal: &mut OrderWal<M>)
 where
   M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a>,
+  for<'a> M::Entry<'a, Active>: Entry<'a>,
   for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
 {
   let mut people = (0..100)
@@ -100,7 +100,7 @@ where
 fn bounds<M>(wal: &mut OrderWal<u32, u32, M>)
 where
   M: Memtable<Key = u32, Value = u32> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   for i in 0..100u32 {
@@ -240,7 +240,7 @@ where
 fn range<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let mut mid = Person::random();
@@ -319,7 +319,7 @@ where
 fn entry_iter<M>(wal: &mut OrderWal<u32, u32, M>)
 where
   M: Memtable<Key = u32, Value = u32> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: Entry<'a> + std::fmt::Debug,
   M::Error: std::fmt::Debug,
 {
   for i in 0..100u32 {

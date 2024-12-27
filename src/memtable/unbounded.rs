@@ -18,7 +18,7 @@ use crate::types::{
 };
 
 use super::{
-  sealed, Memtable, MemtableEntry, MutableMemtable, RangeEntry, RangeEntryExt,
+  sealed, Memtable, Entry, MutableMemtable, RangeEntry, RangeEntryExt,
   RangeRemoveEntry as RangeRemoveEntryTrait, RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
 };
 
@@ -150,12 +150,12 @@ where
   pub(in crate::memtable) fn validate<S>(
     &'a self,
     query_version: u64,
-    ent: PointEntry<'a, S, C, T>,
-  ) -> ControlFlow<Option<Entry<'a, S, C, T>>, PointEntry<'a, S, C, T>>
+    ent: PointEntryRef<'a, S, C, T>,
+  ) -> ControlFlow<Option<EntryRef<'a, S, C, T>>, PointEntryRef<'a, S, C, T>>
   where
     S: Transfer<'a, T::Value<'a>>,
     S::Data<'a, S::Value>: 'a,
-    PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+    PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
     MaybeTombstone: Transfer<'a, T::Value<'a>>,
     RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
         'a,
@@ -210,7 +210,7 @@ where
     if let Some(range_ent) = range_ent {
       let version = range_ent.version();
       if let Some(val) = range_ent.into_value() {
-        return ControlFlow::Break(Some(Entry::new(
+        return ControlFlow::Break(Some(EntryRef::new(
           self,
           query_version,
           ent,
@@ -221,7 +221,7 @@ where
       }
     }
     let version = ent.version();
-    ControlFlow::Break(Some(Entry::new(
+    ControlFlow::Break(Some(EntryRef::new(
       self,
       query_version,
       ent,

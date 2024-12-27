@@ -164,14 +164,14 @@ where
 }
 
 /// The iterator for point entries.
-pub struct IterBulkDeletions<'a, S, C, T>
+pub struct IterRangeRemove<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
 {
   iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
 }
-impl<'a, S, C, T> IterBulkDeletions<'a, S, C, T>
+impl<'a, S, C, T> IterRangeRemove<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -183,7 +183,7 @@ where
     Self { iter }
   }
 }
-impl<'a, S, C, T> Iterator for IterBulkDeletions<'a, S, C, T>
+impl<'a, S, C, T> Iterator for IterRangeRemove<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
@@ -197,7 +197,7 @@ where
     self.iter.next().map(RangeRemoveEntry::new)
   }
 }
-impl<'a, S, C, T> DoubleEndedIterator for IterBulkDeletions<'a, S, C, T>
+impl<'a, S, C, T> DoubleEndedIterator for IterRangeRemove<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
@@ -211,7 +211,7 @@ where
   }
 }
 /// The iterator over a subset of point entries.
-pub struct RangeBulkDeletions<'a, S, Q, R, C, T>
+pub struct RangeRangeRemove<'a, S, Q, R, C, T>
 where
   S: State,
   Q: ?Sized,
@@ -220,7 +220,7 @@ where
   range:
     Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
 }
-impl<'a, S, Q, R, C, T> RangeBulkDeletions<'a, S, Q, R, C, T>
+impl<'a, S, Q, R, C, T> RangeRangeRemove<'a, S, Q, R, C, T>
 where
   S: State,
   Q: ?Sized,
@@ -241,7 +241,7 @@ where
     Self { range }
   }
 }
-impl<'a, S, Q, R, C, T> Iterator for RangeBulkDeletions<'a, S, Q, R, C, T>
+impl<'a, S, Q, R, C, T> Iterator for RangeRangeRemove<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
@@ -258,7 +258,7 @@ where
   }
 }
 
-impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkDeletions<'a, S, Q, R, C, T>
+impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeRangeRemove<'a, S, Q, R, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,

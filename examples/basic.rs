@@ -1,6 +1,6 @@
 use orderwal::{
   dynamic::{BoundedTable, OrderWal, Reader, Writer},
-  memtable::MemtableEntry,
+  memtable::Entry,
   Builder,
 };
 

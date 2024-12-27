@@ -251,7 +251,7 @@ pub trait Reader: Log {
   fn iter_bulk_deletions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsIterator<'_, Active>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkRemoveIterator<'_, Active>
   where
     Self::Memtable: DynamicMemtable + 'static,
   {
@@ -263,7 +263,7 @@ pub trait Reader: Log {
   fn iter_all_bulk_deletions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkRemoveIterator<'_, MaybeTombstone>
   where
     Self::Memtable: DynamicMemtable + 'static,
   {
@@ -276,7 +276,7 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkRemoveRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -291,7 +291,7 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkRemoveRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -305,7 +305,7 @@ pub trait Reader: Log {
   fn iter_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesIterator<'_, Active>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdateIterator<'_, Active>
   where
     Self::Memtable: DynamicMemtable,
   {
@@ -317,7 +317,7 @@ pub trait Reader: Log {
   fn iter_all_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdateIterator<'_, MaybeTombstone>
   where
     Self::Memtable: DynamicMemtable,
   {
@@ -330,7 +330,7 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdateRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -345,7 +345,7 @@ pub trait Reader: Log {
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as DynamicMemtable>::BulkUpdateRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,

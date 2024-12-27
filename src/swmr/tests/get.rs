@@ -5,7 +5,7 @@ use dbutils::{buffer::VacantBuffer, types::MaybeStructured};
 use std::collections::BTreeMap;
 
 use crate::{
-  memtable::{alternative::TableOptions, Memtable, MemtableEntry},
+  memtable::{alternative::TableOptions, Memtable, Entry},
   swmr::base::{Reader, Writer},
   types::{KeyBuilder, ValueBuilder},
 };
@@ -15,7 +15,7 @@ use super::*;
 fn first<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..10)
@@ -43,7 +43,7 @@ where
 fn last<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..10)
@@ -71,7 +71,7 @@ where
 fn insert<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -99,7 +99,7 @@ where
 fn insert_with_value_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -130,7 +130,7 @@ where
 fn insert_with_key_builder<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -165,7 +165,7 @@ where
 fn insert_with_bytes<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   let people = (0..100)
@@ -196,7 +196,7 @@ where
 fn insert_with_builders<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: Entry<'a> + std::fmt::Debug,
   M::Error: std::fmt::Debug,
 {
   let people = (0..1)

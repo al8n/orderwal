@@ -7,8 +7,7 @@ use skl::{
 
 use crate::{
   memtable::{
-    sealed, MemtableEntry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
-    RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
+    sealed, Entry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait, RangeUpdateEntry as RangeUpdateEntryTrait, RawEntry, Transfer
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
@@ -16,23 +15,23 @@ use crate::{
   },
 };
 
-use super::{PointEntry, RangeRemoveEntry, RangeUpdateEntry, Table};
+use super::{PointEntryRef, RangeRemoveEntry, RangeUpdateEntry, Table};
 
 /// Entry in the memtable.
-pub struct Entry<'a, S, C, T>
+pub struct EntryRef<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
 {
   table: &'a Table<C, T>,
-  point_ent: PointEntry<'a, S, C, T>,
+  point_ent: PointEntryRef<'a, S, C, T>,
   key: <T::Key<'a> as Pointee<'a>>::Output,
   val: Option<S::Data<'a, T::Value<'a>>>,
   version: u64,
   query_version: u64,
 }
 
-impl<'a, S, C, T> core::fmt::Debug for Entry<'a, S, C, T>
+impl<'a, S, C, T> core::fmt::Debug for EntryRef<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
@@ -41,8 +40,8 @@ where
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
-  PointEntry<'a, S, C, T>:
-    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
+  PointEntryRef<'a, S, C, T>:
+    Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("Entry")
@@ -53,11 +52,11 @@ where
   }
 }
 
-impl<'a, S, C, T> Clone for Entry<'a, S, C, T>
+impl<'a, S, C, T> Clone for EntryRef<'a, S, C, T>
 where
   S: State,
   S::Data<'a, T::Value<'a>>: Clone,
-  PointEntry<'a, S, C, T>: Clone,
+  PointEntryRef<'a, S, C, T>: Clone,
   T: TypeMode,
   T::Key<'a>: Clone,
   T::Value<'a>: Clone,
@@ -75,7 +74,34 @@ where
   }
 }
 
-impl<'a, S, C, T> MemtableEntry<'a> for Entry<'a, S, C, T>
+impl<'a, S, C, T> RawEntry<'a> for EntryRef<'a, S, C, T>
+where
+  C: 'static,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, &'a [u8]>: 'a,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
+  PointEntryRef<'a, S, C, T>:
+    RawEntry<'a, RawValue = S::Data<'a, &'a [u8]>>,
+{
+  type RawValue = S::Data<'a, &'a [u8]>;
+
+  #[inline]
+  fn raw_key(&self) -> &'a [u8] {
+    self.point_ent.raw_key()
+  }
+
+  #[inline]
+  fn raw_value(&self) -> Self::RawValue {
+    match self.val.as_ref() {
+      Some(val) => <S as sealed::Sealed<'_, T::Value<'_>>>::input(val),
+      None => self.point_ent.raw_value(),
+    }
+  }
+}
+
+impl<'a, S, C, T> Entry<'a> for EntryRef<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
@@ -92,8 +118,8 @@ where
     + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  PointEntry<'a, S, C, T>:
-    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
+  PointEntryRef<'a, S, C, T>:
+    Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
@@ -148,7 +174,7 @@ where
   }
 }
 
-impl<'a, S, C, T> Entry<'a, S, C, T>
+impl<'a, S, C, T> EntryRef<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -157,7 +183,7 @@ where
   pub(crate) fn new(
     table: &'a Table<C, T>,
     query_version: u64,
-    point_ent: PointEntry<'a, S, C, T>,
+    point_ent: PointEntryRef<'a, S, C, T>,
     key: <T::Key<'a> as Pointee<'a>>::Output,
     val: Option<S::Data<'a, T::Value<'a>>>,
     version: u64,
@@ -173,7 +199,7 @@ where
   }
 }
 
-impl<'a, S, C, T> Entry<'a, S, C, T>
+impl<'a, S, C, T> EntryRef<'a, S, C, T>
 where
   C: 'static,
   S: State,
@@ -181,8 +207,8 @@ where
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
-  PointEntry<'a, S, C, T>:
-    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
+  PointEntryRef<'a, S, C, T>:
+    Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
 {
   #[inline]
   fn value_in(&self) -> S::Data<'a, S::Value> {

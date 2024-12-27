@@ -281,7 +281,7 @@ where
   fn iter_bulk_deletions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveIterator<'_, Active>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -295,7 +295,7 @@ where
   fn iter_all_bulk_deletions(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveIterator<'_, MaybeTombstone>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -310,7 +310,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -328,7 +328,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkDeletionsRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -345,7 +345,7 @@ where
   fn iter_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateIterator<'_, Active>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -359,7 +359,7 @@ where
   fn iter_all_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateIterator<'_, MaybeTombstone>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -374,7 +374,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateRange<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -392,7 +392,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdatesRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,

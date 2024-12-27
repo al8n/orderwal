@@ -3,7 +3,7 @@ use skl::KeySize;
 
 use crate::memtable::{
   alternative::{Table, TableOptions},
-  Memtable, MemtableEntry,
+  Memtable, Entry,
 };
 
 use super::*;
@@ -11,7 +11,7 @@ use super::*;
 fn zero_reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   unsafe {
@@ -26,7 +26,7 @@ where
 fn reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
   M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
+  for<'a> M::Item<'a>: Entry<'a>,
   M::Error: std::fmt::Debug,
 {
   unsafe {

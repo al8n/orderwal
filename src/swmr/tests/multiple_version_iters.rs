@@ -15,7 +15,7 @@ use crate::{
   generic::{
     BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
   },
-  memtable::{MemtableEntry, MutableMemtable},
+  memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -78,8 +78,8 @@ fn iter_with_tombstone_mvcc<M>(wal: &mut OrderWal<M>)
 where
   M: GenericMemtable<str, str> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a>,
-  for<'a> M::Entry<'a, MaybeTombstone>: MemtableEntry<'a>,
+  for<'a> M::Entry<'a, Active>: Entry<'a>,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a>,
   for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
 {
   wal.insert(1, "a", "a1").unwrap();
@@ -156,7 +156,7 @@ fn iter_next<'m, M>(wal: &'m mut OrderWal<M>)
 where
   M: GenericMemtable<String, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a>,
+  for<'a> M::Entry<'a, Active>: Entry<'a>,
   M::Iterator<'m, Active>: Iterator<Item = M::Entry<'m, Active>>,
   M::Iterator<'m, MaybeTombstone>: Iterator<Item = M::Entry<'m, MaybeTombstone>>,
   for<'a> M::Comparator: TypeRefComparator<'a, String> + TypeRefQueryComparator<'a, String, str>,
@@ -198,8 +198,8 @@ where
   M: GenericMemtable<String, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
   M::Iterator<'m, Active>: Iterator<Item = M::Entry<'m, Active>>,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a> + Clone,
-  for<'a> M::Entry<'a, MaybeTombstone>: MemtableEntry<'a> + Clone,
+  for<'a> M::Entry<'a, Active>: Entry<'a> + Clone,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a> + Clone,
   for<'a> M::Comparator: TypeRefComparator<'a, String> + TypeRefQueryComparator<'a, String, str>,
 {
   const N: usize = 100;
@@ -238,9 +238,9 @@ fn iter_with_tombstone_next_by_with_tombstone_entry<M>(wal: &mut OrderWal<M>)
 where
   M: GenericMemtable<String, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a> + Clone,
+  for<'a> M::Entry<'a, Active>: Entry<'a> + Clone,
   for<'a> M::Entry<'a, MaybeTombstone>:
-    MemtableEntry<'a, Value = Option<<String as Type>::Ref<'a>>> + Clone,
+    Entry<'a, Value = Option<<String as Type>::Ref<'a>>> + Clone,
   for<'a> M::Comparator: TypeRefComparator<'a, String> + TypeRefQueryComparator<'a, String, str>,
 {
   const N: usize = 100;
@@ -355,7 +355,7 @@ fn iter_prev<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -406,7 +406,7 @@ fn iter_with_tombstone_prev_by_entry<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -452,8 +452,8 @@ fn iter_with_tombstone_prev_by_with_tombstone_entry<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
-  for<'a> M::MultipleVersionEntry<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
+  for<'a> M::MultipleVersionEntry<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 
@@ -500,7 +500,7 @@ fn range_prev<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
 {
   const N: usize = 100;
 

@@ -4,7 +4,7 @@ use dbutils::leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_l
 use orderwal::{
   equivalent::{Comparable, Equivalent},
   generic::{BoundedTable, OrderWal, Reader, Writer},
-  memtable::MemtableEntry,
+  memtable::Entry,
   types::{Type, TypeRef, VacantBuffer},
   Builder,
 };

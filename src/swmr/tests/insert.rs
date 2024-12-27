@@ -12,7 +12,7 @@ use crate::{
   generic::{
     BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
   },
-  memtable::{MemtableEntry, MutableMemtable},
+  memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -24,7 +24,7 @@ fn concurrent_basic<M>(mut w: OrderWal<M>)
 where
   M: GenericMemtable<u32, [u8; 4]> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Key = u32, Value = [u8; 4]>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = u32, Value = [u8; 4]>,
   for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
 {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
@@ -56,7 +56,7 @@ fn concurrent_one_key<M>(mut w: OrderWal<M>)
 where
   M: GenericMemtable<u32, [u8; 4]> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Key = u32, Value = [u8; 4]>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = u32, Value = [u8; 4]>,
   for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
 {
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
@@ -81,7 +81,7 @@ fn apply<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, String)>, Person)
 where
   M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Value = <String as Type>::Ref<'a>>,
   for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
 {
   const N: u32 = 5;
@@ -137,7 +137,7 @@ fn apply_with_key_builder<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, Stri
 where
   M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Value = <String as Type>::Ref<'a>>,
   for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
 {
   const N: u32 = 5;
@@ -196,7 +196,7 @@ fn apply_with_value_builder<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, St
 where
   M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Value = <String as Type>::Ref<'a>>,
   for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
 {
   const N: u32 = 5;
@@ -254,7 +254,7 @@ fn apply_with_builders<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, String)
 where
   M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
   M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Value = <String as Type>::Ref<'a>>,
   for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
 {
   const N: u32 = 1;

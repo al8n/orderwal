@@ -14,7 +14,7 @@ pub mod dynamic;
 pub mod generic;
 
 /// An entry which is stored in the memory table.
-pub trait MemtableEntry<'a>
+pub trait Entry<'a>
 where
   Self: Sized,
 {

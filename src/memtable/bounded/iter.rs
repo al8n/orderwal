@@ -9,7 +9,7 @@ use skl::{
 
 use crate::{
   memtable::{
-    sealed, MemtableEntry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
+    sealed, Entry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
     RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-  Entry, IterPoints, PointEntry, RangePoints, RangeRemoveEntry, RangeUpdateEntry, Table,
+  EntryRef, IterPoints, PointEntryRef, RangePoints, RangeRemoveEntry, RangeUpdateEntry, Table,
 };
 
 /// An iterator over the entries of a `Memtable`.
@@ -81,7 +81,7 @@ where
     + RangeComparator<C>
     + 'static,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
       Value = <MaybeTombstone as State>::Data<
@@ -92,7 +92,7 @@ where
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
-  type Item = Entry<'a, S, C, T>;
+  type Item = EntryRef<'a, S, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -123,7 +123,7 @@ where
     + RangeComparator<C>
     + 'static,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
       Value = <MaybeTombstone as State>::Data<
@@ -216,8 +216,8 @@ where
     + RangeComparator<C>
     + 'static,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  PointEntry<'a, S, C, T>:
-    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
+  PointEntryRef<'a, S, C, T>:
+    Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
@@ -228,7 +228,7 @@ where
       >,
     > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
-  type Item = Entry<'a, S, C, T>;
+  type Item = EntryRef<'a, S, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -264,8 +264,8 @@ where
     + RangeComparator<C>
     + 'static,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  PointEntry<'a, S, C, T>:
-    MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
+  PointEntryRef<'a, S, C, T>:
+    Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<

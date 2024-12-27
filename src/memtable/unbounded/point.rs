@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Point entry.
-pub struct PointEntry<'a, S, C, T>
+pub struct PointEntryRef<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -27,7 +27,7 @@ where
   pub(in crate::memtable) value: OnceCell<S::Data<'a, T::Value<'a>>>,
 }
 
-impl<S, C, T> core::fmt::Debug for PointEntry<'_, S, C, T>
+impl<S, C, T> core::fmt::Debug for PointEntryRef<'_, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -37,11 +37,11 @@ where
     self
       .data
       .get_or_init(|| self.ent.comparator().fetch_entry(self.ent.key()))
-      .write_fmt("PointEntry", f)
+      .write_fmt("PointEntryRef", f)
   }
 }
 
-impl<'a, S, C, T> Clone for PointEntry<'a, S, C, T>
+impl<'a, S, C, T> Clone for PointEntryRef<'a, S, C, T>
 where
   S: State,
   S::Data<'a, T::Value<'a>>: Clone,
@@ -58,7 +58,7 @@ where
     }
   }
 }
-impl<'a, S, C, T> PointEntry<'a, S, C, T>
+impl<'a, S, C, T> PointEntryRef<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -76,10 +76,10 @@ where
   }
 }
 
-impl<'a, S, C, T> crate::memtable::RawEntry<'a> for PointEntry<'a, S, C, T>
+impl<'a, S, C, T> crate::memtable::RawEntry<'a> for PointEntryRef<'a, S, C, T>
 where
   C: 'static,
-  S: Transfer<'a, &'a [u8]>,
+  S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, &'a [u8]>: 'a,
   T: TypeMode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
@@ -116,7 +116,7 @@ where
   }
 }
 
-impl<'a, S, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, S, C, T>
+impl<'a, S, C, T> crate::memtable::Entry<'a> for PointEntryRef<'a, S, C, T>
 where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
@@ -182,7 +182,7 @@ where
   }
 }
 
-impl<S, C, T> PointEntry<'_, S, C, T>
+impl<S, C, T> PointEntryRef<'_, S, C, T>
 where
   C: 'static,
   S: State,
@@ -224,10 +224,10 @@ where
   T: TypeMode,
   T::Comparator<C>: Comparator<RecordPointer>,
 {
-  type Item = PointEntry<'a, S, C, T>;
+  type Item = PointEntryRef<'a, S, C, T>;
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(PointEntry::new)
+    self.iter.next().map(PointEntryRef::new)
   }
 }
 
@@ -240,7 +240,7 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(PointEntry::new)
+    self.iter.next_back().map(PointEntryRef::new)
   }
 }
 
@@ -279,10 +279,10 @@ where
   T: TypeMode,
   T::Comparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
-  type Item = PointEntry<'a, S, C, T>;
+  type Item = PointEntryRef<'a, S, C, T>;
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.range.next().map(PointEntry::new)
+    self.range.next().map(PointEntryRef::new)
   }
 }
 
@@ -297,6 +297,6 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.range.next_back().map(PointEntry::new)
+    self.range.next_back().map(PointEntryRef::new)
   }
 }

@@ -1,6 +1,6 @@
 use orderwal::{
   generic::{BoundedTable, Descend, OrderWal, Reader, Writer},
-  memtable::MemtableEntry,
+  memtable::Entry,
   Builder,
 };
 

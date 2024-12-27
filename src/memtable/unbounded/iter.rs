@@ -7,7 +7,7 @@ use dbutils::{
 
 use crate::{
   memtable::{
-    sealed, MemtableEntry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
+    sealed, Entry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
     RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
@@ -17,11 +17,11 @@ use crate::{
 };
 
 use super::{
-  entry::Entry,
-  point::{IterPoints, RangePoints},
-  range_deletion::RangeRemoveEntry,
-  range_update::RangeUpdateEntry,
-  PointEntry, Table,
+  EntryRef,
+  IterPoints, RangePoints,
+  RangeRemoveEntry,
+  RangeUpdateEntry,
+  PointEntryRef, Table,
 };
 
 /// An iterator over the entries of a `Memtable`.
@@ -83,7 +83,7 @@ where
     + 'static,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
@@ -93,7 +93,7 @@ where
       >,
     > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
-  type Item = Entry<'a, S, C, T>;
+  type Item = EntryRef<'a, S, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -124,7 +124,7 @@ where
     + 'static,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
@@ -214,7 +214,7 @@ where
     + 'static,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
@@ -224,7 +224,7 @@ where
       >,
     > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
-  type Item = Entry<'a, S, C, T>;
+  type Item = EntryRef<'a, S, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -258,7 +258,7 @@ where
     + 'static,
   RangeRemoveEntry<'a, Active, C, T>:
     RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
