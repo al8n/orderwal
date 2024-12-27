@@ -7,7 +7,7 @@ use dbutils::{
 
 use crate::{
   memtable::{
-    sealed, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    sealed, MemtableEntry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
     RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
@@ -19,7 +19,7 @@ use crate::{
 use super::{
   entry::Entry,
   point::{IterPoints, RangePoints},
-  range_deletion::RangeDeletionEntry,
+  range_deletion::RangeRemoveEntry,
   range_update::RangeUpdateEntry,
   PointEntry, Table,
 };
@@ -81,8 +81,8 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
@@ -122,8 +122,8 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
@@ -212,8 +212,8 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
@@ -256,8 +256,8 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntry<'a, S, C, T>: MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<

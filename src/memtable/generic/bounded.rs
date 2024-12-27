@@ -24,7 +24,7 @@ pub type Entry<'a, K, V, S, C> = bounded::Entry<'a, S, C, Generic<K, V>>;
 pub type PointEntry<'a, K, V, S, C> = bounded::PointEntry<'a, S, C, Generic<K, V>>;
 
 /// Range deletion entry of the [`Table`].
-pub type RangeDeletionEntry<'a, K, V, S, C> = bounded::RangeDeletionEntry<'a, S, C, Generic<K, V>>;
+pub type RangeRemoveEntry<'a, K, V, S, C> = bounded::RangeRemoveEntry<'a, S, C, Generic<K, V>>;
 
 /// Range update entry of the [`Table`].
 pub type RangeUpdateEntry<'a, K, V, S, C> = bounded::RangeUpdateEntry<'a, S, C, Generic<K, V>>;
@@ -75,8 +75,8 @@ where
     Self: 'a,
     S: State + 'a;
 
-  type RangeDeletionEntry<'a, S>
-    = RangeDeletionEntry<'a, K, V, S, C>
+  type RangeRemoveEntry<'a, S>
+    = RangeRemoveEntry<'a, K, V, S, C>
   where
     Self: 'a,
     S: State + 'a;

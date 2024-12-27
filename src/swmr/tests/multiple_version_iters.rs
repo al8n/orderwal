@@ -1,24 +1,38 @@
 use core::ops::Bound;
+use std::collections::BTreeMap;
 
-use crate::memtable::{
-  alternative::{MultipleVersionTable, TableOptions},
-  MultipleVersionMemtable, MultipleVersionMemtableEntry,
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  state::{Active, MaybeTombstone},
+  types::{MaybeStructured, Type},
 };
-use multiple_version::{Reader, Writer};
 
-use super::*;
+use std::thread::spawn;
+
+use crate::{
+  batch::BatchEntry,
+  generic::{
+    BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
+  },
+  memtable::{MemtableEntry, MutableMemtable},
+  types::{KeyBuilder, ValueBuilder},
+  Builder,
+};
+
+use super::{Person, MB};
 
 #[cfg(feature = "std")]
-expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<str, str> [TableOptions::Linked]: MultipleVersionTable<_, _> {
+expand_unit_tests!("unbounded": OrderWal<UnboundedTable<str, str>> [Default::default()]: UnboundedTable<_, _> {
   iter_with_tombstone_mvcc,
 });
 
-expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<str, str> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
+expand_unit_tests!("bounded": OrderWal<BoundedTable<str, str>> [Default::default()]: BoundedTable<_, _> {
   iter_with_tombstone_mvcc,
 });
 
 #[cfg(feature = "std")]
-expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<String, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
+expand_unit_tests!("unbounded": OrderWal<UnboundedTable<String, String>> [Default::default()]: UnboundedTable<_, _> {
   iter_next,
   iter_with_tombstone_next_by_entry,
   iter_with_tombstone_next_by_with_tombstone_entry,
@@ -29,11 +43,11 @@ expand_unit_tests!("linked": MultipleVersionOrderWalAlternativeTable<String, Str
   iter_with_tombstone_prev_by_with_tombstone_entry,
 });
 
-macro_rules! arena_builder {
+macro_rules! bounded_builder {
   () => {{
     crate::Builder::new()
       .with_memtable_options(
-        crate::memtable::arena::TableOptions::new()
+        crate::memtable::bounded::TableOptions::new()
           .with_capacity(1024 * 1024)
           .into(),
       )
@@ -41,15 +55,15 @@ macro_rules! arena_builder {
   }};
 }
 
-expand_unit_tests!("arena": MultipleVersionOrderWalAlternativeTable<String, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
-  iter_next(arena_builder!()),
-  iter_with_tombstone_next_by_entry(arena_builder!()),
-  iter_with_tombstone_next_by_with_tombstone_entry(arena_builder!()),
-  range_next(arena_builder!()),
-  iter_prev(arena_builder!()),
-  range_prev(arena_builder!()),
-  iter_with_tombstone_prev_by_entry(arena_builder!()),
-  iter_with_tombstone_prev_by_with_tombstone_entry(arena_builder!()),
+expand_unit_tests!("bounded": OrderWal<BoundedTable<String, String>> [Default::default()]: BoundedTable<_, _> {
+  iter_next(bounded_builder!()),
+  iter_with_tombstone_next_by_entry(bounded_builder!()),
+  iter_with_tombstone_next_by_with_tombstone_entry(bounded_builder!()),
+  range_next(bounded_builder!()),
+  iter_prev(bounded_builder!()),
+  range_prev(bounded_builder!()),
+  iter_with_tombstone_prev_by_entry(bounded_builder!()),
+  iter_with_tombstone_prev_by_with_tombstone_entry(bounded_builder!()),
 });
 
 fn make_int_key(i: usize) -> String {
@@ -60,11 +74,13 @@ fn make_value(i: usize) -> String {
   ::std::format!("v{:05}", i)
 }
 
-fn iter_with_tombstone_mvcc<M>(wal: &mut multiple_version::OrderWal<str, str, M>)
+fn iter_with_tombstone_mvcc<M>(wal: &mut OrderWal<M>)
 where
-  M: MultipleVersionMemtable<Key = str, Value = str> + 'static,
-  M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  M: GenericMemtable<str, str> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a>,
+  for<'a> M::Entry<'a, MaybeTombstone>: MemtableEntry<'a>,
+  for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -125,22 +141,25 @@ where
     .unwrap();
   assert_eq!(lower_bound.value().unwrap(), "c1");
 
-  let lower_bound = unsafe { wal.lower_bound_by_bytes(1, Bound::Included(b"b")).unwrap() };
+  let lower_bound = unsafe { wal.lower_bound(1, Bound::Included(b"b")).unwrap() };
   assert_eq!(lower_bound.value(), "c1");
 
   let lower_bound = unsafe {
     wal
-      .lower_bound_with_tombstone_by_bytes(1, Bound::Included(b"b"))
+      .lower_bound_with_tombstone(1, Bound::Included(b"b"))
       .unwrap()
   };
   assert_eq!(lower_bound.value().unwrap(), "c1");
 }
 
-fn iter_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn iter_next<'m, M>(wal: &'m mut OrderWal<M>)
 where
-  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
-  M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  M: GenericMemtable<String, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a>,
+  M::Iterator<'m, Active>: Iterator<Item = M::Entry<'m, Active>>,
+  M::Iterator<'m, MaybeTombstone>: Iterator<Item = M::Entry<'m, MaybeTombstone>>,
+  for<'a> M::Comparator: TypeRefComparator<'a, String> + TypeRefQueryComparator<'a, String, str>,
 {
   const N: usize = 100;
 
@@ -148,7 +167,7 @@ where
     wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
   }
 
-  let iter = wal.iter_with_tombstone(0);
+  let iter = wal.iter_all(0);
 
   let mut i = 0;
   for ent in iter {
@@ -172,34 +191,16 @@ where
   }
 
   assert_eq!(i, N);
-
-  let iter = wal.values(0);
-
-  let mut i = 0;
-  for ent in iter {
-    assert_eq!(ent.value(), make_value(i).as_str());
-    assert_eq!(ent.raw_value(), make_value(i).as_bytes());
-    i += 1;
-  }
-
-  assert_eq!(i, N);
-
-  let iter = wal.keys(0);
-  let mut i = 0;
-  for ent in iter {
-    assert_eq!(ent.key(), make_int_key(i).as_str());
-    assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
-    i += 1;
-  }
-
-  assert_eq!(i, N);
 }
 
-fn iter_with_tombstone_next_by_entry<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn iter_with_tombstone_next_by_entry<'m, M>(wal: &'m mut OrderWal<M>)
 where
-  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
-  M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
+  M: GenericMemtable<String, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  M::Iterator<'m, Active>: Iterator<Item = M::Entry<'m, Active>>,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a> + Clone,
+  for<'a> M::Entry<'a, MaybeTombstone>: MemtableEntry<'a> + Clone,
+  for<'a> M::Comparator: TypeRefComparator<'a, String> + TypeRefQueryComparator<'a, String, str>,
 {
   const N: usize = 100;
 
@@ -219,24 +220,13 @@ where
   }
   assert_eq!(i, N);
 
-  let mut ent = wal.keys(0).next().clone();
+  let mut ent = wal.iter(0).next().clone();
   #[cfg(feature = "std")]
   std::println!("{ent:?}");
 
   let mut i = 0;
   while let Some(ref mut entry) = ent {
     assert_eq!(entry.key(), make_int_key(i).as_str());
-    ent = entry.next();
-    i += 1;
-  }
-  assert_eq!(i, N);
-
-  let mut ent = wal.values(0).next().clone();
-  #[cfg(feature = "std")]
-  std::println!("{ent:?}");
-
-  let mut i = 0;
-  while let Some(ref mut entry) = ent {
     assert_eq!(entry.value(), make_value(i).as_str());
     ent = entry.next();
     i += 1;
@@ -244,13 +234,14 @@ where
   assert_eq!(i, N);
 }
 
-fn iter_with_tombstone_next_by_with_tombstone_entry<M>(
-  wal: &mut multiple_version::OrderWal<String, String, M>,
-) where
-  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
-  M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
-  for<'a> M::MultipleVersionEntry<'a>: std::fmt::Debug,
+fn iter_with_tombstone_next_by_with_tombstone_entry<M>(wal: &mut OrderWal<M>)
+where
+  M: GenericMemtable<String, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a> + Clone,
+  for<'a> M::Entry<'a, MaybeTombstone>:
+    MemtableEntry<'a, Value = Option<<String as Type>::Ref<'a>>> + Clone,
+  for<'a> M::Comparator: TypeRefComparator<'a, String> + TypeRefQueryComparator<'a, String, str>,
 {
   const N: usize = 100;
 
@@ -294,12 +285,7 @@ fn iter_with_tombstone_next_by_with_tombstone_entry<M>(
   assert!(ent.is_none());
 }
 
-fn range_next<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
-where
-  M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
-  M::Error: std::fmt::Debug,
-  for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
-{
+fn bounded_range_next(wal: &mut OrderWal<BoundedTable<String, String>>) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -311,47 +297,61 @@ where
   let mut iter = wal.range(0, ..=upper.as_str());
   for ent in &mut iter {
     assert_eq!(ent.key(), make_int_key(i).as_str());
-    assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+    // assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
     assert_eq!(ent.value(), make_value(i).as_str());
-    assert_eq!(ent.raw_value(), make_value(i).as_bytes());
+    // assert_eq!(ent.raw_value(), make_value(i).as_bytes());
     i += 1;
   }
 
   assert_eq!(i, 51);
 
   let mut i = 0;
-  let mut iter = wal.range_with_tombstone(0, ..=upper.as_str());
+  let mut iter = wal.range_all(0, ..=upper.as_str());
   for ent in &mut iter {
     assert_eq!(ent.key(), make_int_key(i).as_str());
-    assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+    // assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
     assert_eq!(ent.value().unwrap(), make_value(i).as_str());
-    assert_eq!(ent.raw_value().unwrap(), make_value(i).as_bytes());
+    // assert_eq!(ent.raw_value().unwrap(), make_value(i).as_bytes());
     i += 1;
   }
 
-  assert_eq!(i, 51);
-
-  let mut i = 0;
-  let mut iter = wal.range_keys(0, ..=upper.as_str());
-  for ent in &mut iter {
-    assert_eq!(ent.key(), make_int_key(i).as_str());
-    assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
-    i += 1;
-  }
-
-  assert_eq!(i, 51);
-
-  let mut i = 0;
-  let mut iter = wal.range_values(0, ..=upper.as_str());
-  for ent in &mut iter {
-    assert_eq!(ent.value(), make_value(i).as_str());
-    assert_eq!(ent.raw_value(), make_value(i).as_bytes());
-    i += 1;
-  }
   assert_eq!(i, 51);
 }
 
-fn iter_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn unbounded_range_next(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+  }
+
+  let upper = make_int_key(50);
+  let mut i = 0;
+  let mut iter = wal.range(0, ..=upper.as_str());
+  for ent in &mut iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    // assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+    assert_eq!(ent.value(), make_value(i).as_str());
+    // assert_eq!(ent.raw_value(), make_value(i).as_bytes());
+    i += 1;
+  }
+
+  assert_eq!(i, 51);
+
+  let mut i = 0;
+  let mut iter = wal.range_all(0, ..=upper.as_str());
+  for ent in &mut iter {
+    assert_eq!(ent.key(), make_int_key(i).as_str());
+    // assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+    assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+    // assert_eq!(ent.raw_value().unwrap(), make_value(i).as_bytes());
+    i += 1;
+  }
+
+  assert_eq!(i, 51);
+}
+
+fn iter_prev<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -402,7 +402,7 @@ where
   assert_eq!(i, 0);
 }
 
-fn iter_with_tombstone_prev_by_entry<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn iter_with_tombstone_prev_by_entry<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
@@ -448,9 +448,8 @@ where
   assert_eq!(i, N);
 }
 
-fn iter_with_tombstone_prev_by_with_tombstone_entry<M>(
-  wal: &mut multiple_version::OrderWal<String, String, M>,
-) where
+fn iter_with_tombstone_prev_by_with_tombstone_entry<M>(wal: &mut OrderWal<M>)
+where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Item<'a>: MultipleVersionMemtableEntry<'a> + std::fmt::Debug,
@@ -497,7 +496,7 @@ fn iter_with_tombstone_prev_by_with_tombstone_entry<M>(
   assert!(ent.is_none());
 }
 
-fn range_prev<M>(wal: &mut multiple_version::OrderWal<String, String, M>)
+fn range_prev<M>(wal: &mut OrderWal<M>)
 where
   M: MultipleVersionMemtable<Key = String, Value = String> + 'static,
   M::Error: std::fmt::Debug,

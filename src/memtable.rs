@@ -35,13 +35,40 @@ where
 
   /// Returns the previous entry in the memory table.
   fn prev(&self) -> Option<Self>;
+
+  /// Returns the version of the entry.
+  fn version(&self) -> u64;
 }
 
-/// An range entry which is stored in the memory table.
-pub trait RangeEntry<'a>
+/// An entry which means that the entry can return key and value in bytes format.
+pub trait RawEntry<'a>
 where
   Self: Sized,
 {
+  /// The raw value type.
+  type RawValue: 'a;
+
+  /// Returns the raw key in the entry.
+  fn raw_key(&self) -> &'a [u8];
+
+  /// Returns the raw value in the entry.
+  fn raw_value(&self) -> Self::RawValue;
+}
+
+/// A raw range entry which means that the entry can return start bound and ent bound in bytes format.
+pub trait RawRangeEntry<'a>
+where
+  Self: Sized,
+{
+  /// Returns the start bound of the range entry in bytes.
+  fn raw_start_bound(&self) -> Bound<&'a [u8]>;
+
+  /// Returns the end bound of the range entry in bytes.
+  fn raw_end_bound(&self) -> Bound<&'a [u8]>;
+}
+
+/// An range entry which is stored in the memory table.
+pub trait RangeEntry<'a> {
   /// The key type.
   type Key: 'a;
 
@@ -52,15 +79,22 @@ where
   fn end_bound(&self) -> Bound<Self::Key>;
 
   /// Returns the range of the entry.
-  fn range(&self) -> impl RangeBounds<Self::Key> + 'a {
+  fn range(&self) -> (Bound<Self::Key>, Bound<Self::Key>) {
     (self.start_bound(), self.end_bound())
   }
 
   /// Returns the next entry in the memory table.
-  fn next(&mut self) -> Option<Self>;
+  fn next(&mut self) -> Option<Self>
+  where
+    Self: Sized;
 
   /// Returns the previous entry in the memory table.
-  fn prev(&mut self) -> Option<Self>;
+  fn prev(&mut self) -> Option<Self>
+  where
+    Self: Sized;
+
+  /// Returns the version of the entry.
+  fn version(&self) -> u64;
 }
 
 trait RangeEntryExt<'a>: RangeEntry<'a> {
@@ -90,10 +124,10 @@ trait RangeEntryExt<'a>: RangeEntry<'a> {
 
 impl<'a, T> RangeEntryExt<'a> for T where T: RangeEntry<'a> {}
 
-/// An entry which is stored in the memory table.
-pub trait RangeDeletionEntry<'a>: RangeEntry<'a> {}
+/// A range remove entry which is stored in the memory table.
+pub trait RangeRemoveEntry<'a>: RangeEntry<'a> {}
 
-/// An entry which is stored in the memory table.
+/// A range update entry which is stored in the memory table.
 pub trait RangeUpdateEntry<'a>
 where
   Self: RangeEntry<'a>,
@@ -103,6 +137,18 @@ where
 
   /// Returns the value in the entry.
   fn value(&self) -> Self::Value;
+}
+
+/// A entry which is stored in the memory table.
+pub trait RawRangeUpdateEntry<'a>
+where
+  Self: RangeEntry<'a>,
+{
+  /// The value type.
+  type RawValue: 'a;
+
+  /// Returns the value in the entry.
+  fn raw_value(&self) -> Self::RawValue;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -217,6 +263,10 @@ mod sealed {
     where
       Self: Sized;
 
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized;
+
     fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
 
     fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
@@ -231,6 +281,10 @@ mod sealed {
     fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
 
     fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
     where
       Self: Sized;
 
@@ -258,6 +312,14 @@ mod sealed {
       Self: Sized,
     {
       unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
+    }
+
+    #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
     }
 
     #[inline]
@@ -298,6 +360,14 @@ mod sealed {
     }
 
     #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
+
+    #[inline]
     fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
       data.as_ref().map(|v| *v.get())
     }
@@ -330,6 +400,14 @@ mod sealed {
     }
 
     #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
+    }
+
+    #[inline]
     fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Value> {
       *data
     }
@@ -355,6 +433,14 @@ mod sealed {
 
     #[inline]
     fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
+
+    #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
     where
       Self: Sized,
     {

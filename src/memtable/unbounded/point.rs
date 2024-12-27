@@ -76,6 +76,46 @@ where
   }
 }
 
+impl<'a, S, C, T> crate::memtable::RawEntry<'a> for PointEntry<'a, S, C, T>
+where
+  C: 'static,
+  S: Transfer<'a, &'a [u8]>,
+  S::Data<'a, &'a [u8]>: 'a,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::Comparator<C>: PointComparator<C> + Comparator<RecordPointer>,
+{
+  type RawValue = S::Data<'a, &'a [u8]>;
+
+  #[inline]
+  fn raw_key(&self) -> &'a [u8] {
+    let ent = self.data.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      match ptr {
+        Some(ptr) => self.ent.comparator().fetch_entry(ptr),
+        None => self.ent.comparator().fetch_entry(self.ent.key()),
+      }
+    });
+
+    ent.key()
+  }
+
+  #[inline]
+  fn raw_value(&self) -> Self::RawValue {
+    let ent = self.data.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      match ptr {
+        Some(ptr) => self.ent.comparator().fetch_entry(ptr),
+        None => self.ent.comparator().fetch_entry(self.ent.key()),
+      }
+    });
+
+    S::raw(ent.value())
+  }
+}
+
 impl<'a, S, C, T> crate::memtable::MemtableEntry<'a> for PointEntry<'a, S, C, T>
 where
   C: 'static,
@@ -134,6 +174,11 @@ where
   #[inline]
   fn prev(&self) -> Option<Self> {
     self.ent.prev().map(Self::new)
+  }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    self.ent.version()
   }
 }
 

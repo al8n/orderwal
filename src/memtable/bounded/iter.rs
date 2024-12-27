@@ -9,7 +9,7 @@ use skl::{
 
 use crate::{
   memtable::{
-    sealed, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    sealed, MemtableEntry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
     RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-  Entry, IterPoints, PointEntry, RangeDeletionEntry, RangePoints, RangeUpdateEntry, Table,
+  Entry, IterPoints, PointEntry, RangePoints, RangeRemoveEntry, RangeUpdateEntry, Table,
 };
 
 /// An iterator over the entries of a `Memtable`.
@@ -89,8 +89,8 @@ where
         <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
       >,
     > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   type Item = Entry<'a, S, C, T>;
 
@@ -131,8 +131,8 @@ where
         <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
       >,
     > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -218,8 +218,8 @@ where
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   PointEntry<'a, S, C, T>:
     MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
       Value = <MaybeTombstone as State>::Data<
@@ -266,8 +266,8 @@ where
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   PointEntry<'a, S, C, T>:
     MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
       Value = <MaybeTombstone as State>::Data<

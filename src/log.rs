@@ -23,7 +23,7 @@ pub trait Log: Sized {
   type Allocator: Allocator + 'static;
   type Memtable: Memtable;
   type Checksumer;
-  type Reader;
+  type Reader: 'static;
 
   fn allocator<'a>(&'a self) -> &'a Self::Allocator
   where

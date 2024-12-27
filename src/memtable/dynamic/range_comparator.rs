@@ -9,7 +9,7 @@ use triomphe::Arc;
 
 use crate::types::{
   fetch_raw_range_deletion_entry, fetch_raw_range_key_start_bound, fetch_raw_range_update_entry,
-  Query, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer, RefQuery,
+  Query, RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer, RefQuery,
 };
 
 pub struct MemtableRangeComparator<C: ?Sized> {
@@ -30,7 +30,7 @@ impl<C: ?Sized> crate::types::sealed::RangeComparator<C> for MemtableRangeCompar
     unsafe { fetch_raw_range_update_entry(self.ptr, kp) }
   }
 
-  fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a> {
+  fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeRemoveRef<'a> {
     unsafe { fetch_raw_range_deletion_entry(self.ptr, kp) }
   }
 }

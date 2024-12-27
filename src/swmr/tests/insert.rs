@@ -1,12 +1,18 @@
-use dbutils::{buffer::VacantBuffer, types::MaybeStructured};
-use skl::generic::Type;
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  state::Active,
+  types::{MaybeStructured, Type},
+};
 
 use std::thread::spawn;
 
 use crate::{
   batch::BatchEntry,
-  generic::{BoundedTable, OrderWal, OrderWalReader, Reader, Writer},
-  memtable::{bounded::Table, MemtableEntry},
+  generic::{
+    BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
+  },
+  memtable::{MemtableEntry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
@@ -14,7 +20,13 @@ use crate::{
 use super::{Person, MB};
 
 #[cfg(feature = "std")]
-fn concurrent_basic(mut w: OrderWal<BoundedTable<u32, [u8; 4]>>) {
+fn concurrent_basic<M>(mut w: OrderWal<M>)
+where
+  M: GenericMemtable<u32, [u8; 4]> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Key = u32, Value = [u8; 4]>,
+  for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
+{
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
 
   let handles = readers.into_iter().map(|(i, reader)| {
@@ -40,7 +52,13 @@ fn concurrent_basic(mut w: OrderWal<BoundedTable<u32, [u8; 4]>>) {
 }
 
 #[cfg(feature = "std")]
-fn concurrent_one_key(mut w: OrderWal<BoundedTable<u32, [u8; 4]>>) {
+fn concurrent_one_key<M>(mut w: OrderWal<M>)
+where
+  M: GenericMemtable<u32, [u8; 4]> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Key = u32, Value = [u8; 4]>,
+  for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
+{
   let readers = (0..100u32).map(|i| (i, w.reader())).collect::<Vec<_>>();
   let handles = readers.into_iter().map(|(_, reader)| {
     spawn(move || loop {
@@ -59,9 +77,13 @@ fn concurrent_one_key(mut w: OrderWal<BoundedTable<u32, [u8; 4]>>) {
   }
 }
 
-fn apply(
-  mut wal: OrderWal<BoundedTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person) {
+fn apply<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, String)>, Person)
+where
+  M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
+{
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -111,9 +133,13 @@ fn apply(
   (rp1, output, rp2)
 }
 
-fn apply_with_key_builder(
-  mut wal: OrderWal<BoundedTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person) {
+fn apply_with_key_builder<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, String)>, Person)
+where
+  M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
+{
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -166,9 +192,13 @@ fn apply_with_key_builder(
   (rp1, output, rp2)
 }
 
-fn apply_with_value_builder(
-  mut wal: OrderWal<BoundedTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person) {
+fn apply_with_value_builder<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, String)>, Person)
+where
+  M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
+{
   const N: u32 = 5;
 
   let mut batch = vec![];
@@ -220,9 +250,13 @@ fn apply_with_value_builder(
   (rp1, output, rp2)
 }
 
-fn apply_with_builders(
-  mut wal: OrderWal<BoundedTable<Person, String>>,
-) -> (Person, Vec<(Person, String)>, Person) {
+fn apply_with_builders<M>(mut wal: OrderWal<M>) -> (Person, Vec<(Person, String)>, Person)
+where
+  M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a, Value = <String as Type>::Ref<'a>>,
+  for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
+{
   const N: u32 = 1;
 
   let mut batch = vec![];
@@ -277,84 +311,83 @@ fn apply_with_builders(
   (rp1, output, rp2)
 }
 
-// #[cfg(feature = "std")]
-// expand_unit_tests!(
-//   move "linked": OrderWalAlternativeTable<u32, [u8; 4]> [TableOptions::Linked]: Table<_, _> {
-//     concurrent_basic |p, _res| {
-//       let wal = unsafe { Builder::new().map::<OrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
+#[cfg(feature = "std")]
+expand_unit_tests!(
+  move "unbounded": OrderWal<UnboundedTable<u32, [u8; 4]>> [Default::default()]: UnboundedTable<_, _> {
+    concurrent_basic |p, _res| {
+      let wal = unsafe { Builder::new().map::<OrderWalReader<UnboundedTable<u32, [u8; 4]>>, _>(p).unwrap() };
 
-//       for i in 0..100u32 {
-//         assert!(wal.contains_key(&i));
-//       }
-//     },
-//     concurrent_one_key |p, _res| {
-//       let wal = unsafe { Builder::new().map::<OrderWalReaderAlternativeTable<u32, [u8; 4]>, _>(p).unwrap() };
-//       assert!(wal.contains_key(&1));
-//     },
-//   }
-// );
+      for i in 0..100u32 {
+        assert!(wal.contains_key(1, &i));
+      }
+    },
+    concurrent_one_key |p, _res| {
+      let wal = unsafe { Builder::new().map::<OrderWalReader<UnboundedTable<u32, [u8; 4]>>, _>(p).unwrap() };
+      assert!(wal.contains_key(1, &1));
+    },
+  }
+);
 
-// #[cfg(feature = "std")]
-// expand_unit_tests!(
-//   move "linked": OrderWal<BoundedTable<Person, String>> [TableOptions::Linked]: Table<_, _> {
-//     apply |p, (rp1, data, rp2)| {
-//       let map = unsafe {
-//         Builder::new()
-//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
-//           .unwrap()
-//       };
+expand_unit_tests!(
+  move "unbounded": OrderWal<UnboundedTable<Person, String>> [Default::default()]: UnboundedTable<_, _> {
+    apply |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<OrderWalReader<UnboundedTable<Person, String>>, _>(&p)
+          .unwrap()
+      };
 
-//       for (p, val) in data {
-//         assert_eq!(map.get(&p).unwrap().value(), &val);
-//       }
-//       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-//       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-//     },
-//     apply_with_key_builder |p, (rp1, data, rp2)| {
-//       let map = unsafe {
-//         Builder::new()
-//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
-//           .unwrap()
-//       };
+      for (p, val) in data {
+        assert_eq!(map.get(1, &p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(1, &rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(1, &rp2).unwrap().value(), "rp2");
+    },
+    apply_with_key_builder |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<OrderWalReader<UnboundedTable<Person, String>>, _>(&p)
+          .unwrap()
+      };
 
-//       for (p, val) in data {
-//         assert_eq!(map.get(&p).unwrap().value(), &val);
-//       }
-//       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-//       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-//     },
-//     apply_with_value_builder |p, (rp1, data, rp2)| {
-//       let map = unsafe {
-//         Builder::new()
-//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
-//           .unwrap()
-//       };
+      for (p, val) in data {
+        assert_eq!(map.get(1, &p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(1, &rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(1, &rp2).unwrap().value(), "rp2");
+    },
+    apply_with_value_builder |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<OrderWalReader<UnboundedTable<Person, String>>, _>(&p)
+          .unwrap()
+      };
 
-//       for (p, val) in data {
-//         assert_eq!(map.get(&p).unwrap().value(), &val);
-//       }
-//       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-//       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-//     },
-//     apply_with_builders |p, (rp1, data, rp2)| {
-//       let map = unsafe {
-//         Builder::new()
-//           .map::<OrderWalReader<BoundedTable<Person, String>>, _>(&p)
-//           .unwrap()
-//       };
+      for (p, val) in data {
+        assert_eq!(map.get(1, &p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(1, &rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(1, &rp2).unwrap().value(), "rp2");
+    },
+    apply_with_builders |p, (rp1, data, rp2)| {
+      let map = unsafe {
+        Builder::new()
+          .map::<OrderWalReader<UnboundedTable<Person, String>>, _>(&p)
+          .unwrap()
+      };
 
-//       for (p, val) in data {
-//         assert_eq!(map.get(&p).unwrap().value(), &val);
-//       }
-//       assert_eq!(map.get(&rp1).unwrap().value(), "rp1");
-//       assert_eq!(map.get(&rp2).unwrap().value(), "rp2");
-//     }
-//   }
-// );
+      for (p, val) in data {
+        assert_eq!(map.get(1, &p).unwrap().value(), &val);
+      }
+      assert_eq!(map.get(1, &rp1).unwrap().value(), "rp1");
+      assert_eq!(map.get(1, &rp2).unwrap().value(), "rp2");
+    }
+  }
+);
 
 #[cfg(feature = "std")]
 expand_unit_tests!(
-  move "arena": OrderWal<BoundedTable<u32, [u8; 4]>> [Default::default()]: Table<_, _> {
+  move "bounded": OrderWal<BoundedTable<u32, [u8; 4]>> [Default::default()]: BoundedTable<_, _> {
     concurrent_basic |p, _res| {
       let wal = unsafe { Builder::new().map::<OrderWalReader<BoundedTable<u32, [u8; 4]>>, _>(p).unwrap() };
 
@@ -370,7 +403,7 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  move "arena": OrderWal<BoundedTable<Person, String>> [Default::default()]: Table<_, _> {
+  move "bounded": OrderWal<BoundedTable<Person, String>> [Default::default()]: BoundedTable<_, _> {
     apply |p, (rp1, data, rp2)| {
       let map = unsafe {
         Builder::new()

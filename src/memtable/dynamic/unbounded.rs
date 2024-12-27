@@ -26,7 +26,7 @@ pub type Entry<'a, S, C> = unbounded::Entry<'a, S, C, Dynamic>;
 pub type PointEntry<'a, S, C> = unbounded::PointEntry<'a, S, C, Dynamic>;
 
 /// Range deletion entry of the [`Table`].
-pub type RangeDeletionEntry<'a, S, C> = unbounded::RangeDeletionEntry<'a, S, C, Dynamic>;
+pub type RangeRemoveEntry<'a, S, C> = unbounded::RangeRemoveEntry<'a, S, C, Dynamic>;
 
 /// Range update entry of the [`Table`].
 pub type RangeUpdateEntry<'a, S, C> = unbounded::RangeUpdateEntry<'a, S, C, Dynamic>;
@@ -72,8 +72,8 @@ where
     Self: 'a,
     S: State + 'a;
 
-  type RangeDeletionEntry<'a, S>
-    = RangeDeletionEntry<'a, S, C>
+  type RangeRemoveEntry<'a, S>
+    = RangeRemoveEntry<'a, S, C>
   where
     Self: 'a,
     S: State + 'a;

@@ -11,21 +11,21 @@ use dbutils::{
 
 use crate::types::{
   sealed::{Pointee, RangeComparator},
-  Query, QueryRange, RawRangeDeletionRef, RecordPointer, TypeMode,
+  Query, QueryRange, RawRangeRemoveRef, RecordPointer, TypeMode,
 };
 
 /// Range deletion entry.
-pub struct RangeDeletionEntry<'a, S, C, T>
+pub struct RangeRemoveEntry<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
 {
   pub(crate) ent: Entry<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
-  data: OnceCell<RawRangeDeletionRef<'a>>,
+  data: OnceCell<RawRangeRemoveRef<'a>>,
   start_bound: OnceCell<Bound<T::Key<'a>>>,
   end_bound: OnceCell<Bound<T::Key<'a>>>,
 }
-impl<S, C, T> core::fmt::Debug for RangeDeletionEntry<'_, S, C, T>
+impl<S, C, T> core::fmt::Debug for RangeRemoveEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
@@ -36,10 +36,10 @@ where
     self
       .data
       .get_or_init(|| self.ent.comparator().fetch_range_deletion(self.ent.key()))
-      .write_fmt("RangeDeletionEntry", f)
+      .write_fmt("RangeRemoveEntry", f)
   }
 }
-impl<'a, S, C, T> Clone for RangeDeletionEntry<'a, S, C, T>
+impl<'a, S, C, T> Clone for RangeRemoveEntry<'a, S, C, T>
 where
   S: State,
   // S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
@@ -57,7 +57,7 @@ where
     }
   }
 }
-impl<'a, S, C, T> RangeDeletionEntry<'a, S, C, T>
+impl<'a, S, C, T> RangeRemoveEntry<'a, S, C, T>
 where
   S: State,
   T: TypeMode,
@@ -73,7 +73,33 @@ where
     }
   }
 }
-impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeDeletionEntry<'a, S, C, T>
+
+impl<'a, S, C, T> crate::memtable::RawRangeEntry<'a> for RangeRemoveEntry<'a, S, C, T>
+where
+  C: 'static,
+  S: State,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
+{
+  #[inline]
+  fn raw_start_bound(&self) -> Bound<&'a [u8]> {
+    let ent = self
+      .data
+      .get_or_init(|| self.ent.comparator().fetch_range_deletion(self.ent.key()));
+    ent.start_bound()
+  }
+
+  #[inline]
+  fn raw_end_bound(&self) -> Bound<&'a [u8]> {
+    let ent = self
+      .data
+      .get_or_init(|| self.ent.comparator().fetch_range_deletion(self.ent.key()));
+    ent.end_bound()
+  }
+}
+
+impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeRemoveEntry<'a, S, C, T>
 where
   C: 'static,
   S: State,
@@ -114,8 +140,13 @@ where
   fn prev(&mut self) -> Option<Self> {
     self.ent.prev().map(Self::new)
   }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    self.ent.version()
+  }
 }
-impl<S, C, T> RangeDeletionEntry<'_, S, C, T>
+impl<S, C, T> RangeRemoveEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
@@ -128,7 +159,7 @@ where
   }
 }
 
-impl<'a, S, C, T> crate::memtable::RangeDeletionEntry<'a> for RangeDeletionEntry<'a, S, C, T>
+impl<'a, S, C, T> crate::memtable::RangeRemoveEntry<'a> for RangeRemoveEntry<'a, S, C, T>
 where
   C: 'static,
   S: State,
@@ -165,10 +196,10 @@ where
   T: TypeMode,
   T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
-  type Item = RangeDeletionEntry<'a, S, C, T>;
+  type Item = RangeRemoveEntry<'a, S, C, T>;
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(RangeDeletionEntry::new)
+    self.iter.next().map(RangeRemoveEntry::new)
   }
 }
 impl<'a, S, C, T> DoubleEndedIterator for IterBulkDeletions<'a, S, C, T>
@@ -180,7 +211,7 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(RangeDeletionEntry::new)
+    self.iter.next_back().map(RangeRemoveEntry::new)
   }
 }
 /// The iterator over a subset of point entries.
@@ -226,10 +257,10 @@ where
   T: TypeMode,
   T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
-  type Item = RangeDeletionEntry<'a, S, C, T>;
+  type Item = RangeRemoveEntry<'a, S, C, T>;
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.range.next().map(RangeDeletionEntry::new)
+    self.range.next().map(RangeRemoveEntry::new)
   }
 }
 impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeBulkDeletions<'a, S, Q, R, C, T>
@@ -243,6 +274,6 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.range.next_back().map(RangeDeletionEntry::new)
+    self.range.next_back().map(RangeRemoveEntry::new)
   }
 }

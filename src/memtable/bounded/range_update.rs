@@ -86,6 +86,31 @@ where
   }
 }
 
+impl<'a, S, C, T> crate::memtable::RawRangeEntry<'a> for RangeUpdateEntry<'a, S, C, T>
+where
+  C: 'static,
+  S: Transfer<'a, T::Value<'a>>,
+  T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
+{
+  #[inline]
+  fn raw_start_bound(&self) -> Bound<&'a [u8]> {
+    let ent = self
+      .data
+      .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
+    ent.start_bound()
+  }
+
+  #[inline]
+  fn raw_end_bound(&self) -> Bound<&'a [u8]> {
+    let ent = self
+      .data
+      .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
+    ent.end_bound()
+  }
+}
+
 impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
@@ -127,18 +152,36 @@ where
   fn prev(&mut self) -> Option<Self> {
     self.ent.prev().map(Self::new)
   }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    self.ent.version()
+  }
 }
 
-impl<S, C, T> RangeUpdateEntry<'_, S, C, T>
+impl<'a, S, C, T> crate::memtable::RawRangeUpdateEntry<'a> for RangeUpdateEntry<'a, S, C, T>
 where
   C: 'static,
-  S: State,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, &'a [u8]>: 'a,
   T: TypeMode,
+  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
+  T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
-  /// Returns the version of the entry.
+  type RawValue = S::Data<'a, &'a [u8]>;
+
   #[inline]
-  pub fn version(&self) -> u64 {
-    self.ent.version()
+  fn raw_value(&self) -> Self::RawValue {
+    let ent = self.data.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      match ptr {
+        Some(ptr) => self.ent.comparator().fetch_range_update(&ptr),
+        None => self.ent.comparator().fetch_range_update(self.ent.key()),
+      }
+    });
+
+    S::raw(ent.value())
   }
 }
 

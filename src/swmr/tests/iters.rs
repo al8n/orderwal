@@ -1,20 +1,33 @@
 use core::ops::Bound;
 use std::collections::BTreeMap;
 
-use base::{OrderWal, Reader, Writer};
-
-use crate::memtable::{
-  alternative::{Table, TableOptions},
-  Memtable, MemtableEntry,
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  state::Active,
+  types::{MaybeStructured, Type},
 };
 
-use super::*;
+use std::thread::spawn;
 
-fn iter<M>(wal: &mut OrderWal<Person, String, M>)
+use crate::{
+  batch::BatchEntry,
+  generic::{
+    BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
+  },
+  memtable::{MemtableEntry, MutableMemtable},
+  types::{KeyBuilder, ValueBuilder},
+  Builder,
+};
+
+use super::{Person, MB};
+
+fn iter<M>(wal: &mut OrderWal<M>)
 where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
-  M::Error: std::fmt::Debug,
+  M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
+  M::Error: core::fmt::Debug,
+  for<'a> M::Entry<'a, Active>: MemtableEntry<'a>,
+  for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
 {
   let mut people = (0..100)
     .map(|_| {

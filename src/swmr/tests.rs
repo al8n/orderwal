@@ -8,7 +8,6 @@ use std::{
   vec::Vec,
 };
 
-// use crate::memtable::bounded::{AlternativeTable, OrderWal, OrderWalReader};
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
@@ -150,14 +149,6 @@ macro_rules! expand_unit_tests {
     )*
   };
 }
-
-// type OrderWalAlternativeTable<K, V> = OrderWal<AlternativeTable<K, V>>;
-// type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<AlternativeTable<K, V>>;
-
-// type MultipleVersionOrderWalAlternativeTable<K, V> =
-//   multiple_version::OrderWal<multiple_version::AlternativeTable<K, V>>;
-// type MultipleVersionOrderWalReaderAlternativeTable<K, V> =
-//   multiple_version::OrderWalReader<multiple_version::AlternativeTable<K, V>>;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

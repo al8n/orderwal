@@ -104,14 +104,14 @@ impl<'a> RawRangeUpdateRef<'a> {
 }
 
 #[derive(Clone, Copy)]
-pub struct RawRangeDeletionRef<'a> {
+pub struct RawRangeRemoveRef<'a> {
   flag: EntryFlags,
   start_bound: Bound<&'a [u8]>,
   end_bound: Bound<&'a [u8]>,
   version: u64,
 }
 
-impl RawRangeDeletionRef<'_> {
+impl RawRangeRemoveRef<'_> {
   #[inline]
   pub(crate) fn write_fmt(
     &self,
@@ -127,7 +127,7 @@ impl RawRangeDeletionRef<'_> {
   }
 }
 
-impl<'a> RawRangeDeletionRef<'a> {
+impl<'a> RawRangeRemoveRef<'a> {
   #[inline]
   pub const fn start_bound(&self) -> Bound<&'a [u8]> {
     match &self.start_bound {
@@ -456,7 +456,7 @@ unsafe fn fetch_raw_range_key_helper<'a>(
 pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a>(
   data_ptr: *const u8,
   kp: &RecordPointer,
-) -> RawRangeDeletionRef<'a> {
+) -> RawRangeRemoveRef<'a> {
   let FetchRangeKey {
     flag,
     version,
@@ -470,7 +470,7 @@ pub(crate) unsafe fn fetch_raw_range_deletion_entry<'a>(
     )
   });
 
-  RawRangeDeletionRef {
+  RawRangeRemoveRef {
     flag,
     start_bound,
     end_bound,

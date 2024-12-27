@@ -18,8 +18,8 @@ use crate::types::{
 };
 
 use super::{
-  sealed, Memtable, MemtableEntry, MutableMemtable, RangeDeletionEntry as RangeDeletionEntryTrait,
-  RangeEntry, RangeEntryExt, RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
+  sealed, Memtable, MemtableEntry, MutableMemtable, RangeEntry, RangeEntryExt,
+  RangeRemoveEntry as RangeRemoveEntryTrait, RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
 };
 
 pub use entry::*;
@@ -144,8 +144,8 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   pub(in crate::memtable) fn validate<S>(
     &'a self,
@@ -177,7 +177,7 @@ where
         if !(version <= del_ent_version && del_ent_version <= query_version) {
           return false;
         }
-        let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
+        let ent = RangeRemoveEntry::<Active, C, T>::new(ent);
         dbutils::equivalentor::RangeComparator::contains(
           cmp,
           &ent.query_range(),

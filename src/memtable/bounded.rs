@@ -2,8 +2,8 @@ pub use skl::Height;
 
 use crate::{
   memtable::{
-    Memtable, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
-    RangeEntryExt as _, RangeUpdateEntry as RangeUpdateEntryTrait,
+    Memtable, MemtableEntry, RangeEntry, RangeEntryExt as _,
+    RangeRemoveEntry as RangeRemoveEntryTrait, RangeUpdateEntry as RangeUpdateEntryTrait,
   },
   types::{
     sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
@@ -264,8 +264,8 @@ where
     + TypeRefQueryComparator<'a, RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   pub(in crate::memtable) fn validate<S>(
     &'a self,
@@ -298,7 +298,7 @@ where
         if !(version <= del_ent_version && del_ent_version <= query_version) {
           return false;
         }
-        let ent = RangeDeletionEntry::<Active, C, T>::new(ent);
+        let ent = RangeRemoveEntry::<Active, C, T>::new(ent);
         dbutils::equivalentor::RangeComparator::contains(
           cmp,
           &ent.query_range(),

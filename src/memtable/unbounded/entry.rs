@@ -7,7 +7,7 @@ use dbutils::{
 
 use crate::{
   memtable::{
-    sealed, MemtableEntry, RangeDeletionEntry as RangeDeletionEntryTrait, RangeEntry,
+    sealed, MemtableEntry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
     RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
   },
   types::{
@@ -16,7 +16,7 @@ use crate::{
   },
 };
 
-use super::{PointEntry, RangeDeletionEntry, RangeUpdateEntry, Table};
+use super::{PointEntry, RangeRemoveEntry, RangeUpdateEntry, Table};
 
 /// Entry in the memtable.
 pub struct Entry<'a, S, C, T>
@@ -93,8 +93,8 @@ where
     + 'static,
   PointEntry<'a, S, C, T>:
     MemtableEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
-  RangeDeletionEntry<'a, Active, C, T>:
-    RangeDeletionEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeRemoveEntry<'a, Active, C, T>:
+    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
       'a,
       Value = <MaybeTombstone as State>::Data<
@@ -139,6 +139,11 @@ where
       }
     }
     None
+  }
+
+  #[inline]
+  fn version(&self) -> u64 {
+    self.version
   }
 }
 

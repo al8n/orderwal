@@ -47,7 +47,7 @@ where
     S: State + 'a;
 
   /// The item returned by the bulk deletions iterators
-  type RangeDeletionEntry<'a, S>
+  type RangeRemoveEntry<'a, S>
   where
     Self: 'a,
     S: State + 'a;

@@ -29,7 +29,7 @@ pub(crate) mod sealed {
   use dbutils::types::{LazyRef, Type};
 
   use super::{
-    super::{RawEntryRef, RawRangeDeletionRef, RawRangeUpdateRef, RecordPointer},
+    super::{RawEntryRef, RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer},
     Dynamic, Generic, TypeMode,
   };
 
@@ -44,7 +44,7 @@ pub(crate) mod sealed {
   pub trait RangeComparator<C: ?Sized>: ComparatorConstructor<C> {
     fn fetch_range_update<'a>(&self, kp: &RecordPointer) -> RawRangeUpdateRef<'a>;
 
-    fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeDeletionRef<'a>;
+    fn fetch_range_deletion<'a>(&self, kp: &RecordPointer) -> RawRangeRemoveRef<'a>;
   }
 
   pub trait Pointee<'a> {

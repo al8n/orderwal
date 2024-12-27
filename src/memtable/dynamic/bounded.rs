@@ -24,7 +24,7 @@ pub type Entry<'a, S, C> = bounded::Entry<'a, S, C, Dynamic>;
 pub type PointEntry<'a, S, C> = bounded::PointEntry<'a, S, C, Dynamic>;
 
 /// Range deletion entry of the [`Table`].
-pub type RangeDeletionEntry<'a, S, C> = bounded::RangeDeletionEntry<'a, S, C, Dynamic>;
+pub type RangeRemoveEntry<'a, S, C> = bounded::RangeRemoveEntry<'a, S, C, Dynamic>;
 
 /// Range update entry of the [`Table`].
 pub type RangeUpdateEntry<'a, S, C> = bounded::RangeUpdateEntry<'a, S, C, Dynamic>;
@@ -69,8 +69,8 @@ where
     Self: 'a,
     S: State + 'a;
 
-  type RangeDeletionEntry<'a, S>
-    = RangeDeletionEntry<'a, S, C>
+  type RangeRemoveEntry<'a, S>
+    = RangeRemoveEntry<'a, S, C>
   where
     Self: 'a,
     S: State + 'a;
