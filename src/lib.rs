@@ -4,7 +4,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
-#![allow(clippy::type_complexity)]
+#![allow(clippy::type_complexity, rustdoc::broken_intra_doc_links)]
 
 #[cfg(feature = "std")]
 extern crate std;

@@ -103,8 +103,8 @@ where
   /// This function doesn't create the file if it doesn't exist. Use the
   /// [`Options::with_create`] method to do so.
   ///
-  /// [`write()`]: std::io::Lrite::write "io::Lrite::write"
-  /// [`flush()`]: std::io::Lrite::flush "io::Lrite::flush"
+  /// [`write()`]: std::io::Write::write "io::Write::write"
+  /// [`flush()`]: std::io::Write::flush "io::Write::flush"
   /// [seek]: std::io::Seek::seek "io::Seek::seek"
   /// [Current]: std::io::SeekFrom::Current "io::SeekFrom::Current"
   ///

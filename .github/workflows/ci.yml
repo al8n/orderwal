@@ -110,7 +110,7 @@ jobs:
       - name: cargo build --target ${{ matrix.target }}
         run: |
           rustup target add ${{ matrix.target }}
-          cargo build --target ${{ matrix.target }} --no-default-features --features alloc
+          cargo build --target ${{ matrix.target }} --no-default-features --features bounded
         if: matrix.target == 'wasm32-unknown-unknown' || matrix.target == 'wasm32-unknown-emscripten' || matrix.target == 'wasm32-wasip1'
 
   build:
@@ -184,7 +184,7 @@ jobs:
       shell: pwsh
       run: |
         $env:RUSTFLAGS="--cfg all_orderwal_tests"
-        cargo test --no-default-features --features alloc
+        cargo test --no-default-features --features bounded
       if: matrix.os == 'windows-latest'
  
   test:
@@ -311,64 +311,7 @@ jobs:
         run: cargo install cargo-hack
       - name: Miri
         run: |
-          bash ci/miri_tb.sh ${{ matrix.target }} ${{ matrix.cfg }}
-
-  # miri-sb:
-  #   name: miri-sb-${{ matrix.target }}-${{ matrix.cfg }}
-  #   strategy:
-  #     matrix:
-  #       os:
-  #         - ubuntu-latest
-  #         - macos-latest
-  #       target:
-  #         - x86_64-unknown-linux-gnu
-  #         - i686-unknown-linux-gnu
-  #         - powerpc64-unknown-linux-gnu
-  #         - x86_64-apple-darwin
-  #         - aarch64-apple-darwin
-  #       cfg:
-  #         - unsync_insert
-  #         - unsync_iters
-  #         - unsync_get
-  #         - unsync_constructor
-  #         - swmr_insert
-  #         - swmr_iters
-  #         - swmr_get
-  #         - swmr_constructor
-  #         - swmr_insert
-  #         - swmr_iters
-  #         - swmr_get
-  #         - swmr_constructor
-  #       # Exclude invalid combinations
-  #       exclude:
-  #         - os: ubuntu-latest
-  #           target: x86_64-apple-darwin
-  #         - os: ubuntu-latest
-  #           target: aarch64-apple-darwin
-  #         - os: macos-latest
-  #           target: x86_64-unknown-linux-gnu
-  #         - os: macos-latest
-  #           target: i686-unknown-linux-gnu
-  #         - os: macos-latest
-  #           target: powerpc64-unknown-linux-gnu
-  #   runs-on: ${{ matrix.os }}
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Cache cargo build and registry
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: |
-  #           ~/.cargo/registry
-  #           ~/.cargo/git
-  #           target
-  #         key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-miri-
-  #     - name: Install cargo-hack
-  #       run: cargo install cargo-hack
-  #     - name: Miri
-  #       run: |
-  #         bash ci/miri_sb.sh ${{ matrix.target }} ${{ matrix.cfg }}
+          bash ci/miri_tb.sh ${{ matrix.target }} ${{ matrix.cfg }} 
 
   # valgrind
   valgrind:
