@@ -266,7 +266,7 @@ where
   }
 
   #[inline]
-  fn iter_points(&self, version: u64) -> Self::PointsIterator<'_, skl::Active> {
+  fn iter_points(&self, version: u64) -> Self::PointsIterator<'_, Active> {
     IterPoints::new(self.skl.iter(version))
   }
 
@@ -276,11 +276,7 @@ where
   }
 
   #[inline]
-  fn range_points<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> Self::RangePoints<'a, skl::Active, Q, R>
+  fn range_points<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangePoints<'a, Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,

@@ -11,7 +11,7 @@ use dbutils::{
 use either::Either;
 use rarena_allocator::Allocator;
 
-#[cfg(any(feature = "bounded", feature = "unbounded"))]
+#[cfg(feature = "bounded")]
 use crate::memtable;
 use crate::{
   batch::Batch,
