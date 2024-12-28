@@ -5,12 +5,18 @@ use std::thread::spawn;
 use crate::{
   batch::BatchEntry,
   dynamic::{
-    BoundedTable, DynamicMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
+    DynamicMemtable, OrderWal, OrderWalReader, Reader, Writer,
   },
   memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
+
+#[cfg(feature = "bounded")]
+use crate::dynamic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::dynamic::UnboundedTable;
 
 use super::{Person, MB};
 

@@ -8,10 +8,16 @@ use dbutils::{
 use core::ops::Bound;
 
 use crate::{
-  generic::{BoundedTable, GenericMemtable, OrderWal, Reader, UnboundedTable, Writer},
+  generic::{GenericMemtable, OrderWal, Reader, Writer},
   memtable::{Entry, MutableMemtable, RawEntry},
   types::{KeyBuilder, ValueBuilder},
 };
+
+#[cfg(feature = "bounded")]
+use crate::generic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::generic::UnboundedTable;
 
 use super::{Person, MB};
 

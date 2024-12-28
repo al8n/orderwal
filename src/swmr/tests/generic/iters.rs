@@ -1,9 +1,15 @@
 use core::ops::Bound;
 
 use crate::{
-  generic::{BoundedTable, OrderWal, Reader, UnboundedTable, Writer},
+  generic::{OrderWal, Reader, Writer},
   memtable::{Entry, RawEntry as _},
 };
+
+#[cfg(feature = "bounded")]
+use crate::generic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::generic::UnboundedTable;
 
 use super::MB;
 

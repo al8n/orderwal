@@ -1,9 +1,15 @@
 use core::ops::Bound;
 
 use crate::{
-  dynamic::{BoundedTable, OrderWal, Reader, UnboundedTable, Writer},
+  dynamic::{OrderWal, Reader, Writer},
   memtable::{Entry, RawEntry as _},
 };
+
+#[cfg(feature = "bounded")]
+use crate::dynamic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::dynamic::UnboundedTable;
 
 use super::MB;
 

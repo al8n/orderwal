@@ -1,4 +1,10 @@
-use crate::generic::{BoundedTable, GenericMemtable, OrderWal, Reader, UnboundedTable, Writer};
+use crate::generic::{GenericMemtable, OrderWal, Reader, Writer};
+
+#[cfg(feature = "bounded")]
+use crate::generic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::generic::UnboundedTable;
 
 use super::{Person, MB};
 

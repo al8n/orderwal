@@ -10,12 +10,18 @@ use std::thread::spawn;
 use crate::{
   batch::BatchEntry,
   generic::{
-    BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
+    GenericMemtable, OrderWal, OrderWalReader, Reader, Writer,
   },
   memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
 };
+
+#[cfg(feature = "bounded")]
+use crate::generic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::generic::UnboundedTable;
 
 use super::{Person, MB};
 

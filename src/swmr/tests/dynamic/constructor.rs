@@ -1,4 +1,10 @@
-use crate::dynamic::{BoundedTable, DynamicMemtable, OrderWal, Reader, UnboundedTable, Writer};
+use crate::dynamic::{DynamicMemtable, OrderWal, Reader, Writer};
+
+#[cfg(feature = "bounded")]
+use crate::dynamic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::dynamic::UnboundedTable;
 
 use super::MB;
 

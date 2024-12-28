@@ -7,10 +7,16 @@ use dbutils::{
 use core::ops::Bound;
 
 use crate::{
-  dynamic::{BoundedTable, DynamicMemtable, OrderWal, Reader, UnboundedTable, Writer},
+  dynamic::{DynamicMemtable, OrderWal, Reader, Writer},
   memtable::{Entry, MutableMemtable, RawEntry},
   types::{KeyBuilder, ValueBuilder},
 };
+
+#[cfg(feature = "bounded")]
+use crate::dynamic::BoundedTable;
+
+#[cfg(feature = "unbounded")]
+use crate::dynamic::UnboundedTable;
 
 use super::{Person, MB};
 

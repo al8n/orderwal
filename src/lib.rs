@@ -1,13 +1,16 @@
 //! An ordered Write-Ahead Log implementation for Rust.
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity, rustdoc::broken_intra_doc_links)]
 
-#[cfg(any(feature = "std", test))]
+#[cfg(feature = "std")]
 extern crate std;
+
+#[cfg(all(feature = "alloc", not(feature = "std"), test))]
+extern crate alloc as std;
 
 pub use among;
 pub use builder::Builder;
