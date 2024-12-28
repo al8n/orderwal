@@ -9,9 +9,6 @@
 #[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc as std;
-
 pub use among;
 pub use builder::Builder;
 pub use dbutils::{checksum, equivalent, equivalentor, state};

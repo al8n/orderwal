@@ -212,6 +212,10 @@ mod sealed {
     where
       Self: Sized;
 
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized;
+
     fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
 
     fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
@@ -228,6 +232,10 @@ mod sealed {
     fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
 
     fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
     where
       Self: Sized;
 

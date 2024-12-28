@@ -54,7 +54,7 @@ pub trait Log: Sized {
       });
 
     #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
-    let this = Self::Memtable::new(memtable_opts)
+    let this = Self::Memtable::new(arena.clone(), memtable_opts)
       .map(|memtable| Self::construct(arena, memtable, opts, cks))
       .map_err(Error::memtable);
 

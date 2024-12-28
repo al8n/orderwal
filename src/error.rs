@@ -236,10 +236,10 @@ impl<T: Memtable> Error<T> {
   #[inline]
   pub(crate) fn corrupted<E>(e: E) -> Self
   where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+    E: Into<Box<dyn core::error::Error + Send + Sync>>,
   {
     #[derive(Debug)]
-    struct Corrupted(Box<dyn std::error::Error + Send + Sync>);
+    struct Corrupted(Box<dyn core::error::Error + Send + Sync>);
 
     impl std::fmt::Display for Corrupted {
       fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -247,7 +247,7 @@ impl<T: Memtable> Error<T> {
       }
     }
 
-    impl std::error::Error for Corrupted {}
+    impl core::error::Error for Corrupted {}
 
     Self::IO(std::io::Error::new(
       std::io::ErrorKind::InvalidData,

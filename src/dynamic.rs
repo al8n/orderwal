@@ -11,7 +11,6 @@ use dbutils::{
   state::{Active, MaybeTombstone},
 };
 use either::Either;
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
 
 use crate::{

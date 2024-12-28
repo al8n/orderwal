@@ -175,6 +175,8 @@ where
           b.alloc()
         }
       }?;
+      #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+      let points: SkipMap<_, _, _> = b.alloc()?;
       let allocator = points.allocator().clone();
       let range_del_skl =
         SkipMap::<_, _, _>::create_from_allocator(allocator.clone(), range_del_cmp)?;
