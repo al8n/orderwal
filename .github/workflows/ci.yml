@@ -174,7 +174,7 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test (Unix)
-      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --no-default-features --features alloc
+      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --no-default-features --features bounded 
       if: matrix.os != 'windows-latest'
     - name: Run test (Windows)
       shell: pwsh
