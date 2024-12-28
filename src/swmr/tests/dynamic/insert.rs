@@ -1,5 +1,6 @@
 use dbutils::{buffer::VacantBuffer, state::Active, types::Type};
 
+#[cfg(feature = "std")]
 use std::thread::spawn;
 
 use crate::{
@@ -16,7 +17,7 @@ use crate::dynamic::BoundedTable;
 #[cfg(feature = "unbounded")]
 use crate::dynamic::UnboundedTable;
 
-use super::{Person, MB};
+use super::*;
 
 #[cfg(feature = "std")]
 fn concurrent_basic<M>(mut w: OrderWal<M>)
