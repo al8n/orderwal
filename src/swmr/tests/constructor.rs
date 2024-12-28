@@ -1,18 +1,18 @@
-use base::{Reader, Writer};
+use multiple_version::{OrderWal, Reader, Writer};
 use skl::KeySize;
 
 use crate::memtable::{
-  alternative::{Table, TableOptions},
-  Memtable, Entry,
+  alternative::{MultipleVersionTable, TableOptions},
+  MultipleVersionEntry, MultipleVersionMemtable,
 };
 
 use super::*;
 
 fn zero_reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
 {
   unsafe {
     assert_eq!(wal.reserved_slice(), b"");
@@ -25,9 +25,9 @@ where
 
 fn reserved<M>(wal: &mut OrderWal<Person, String, M>)
 where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
+  M: MultipleVersionMemtable<Key = Person, Value = String> + 'static,
   M::Error: std::fmt::Debug,
+  for<'a> M::Item<'a>: MultipleVersionEntry<'a> + std::fmt::Debug,
 {
   unsafe {
     let buf = wal.reserved_slice_mut();
@@ -42,14 +42,14 @@ where
 
 #[cfg(feature = "std")]
 expand_unit_tests!(
-  "linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
+  "linked": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
     zero_reserved,
   }
 );
 
 #[cfg(feature = "std")]
 expand_unit_tests!(
-  "linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
+  "linked": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Linked]: MultipleVersionTable<_, _> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -59,13 +59,13 @@ expand_unit_tests!(
 );
 
 expand_unit_tests!(
-  "arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
+  "arena": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
     zero_reserved,
   }
 );
 
 expand_unit_tests!(
-  "arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
+  "arena": MultipleVersionOrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: MultipleVersionTable<_, _> {
     reserved({
       crate::Builder::new()
         .with_capacity(MB)
@@ -106,7 +106,7 @@ fn reopen_wrong_mode() {
     Builder::new()
       .with_capacity(MB)
       .with_read(true)
-      .map_mut::<crate::multiple_version::OrderWal<Person, String>, _>(path.as_path())
+      .map_mut::<crate::base::OrderWal<Person, String>, _>(path.as_path())
       .unwrap_err()
   };
   assert!(matches!(err, crate::error::Error::ModeMismatch { .. }));

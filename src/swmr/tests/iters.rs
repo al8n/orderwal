@@ -1,412 +1,493 @@
 use core::ops::Bound;
-use std::collections::BTreeMap;
-
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
-  state::Active,
-  types::{MaybeStructured, Type},
-};
-
-use std::thread::spawn;
 
 use crate::{
-  batch::BatchEntry,
-  generic::{
-    BoundedTable, GenericMemtable, OrderWal, OrderWalReader, Reader, UnboundedTable, Writer,
-  },
-  memtable::{Entry, MutableMemtable},
-  types::{KeyBuilder, ValueBuilder},
-  Builder,
+  generic::{BoundedTable, OrderWal, Reader, UnboundedTable, Writer},
+  memtable::{Entry, RawEntry as _},
 };
 
-use super::{Person, MB};
+use super::MB;
 
-fn iter<M>(wal: &mut OrderWal<M>)
-where
-  M: GenericMemtable<Person, String> + MutableMemtable + Send + 'static,
-  M::Error: core::fmt::Debug,
-  for<'a> M::Entry<'a, Active>: Entry<'a>,
-  for<'a> M::Comparator: TypeRefComparator<'a, u32> + TypeRefQueryComparator<'a, u32, u32>,
-{
-  let mut people = (0..100)
-    .map(|_| {
-      let p = Person::random();
-      let v = std::format!("My name is {}", p.name);
-      wal.insert(&p, &v).unwrap();
-      (p, v)
-    })
-    .collect::<Vec<_>>();
+#[cfg(feature = "std")]
+expand_unit_tests!("unbounded": OrderWal<UnboundedTable<str, str>> [Default::default()]: UnboundedTable<_, _> {
+  unbounded_iter_with_tombstone_mvcc,
+});
 
-  people.sort_by(|a, b| a.0.cmp(&b.0));
+expand_unit_tests!("bounded": OrderWal<BoundedTable<str, str>> [Default::default()]: BoundedTable<_, _> {
+  bounded_iter_with_tombstone_mvcc,
+});
 
-  let mut iter = wal.iter();
+#[cfg(feature = "std")]
+expand_unit_tests!("unbounded": OrderWal<UnboundedTable<String, String>> [Default::default()]: UnboundedTable<_, _> {
+  unbounded_iter_with_tombstone_next_by_entry,
+  unbounded_iter_with_tombstone_next_by_with_tombstone_entry,
+  unbounded_iter_next,
+  unbounded_range_next,
+  unbounded_iter_prev,
+  unbounded_range_prev,
+  unbounded_iter_with_tombstone_prev_by_entry,
+  unbounded_iter_with_tombstone_prev_by_with_tombstone_entry,
+});
 
-  for (pwal, pvec) in people.iter().zip(iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  let mut rev_iter = wal.iter().rev();
-
-  for (pwal, pvec) in people.iter().rev().zip(rev_iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  let mut iter = wal.keys();
-
-  for (pwal, pvec) in people.iter().zip(iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-  }
-
-  let mut rev_iter = wal.keys().rev();
-
-  for (pwal, pvec) in people.iter().rev().zip(rev_iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-  }
-
-  let mut iter = wal.values();
-
-  for (pwal, pvec) in people.iter().zip(iter.by_ref()) {
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  let mut rev_iter = wal.values().rev();
-
-  for (pwal, pvec) in people.iter().rev().zip(rev_iter.by_ref()) {
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  let wal = wal.reader();
-  let mut iter = wal.iter();
-
-  for (pwal, pvec) in people.iter().zip(iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
+macro_rules! bounded_builder {
+  () => {{
+    crate::Builder::new()
+      .with_memtable_options(
+        crate::memtable::bounded::TableOptions::new()
+          .with_capacity(1024 * 1024)
+          .into(),
+      )
+      .with_capacity(8 * 1024)
+  }};
 }
 
-fn bounds<M>(wal: &mut OrderWal<u32, u32, M>)
-where
-  M: Memtable<Key = u32, Value = u32> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
-  M::Error: std::fmt::Debug,
-{
-  for i in 0..100u32 {
-    wal.insert(&i, &i).unwrap();
-  }
+expand_unit_tests!("bounded": OrderWal<BoundedTable<String, String>> [Default::default()]: BoundedTable<_, _> {
+  bounded_iter_with_tombstone_next_by_entry(bounded_builder!()),
+  bounded_iter_with_tombstone_next_by_with_tombstone_entry(bounded_builder!()),
+  bounded_iter_next(bounded_builder!()),
+  bounded_range_next(bounded_builder!()),
+  bounded_iter_prev(bounded_builder!()),
+  bounded_range_prev(bounded_builder!()),
+  bounded_iter_with_tombstone_prev_by_entry(bounded_builder!()),
+  bounded_iter_with_tombstone_prev_by_with_tombstone_entry(bounded_builder!()),
+});
 
-  let upper50 = wal.upper_bound(Bound::Included(&50u32)).unwrap();
-  assert_eq!(upper50.value(), &50u32);
-  let upper51 = wal.upper_bound(Bound::Excluded(&51u32)).unwrap();
-  assert_eq!(upper51.value(), &50u32);
-
-  let upper50 = unsafe {
-    wal
-      .upper_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(upper50.value(), &50u32);
-  let upper51 = unsafe {
-    wal
-      .upper_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(upper51.value(), &50u32);
-
-  let upper101 = wal.upper_bound(Bound::Included(&101u32)).unwrap();
-  assert_eq!(upper101.value(), &99u32);
-  let upper101 = unsafe {
-    wal
-      .upper_bound_by_bytes(Bound::Included(101u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(upper101.value(), &99u32);
-
-  let upper_unbounded = wal.upper_bound::<u32>(Bound::Unbounded).unwrap();
-  assert_eq!(upper_unbounded.value(), &99u32);
-  let upper_unbounded = unsafe { wal.upper_bound_by_bytes(Bound::Unbounded).unwrap() };
-  assert_eq!(upper_unbounded.value(), &99u32);
-
-  let lower50 = wal.lower_bound(Bound::Included(&50u32)).unwrap();
-  assert_eq!(lower50.value(), &50u32);
-  let lower50 = unsafe {
-    wal
-      .lower_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(lower50.value(), &50u32);
-
-  let lower51 = wal.lower_bound(Bound::Excluded(&51u32)).unwrap();
-  assert_eq!(lower51.value(), &52u32);
-  let lower51 = unsafe {
-    wal
-      .lower_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(lower51.value(), &52u32);
-
-  let lower0 = wal.lower_bound(Bound::Excluded(&0u32)).unwrap();
-  assert_eq!(lower0.value(), &1u32);
-  let lower0 = unsafe {
-    wal
-      .lower_bound_by_bytes(Bound::Excluded(0u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(lower0.value(), &1u32);
-
-  let lower_unbounded = wal.lower_bound::<u32>(Bound::Unbounded).unwrap();
-  assert_eq!(lower_unbounded.value(), &0u32);
-  let lower_unbounded = unsafe { wal.lower_bound_by_bytes(Bound::Unbounded).unwrap() };
-  assert_eq!(lower_unbounded.value(), &0u32);
-
-  let wal = wal.reader();
-  let upper50 = wal.upper_bound(Bound::Included(&50u32)).unwrap();
-  assert_eq!(upper50.value(), &50u32);
-  let upper50 = unsafe {
-    wal
-      .upper_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(upper50.value(), &50u32);
-
-  let upper51 = wal.upper_bound(Bound::Excluded(&51u32)).unwrap();
-  assert_eq!(upper51.value(), &50u32);
-  let upper51 = unsafe {
-    wal
-      .upper_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(upper51.value(), &50u32);
-
-  let upper101 = wal.upper_bound(Bound::Included(&101u32)).unwrap();
-  assert_eq!(upper101.value(), &99u32);
-  let upper101 = unsafe {
-    wal
-      .upper_bound_by_bytes(Bound::Included(101u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(upper101.value(), &99u32);
-
-  let upper_unbounded = wal.upper_bound::<u32>(Bound::Unbounded).unwrap();
-  assert_eq!(upper_unbounded.value(), &99u32);
-  let upper_unbounded = unsafe { wal.upper_bound_by_bytes(Bound::Unbounded).unwrap() };
-  assert_eq!(upper_unbounded.value(), &99u32);
-
-  let lower50 = wal.lower_bound(Bound::Included(&50u32)).unwrap();
-  assert_eq!(lower50.value(), &50u32);
-  let lower50 = unsafe {
-    wal
-      .lower_bound_by_bytes(Bound::Included(50u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(lower50.value(), &50u32);
-
-  let lower51 = wal.lower_bound(Bound::Excluded(&51u32)).unwrap();
-  assert_eq!(lower51.value(), &52u32);
-  let lower51 = unsafe {
-    wal
-      .lower_bound_by_bytes(Bound::Excluded(51u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(lower51.value(), &52u32);
-
-  let lower0 = wal.lower_bound(Bound::Excluded(&0u32)).unwrap();
-  assert_eq!(lower0.value(), &1u32);
-  let lower0 = unsafe {
-    wal
-      .lower_bound_by_bytes(Bound::Excluded(0u32.to_le_bytes().as_ref()))
-      .unwrap()
-  };
-  assert_eq!(lower0.value(), &1u32);
-
-  let lower_unbounded = wal.lower_bound::<u32>(Bound::Unbounded).unwrap();
-  assert_eq!(lower_unbounded.value(), &0u32);
-  let lower_unbounded = unsafe { wal.lower_bound_by_bytes(Bound::Unbounded).unwrap() };
-  assert_eq!(lower_unbounded.value(), &0u32);
+fn make_int_key(i: usize) -> String {
+  ::std::format!("{:05}", i)
 }
 
-fn range<M>(wal: &mut OrderWal<Person, String, M>)
-where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
-  M::Error: std::fmt::Debug,
-{
-  let mut mid = Person::random();
-  let people = (0..100)
-    .map(|idx| {
-      let p = Person::random();
-      let v = std::format!("My name is {}", p.name);
-      wal.insert(&p, &v).unwrap();
+fn make_value(i: usize) -> String {
+  ::std::format!("v{:05}", i)
+}
 
-      if idx == 500 {
-        mid = p.clone();
+macro_rules! iter_with_tombstone_mvcc {
+  ($wal:ident) => {{
+    $wal.insert(1, "a", "a1").unwrap();
+    $wal.insert(3, "a", "a2").unwrap();
+    $wal.insert(1, "c", "c1").unwrap();
+    $wal.insert(3, "c", "c2").unwrap();
+
+    let mut iter = $wal.iter_all(0);
+    let mut num = 0;
+    while iter.next().is_some() {
+      num += 1;
+    }
+    assert_eq!(num, 0);
+
+    let mut iter = $wal.iter_all(1);
+    let mut num = 0;
+    while iter.next().is_some() {
+      num += 1;
+    }
+    assert_eq!(num, 2);
+
+    let mut iter = $wal.iter_all(2);
+    let mut num = 0;
+    while iter.next().is_some() {
+      num += 1;
+    }
+    assert_eq!(num, 2);
+
+    let mut iter = $wal.iter_all(3);
+    let mut num = 0;
+    while iter.next().is_some() {
+      num += 1;
+    }
+    assert_eq!(num, 4);
+
+    let upper_bound = $wal.upper_bound(1, Bound::Included("b")).unwrap();
+    assert_eq!(upper_bound.value(), "a1");
+
+    let upper_bound = $wal
+      .upper_bound_with_tombstone(1, Bound::Included("b"))
+      .unwrap();
+    assert_eq!(upper_bound.value().unwrap(), "a1");
+
+    let upper_bound = $wal.upper_bound(1, Bound::Included("b")).unwrap();
+    assert_eq!(upper_bound.value(), "a1");
+
+    let upper_bound = $wal
+      .upper_bound_with_tombstone(1, Bound::Included("b"))
+      .unwrap();
+    assert_eq!(upper_bound.value().unwrap(), "a1");
+
+    let lower_bound = $wal.lower_bound(1, Bound::Included("b")).unwrap();
+    assert_eq!(lower_bound.value(), "c1");
+
+    let lower_bound = $wal
+      .lower_bound_with_tombstone(1, Bound::Included("b"))
+      .unwrap();
+    assert_eq!(lower_bound.value().unwrap(), "c1");
+
+    let lower_bound = $wal.lower_bound(1, Bound::Included("b")).unwrap();
+    assert_eq!(lower_bound.value(), "c1");
+
+    let lower_bound = $wal
+      .lower_bound_with_tombstone(1, Bound::Included("b"))
+      .unwrap();
+    assert_eq!(lower_bound.value().unwrap(), "c1");
+  }};
+}
+
+fn bounded_iter_with_tombstone_mvcc(wal: &mut OrderWal<BoundedTable<str, str>>) {
+  iter_with_tombstone_mvcc!(wal);
+}
+
+fn unbounded_iter_with_tombstone_mvcc(wal: &mut OrderWal<UnboundedTable<str, str>>) {
+  iter_with_tombstone_mvcc!(wal);
+}
+
+macro_rules! iter_next {
+  ($wal:ident) => {{
+    const N: usize = 100;
+
+    for i in (0..N).rev() {
+      $wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    }
+
+    let iter = $wal.iter_all(0);
+
+    let mut i = 0;
+    for ent in iter {
+      assert_eq!(ent.key(), make_int_key(i).as_str());
+      assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+      assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+      assert_eq!(ent.raw_value().unwrap(), make_value(i).as_bytes());
+      i += 1;
+    }
+
+    assert_eq!(i, N);
+
+    let iter = $wal.iter(0);
+    let mut i = 0;
+    for ent in iter {
+      assert_eq!(ent.key(), make_int_key(i).as_str());
+      assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+      assert_eq!(ent.value(), make_value(i).as_str());
+      assert_eq!(ent.raw_value(), make_value(i).as_bytes());
+      i += 1;
+    }
+
+    assert_eq!(i, N);
+  }};
+}
+
+fn bounded_iter_next(wal: &mut OrderWal<BoundedTable<String, String>>) {
+  iter_next!(wal);
+}
+
+fn unbounded_iter_next(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  iter_next!(wal);
+}
+
+macro_rules! iter_with_tombstone_next_by_entry {
+  ($wal:ident) => {{
+    const N: usize = 100;
+
+    for i in (0..N).rev() {
+      $wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    }
+
+    let mut ent = $wal.first(0).clone();
+    #[cfg(feature = "std")]
+    std::println!("{ent:?}");
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      assert_eq!(entry.key(), make_int_key(i).as_str());
+      assert_eq!(entry.value(), make_value(i).as_str());
+      ent = entry.next();
+      i += 1;
+    }
+    assert_eq!(i, N);
+
+    let mut ent = $wal.iter(0).next().clone();
+    #[cfg(feature = "std")]
+    std::println!("{ent:?}");
+
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      assert_eq!(entry.key(), make_int_key(i).as_str());
+      assert_eq!(entry.value(), make_value(i).as_str());
+      ent = entry.next();
+      i += 1;
+    }
+    assert_eq!(i, N);
+  }};
+}
+
+fn bounded_iter_with_tombstone_next_by_entry(wal: &mut OrderWal<BoundedTable<String, String>>) {
+  iter_with_tombstone_next_by_entry!(wal);
+}
+
+fn unbounded_iter_with_tombstone_next_by_entry(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  iter_with_tombstone_next_by_entry!(wal);
+}
+
+macro_rules! iter_with_tombstone_next_by_with_tombstone_entry {
+  ($wal:ident) => {{
+    const N: usize = 100;
+
+    for i in 0..N {
+      let k = make_int_key(i);
+      let v = make_value(i);
+      $wal.insert(0, &k, &v).unwrap();
+      $wal.remove(1, &k).unwrap();
+    }
+
+    let mut ent = $wal.first(0).clone();
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      assert_eq!(entry.key(), make_int_key(i).as_str());
+      assert_eq!(entry.value(), make_value(i).as_str());
+      ent = entry.next();
+      i += 1;
+    }
+    assert_eq!(i, N);
+
+    let mut ent = $wal.first_with_tombstone(1).clone();
+    #[cfg(feature = "std")]
+    std::println!("{ent:?}");
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      if i % 2 == 1 {
+        assert_eq!(entry.version(), 0);
+        assert_eq!(entry.key(), make_int_key(i / 2).as_str());
+        assert_eq!(entry.value().unwrap(), make_value(i / 2).as_str());
+      } else {
+        assert_eq!(entry.version(), 1);
+        assert_eq!(entry.key(), make_int_key(i / 2).as_str());
+        assert!(entry.value().is_none());
       }
-      (p, v)
-    })
-    .collect::<BTreeMap<_, _>>();
 
-  let mut iter = wal.range::<Person, _>(&mid..);
-
-  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  assert!(iter.next().is_none());
-
-  let mut iter = wal.range_keys::<Person, _>(&mid..);
-  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.clone().key()));
-  }
-
-  assert!(iter.next().is_none());
-
-  let mut rev_iter = wal.range_keys::<Person, _>(&mid..).rev();
-
-  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-  }
-
-  let mut iter = wal.range_values::<Person, _>(&mid..);
-  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
-    assert_eq!(&pwal.1, pvec.clone().value());
-  }
-
-  assert!(iter.next().is_none());
-
-  let mut rev_iter = wal.range_values::<Person, _>(&mid..).rev();
-
-  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  let wal = wal.reader();
-  let mut iter = wal.range::<Person, _>(&mid..);
-
-  for (pwal, pvec) in people.range(&mid..).zip(iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
-
-  let mut rev_iter = wal.range::<Person, _>(&mid..).rev();
-
-  for (pwal, pvec) in people.range(&mid..).rev().zip(rev_iter.by_ref()) {
-    assert!(pwal.0.equivalent(pvec.key()));
-    assert!(pwal.0.to_vec().eq(pvec.raw_key()));
-    assert_eq!(&pwal.1, pvec.value());
-    assert_eq!(pwal.1.as_bytes(), pvec.raw_value());
-  }
+      ent = entry.next();
+      i += 1;
+    }
+    assert_eq!(i, N * 2);
+    let ent = $wal.first(1);
+    assert!(ent.is_none());
+  }};
 }
 
-fn entry_iter<M>(wal: &mut OrderWal<u32, u32, M>)
-where
-  M: Memtable<Key = u32, Value = u32> + 'static,
-  for<'a> M::Item<'a>: Entry<'a> + std::fmt::Debug,
-  M::Error: std::fmt::Debug,
-{
-  for i in 0..100u32 {
-    wal.insert(&i, &i).unwrap();
-  }
-
-  let mut curr = wal.first();
-  #[cfg(feature = "std")]
-  std::println!("{:?}", curr);
-  let mut cursor = 0;
-  while let Some(mut ent) = curr {
-    assert_eq!(ent.key(), &cursor);
-    assert_eq!(ent.value(), &cursor);
-    cursor += 1;
-    curr = ent.next();
-  }
-
-  let curr = wal.last();
-
-  let mut curr = curr.clone();
-  let mut cursor = 100;
-  while let Some(mut ent) = curr {
-    cursor -= 1;
-    assert_eq!(ent.key(), &cursor);
-    assert_eq!(ent.value(), &cursor);
-    curr = ent.prev();
-  }
-
-  let mut curr = wal.keys().next();
-  #[cfg(feature = "std")]
-  std::println!("{:?}", curr);
-  let mut cursor = 0;
-  while let Some(mut ent) = curr {
-    assert_eq!(ent.key(), &cursor);
-    cursor += 1;
-    curr = ent.next();
-  }
-
-  let curr = wal.keys().next_back();
-
-  let mut curr = curr.clone();
-  let mut cursor = 100;
-  while let Some(mut ent) = curr {
-    cursor -= 1;
-    assert_eq!(ent.key(), &cursor);
-    curr = ent.prev();
-  }
-
-  let mut curr = wal.values().next();
-  #[cfg(feature = "std")]
-  std::println!("{:?}", curr);
-  let mut cursor = 0;
-  while let Some(mut ent) = curr {
-    assert_eq!(ent.value(), &cursor);
-    cursor += 1;
-    curr = ent.next();
-  }
-
-  let curr = wal.values().next_back();
-
-  let mut curr = curr.clone();
-  let mut cursor = 100;
-  while let Some(mut ent) = curr {
-    cursor -= 1;
-    assert_eq!(ent.value(), &cursor);
-    curr = ent.prev();
-  }
+fn bounded_iter_with_tombstone_next_by_with_tombstone_entry(
+  wal: &mut OrderWal<BoundedTable<String, String>>,
+) {
+  iter_with_tombstone_next_by_with_tombstone_entry!(wal);
 }
 
-#[cfg(feature = "std")]
-expand_unit_tests!("linked": OrderWalAlternativeTable<u32, u32> [TableOptions::Linked]: Table<_, _> {
-  bounds,
-  entry_iter,
-});
+fn unbounded_iter_with_tombstone_next_by_with_tombstone_entry(
+  wal: &mut OrderWal<UnboundedTable<String, String>>,
+) {
+  iter_with_tombstone_next_by_with_tombstone_entry!(wal);
+}
 
-expand_unit_tests!("arena": OrderWalAlternativeTable<u32, u32> [TableOptions::Arena(Default::default())]: Table<_, _> {
-  bounds,
-  entry_iter,
-});
+macro_rules! range_next {
+  ($wal:ident) => {{
+    const N: usize = 100;
 
-#[cfg(feature = "std")]
-expand_unit_tests!("linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: Table<_, _> {
-  range,
-  iter,
-});
+    for i in (0..N).rev() {
+      $wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    }
 
-expand_unit_tests!("arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: Table<_, _> {
-  range,
-  iter,
-});
+    let upper = make_int_key(50);
+    let mut i = 0;
+    let mut iter = $wal.range(0, ..=upper.as_str());
+    for ent in &mut iter {
+      assert_eq!(ent.key(), make_int_key(i).as_str());
+      assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+      assert_eq!(ent.value(), make_value(i).as_str());
+      assert_eq!(ent.raw_value(), make_value(i).as_bytes());
+      i += 1;
+    }
+
+    assert_eq!(i, 51);
+
+    let mut i = 0;
+    let mut iter = $wal.range_all(0, ..=upper.as_str());
+    for ent in &mut iter {
+      assert_eq!(ent.key(), make_int_key(i).as_str());
+      assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+      assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+      assert_eq!(ent.raw_value().unwrap(), make_value(i).as_bytes());
+      i += 1;
+    }
+
+    assert_eq!(i, 51);
+  }};
+}
+
+fn bounded_range_next(wal: &mut OrderWal<BoundedTable<String, String>>) {
+  range_next!(wal);
+}
+
+fn unbounded_range_next(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  range_next!(wal);
+}
+
+macro_rules! iter_prev {
+  ($wal:ident) => {{
+    const N: usize = 100;
+
+    for i in 0..N {
+      $wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    }
+
+    let iter = $wal.iter_all(0).rev();
+    let mut i = N;
+    for ent in iter {
+      assert_eq!(ent.key(), make_int_key(i - 1).as_str());
+      assert_eq!(ent.value().unwrap(), make_value(i - 1).as_str());
+      i -= 1;
+    }
+
+    assert_eq!(i, 0);
+
+    let iter = $wal.iter(0).rev();
+    let mut i = N;
+    for ent in iter {
+      assert_eq!(ent.key(), make_int_key(i - 1).as_str());
+      assert_eq!(ent.value(), make_value(i - 1).as_str());
+      i -= 1;
+    }
+
+    assert_eq!(i, 0);
+  }};
+}
+
+fn bounded_iter_prev(wal: &mut OrderWal<BoundedTable<String, String>>) {
+  iter_prev!(wal);
+}
+
+fn unbounded_iter_prev(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  iter_prev!(wal);
+}
+
+macro_rules! iter_with_tombstone_prev_by_entry {
+  ($wal:ident) => {
+    const N: usize = 100;
+
+    for i in 0..N {
+      $wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    }
+
+    let mut ent = $wal.last(0);
+
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      i += 1;
+      assert_eq!(entry.key(), make_int_key(N - i).as_str());
+      assert_eq!(entry.value(), make_value(N - i).as_str());
+      ent = entry.prev();
+    }
+    assert_eq!(i, N);
+  };
+}
+
+fn bounded_iter_with_tombstone_prev_by_entry(wal: &mut OrderWal<BoundedTable<String, String>>) {
+  iter_with_tombstone_prev_by_entry!(wal);
+}
+
+fn unbounded_iter_with_tombstone_prev_by_entry(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  iter_with_tombstone_prev_by_entry!(wal);
+}
+
+macro_rules! iter_with_tombstone_prev_by_with_tombstone_entry {
+  ($wal:ident) => {{
+    const N: usize = 100;
+
+    for i in 0..N {
+      let k = make_int_key(i);
+      let v = make_value(i);
+      $wal.insert(0, &k, &v).unwrap();
+      $wal.remove(1, &k).unwrap();
+    }
+
+    let mut ent = $wal.last(0);
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      i += 1;
+      assert_eq!(entry.key(), make_int_key(N - i).as_str());
+      assert_eq!(entry.value(), make_value(N - i).as_str());
+      ent = entry.prev();
+    }
+    assert_eq!(i, N);
+
+    let mut ent = $wal.last_with_tombstone(1);
+    let mut i = 0;
+    while let Some(ref mut entry) = ent {
+      if i % 2 == 0 {
+        assert_eq!(entry.version(), 0);
+        assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_str());
+        assert_eq!(entry.value().unwrap(), make_value(N - 1 - i / 2).as_str());
+      } else {
+        assert_eq!(entry.version(), 1);
+        assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_str());
+        assert!(entry.value().is_none());
+      }
+
+      ent = entry.prev();
+      i += 1;
+    }
+
+    assert_eq!(i, N * 2);
+    let ent = $wal.last(1);
+    assert!(ent.is_none());
+  }};
+}
+
+fn bounded_iter_with_tombstone_prev_by_with_tombstone_entry(
+  wal: &mut OrderWal<BoundedTable<String, String>>,
+) {
+  iter_with_tombstone_prev_by_with_tombstone_entry!(wal);
+}
+
+fn unbounded_iter_with_tombstone_prev_by_with_tombstone_entry(
+  wal: &mut OrderWal<UnboundedTable<String, String>>,
+) {
+  iter_with_tombstone_prev_by_with_tombstone_entry!(wal);
+}
+
+macro_rules! range_prev {
+  ($wal:ident) => {{
+    const N: usize = 100;
+
+    for i in 0..N {
+      $wal.insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    }
+
+    let lower = make_int_key(50);
+    let it = $wal.range(0, lower.as_str()..).rev();
+    let mut i = N - 1;
+
+    for ent in it {
+      assert_eq!(ent.key(), make_int_key(i).as_str());
+      assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+      assert_eq!(ent.value(), make_value(i).as_str());
+      assert_eq!(ent.raw_value(), make_value(i).as_bytes());
+      assert_eq!(ent.version(), 0);
+      i -= 1;
+    }
+
+    assert_eq!(i, 49);
+
+    let it = $wal.range_all(0, lower.as_str()..).rev();
+    let mut i = N - 1;
+
+    for ent in it {
+      assert_eq!(ent.key(), make_int_key(i).as_str());
+      assert_eq!(ent.raw_key(), make_int_key(i).as_bytes());
+      assert_eq!(ent.value().unwrap(), make_value(i).as_str());
+      assert_eq!(ent.raw_value().unwrap(), make_value(i).as_bytes());
+      assert_eq!(ent.version(), 0);
+      i -= 1;
+    }
+
+    assert_eq!(i, 49);
+  }};
+}
+
+fn bounded_range_prev(wal: &mut OrderWal<BoundedTable<String, String>>) {
+  range_prev!(wal);
+}
+
+fn unbounded_range_prev(wal: &mut OrderWal<UnboundedTable<String, String>>) {
+  range_prev!(wal);
+}

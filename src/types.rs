@@ -379,7 +379,9 @@ impl<T: range_operation::Sealed> BulkOperation for T {}
 mod range_operation {
   use core::ops::Bound;
 
-  use super::{RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer, Remove, Update, sealed::RangeComparator};
+  use super::{
+    sealed::RangeComparator, RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer, Remove, Update,
+  };
 
   pub trait Sealed: Send + Sync + 'static {
     type Output<'a>;

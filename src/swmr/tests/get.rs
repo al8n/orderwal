@@ -1,254 +1,751 @@
-use base::OrderWal;
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  state::{Active, MaybeTombstone},
+  types::{MaybeStructured, Type},
+};
+use skl::generic::Str;
 
-use dbutils::{buffer::VacantBuffer, types::MaybeStructured};
-
-use std::collections::BTreeMap;
+use core::ops::Bound;
 
 use crate::{
-  memtable::{alternative::TableOptions, Entry, Memtable},
-  swmr::base::{Reader, Writer},
+  generic::{
+    BoundedTable, GenericMemtable, OrderWal, Reader, UnboundedTable, Writer,
+  },
+  memtable::{Entry, MutableMemtable, RawEntry},
   types::{KeyBuilder, ValueBuilder},
 };
 
-use super::*;
+use super::{Person, MB};
 
-fn first<M>(wal: &mut OrderWal<Person, String, M>)
+#[cfg(feature = "std")]
+expand_unit_tests!("unbounded": OrderWal<UnboundedTable<str, str>> [Default::default()]: UnboundedTable<_, _>  {
+  mvcc,
+  gt,
+  ge,
+  le,
+  lt,
+});
+
+expand_unit_tests!("bounded": OrderWal<BoundedTable<str, str>> [Default::default()]: BoundedTable<_, _>  {
+  mvcc,
+  gt,
+  ge,
+  le,
+  lt,
+});
+
+#[cfg(feature = "std")]
+expand_unit_tests!("unbounded": OrderWal<UnboundedTable<Person, String>> [Default::default()]: UnboundedTable<_, _> {
+  insert,
+  unbounded_insert_with_value_builder,
+  unbounded_insert_with_key_builder,
+  unbounded_insert_with_bytes,
+  unbounded_insert_with_builders,
+});
+
+expand_unit_tests!("bounded": OrderWal<BoundedTable<Person, String>> [Default::default()]: BoundedTable<_, _> {
+  insert,
+  bounded_insert_with_value_builder,
+  bounded_insert_with_key_builder,
+  bounded_insert_with_bytes,
+  bounded_insert_with_builders,
+});
+
+fn mvcc<M>(wal: &mut OrderWal<M>)
 where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
+  M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
+  for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
 {
-  let people = (0..10)
-    .map(|_| {
-      let p = Person::random();
-      let v = std::format!("My name is {}", p.name);
-      wal.insert(&p, &v).unwrap();
+  wal.insert(1, "a", "a1").unwrap();
+  wal.insert(3, "a", "a2").unwrap();
+  wal.insert(1, "c", "c1").unwrap();
+  wal.insert(3, "c", "c2").unwrap();
 
-      (p, v)
-    })
-    .collect::<BTreeMap<_, _>>();
+  let ent = wal.get(1, "a").unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
 
-  let ent = wal.first().unwrap();
-  let (p, v) = people.first_key_value().unwrap();
-  assert!(ent.key().equivalent(p));
-  assert_eq!(ent.value(), v);
+  let ent = wal.get(2, "a").unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
 
-  let wal = wal.reader();
-  let ent = wal.first().unwrap();
-  let (p, v) = people.first_key_value().unwrap();
-  assert!(ent.key().equivalent(p));
-  assert_eq!(ent.value(), v);
+  let ent = wal.get(3, "a").unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.get(4, "a").unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  assert!(wal.get(0, "b").is_none());
+  assert!(wal.get(1, "b").is_none());
+  assert!(wal.get(2, "b").is_none());
+  assert!(wal.get(3, "b").is_none());
+  assert!(wal.get(4, "b").is_none());
+
+  let ent = wal.get(1, "c").unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.get(2, "c").unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.get(3, "c").unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.get(4, "c").unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  assert!(wal.get(5, "d").is_none());
 }
 
-fn last<M>(wal: &mut OrderWal<Person, String, M>)
+fn gt<M>(wal: &mut OrderWal<M>)
 where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
+  M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
+  for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
 {
-  let people = (0..10)
-    .map(|_| {
-      let p = Person::random();
-      let v = std::format!("My name is {}", p.name);
-      wal.insert(&p, &v).unwrap();
+  wal.insert(1, "a", "a1").unwrap();
+  wal.insert(3, "a", "a2").unwrap();
+  wal.insert(1, "c", "c1").unwrap();
+  wal.insert(3, "c", "c2").unwrap();
+  wal.insert(5, "c", "c3").unwrap();
 
-      (p, v)
-    })
-    .collect::<BTreeMap<_, _>>();
+  assert!(wal.lower_bound(0, Bound::Excluded("a")).is_none());
+  assert!(wal.lower_bound(0, Bound::Excluded("b")).is_none());
+  assert!(wal.lower_bound(0, Bound::Excluded("c")).is_none());
 
-  let ent = wal.last().unwrap();
-  let (p, v) = people.last_key_value().unwrap();
-  assert!(ent.key().equivalent(p));
-  assert_eq!(ent.value(), v);
+  let ent = wal.lower_bound(1, Bound::Excluded("")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
 
-  let wal = wal.reader();
-  let ent = wal.last().unwrap();
-  assert!(ent.key().equivalent(p));
-  assert_eq!(ent.value(), v);
+  let ent = wal.lower_bound(2, Bound::Excluded("")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(3, Bound::Excluded("")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(1, Bound::Excluded("a")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(2, Bound::Excluded("a")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(3, Bound::Excluded("a")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(1, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(2, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(3, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(4, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(5, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c3");
+  assert_eq!(ent.version(), 5);
+
+  let ent = wal.lower_bound(6, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c3");
+  assert_eq!(ent.version(), 5);
+
+  assert!(wal.lower_bound(1, Bound::Excluded("c")).is_none());
+  assert!(wal.lower_bound(2, Bound::Excluded("c")).is_none());
+  assert!(wal.lower_bound(3, Bound::Excluded("c")).is_none());
+  assert!(wal.lower_bound(4, Bound::Excluded("c")).is_none());
+  assert!(wal.lower_bound(5, Bound::Excluded("c")).is_none());
+  assert!(wal.lower_bound(6, Bound::Excluded("c")).is_none());
+}
+
+fn ge<M>(wal: &mut OrderWal<M>)
+where
+  M: GenericMemtable<str, str> + MutableMemtable + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+{
+  wal.insert(1, "a", "a1").unwrap();
+  wal.insert(3, "a", "a2").unwrap();
+  wal.insert(1, "c", "c1").unwrap();
+  wal.insert(3, "c", "c2").unwrap();
+
+  assert!(wal.lower_bound(0, Bound::Included("a")).is_none());
+  assert!(wal.lower_bound(0, Bound::Included("b")).is_none());
+  assert!(wal.lower_bound(0, Bound::Included("c")).is_none());
+
+  let ent = wal.lower_bound(1, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(2, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(3, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(4, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(1, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(2, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(3, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(4, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(1, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(2, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.lower_bound(3, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.lower_bound(4, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  assert!(wal.lower_bound(0, Bound::Included("d")).is_none());
+  assert!(wal.lower_bound(1, Bound::Included("d")).is_none());
+  assert!(wal.lower_bound(2, Bound::Included("d")).is_none());
+  assert!(wal.lower_bound(3, Bound::Included("d")).is_none());
+  assert!(wal.lower_bound(4, Bound::Included("d")).is_none());
+}
+
+fn le<M>(wal: &mut OrderWal<M>)
+where
+  M: GenericMemtable<str, str> + MutableMemtable + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+{
+  wal.insert(1, "a", "a1").unwrap();
+  wal.insert(3, "a", "a2").unwrap();
+  wal.insert(1, "c", "c1").unwrap();
+  wal.insert(3, "c", "c2").unwrap();
+
+  assert!(wal.upper_bound(0, Bound::Included("a")).is_none());
+  assert!(wal.upper_bound(0, Bound::Included("b")).is_none());
+  assert!(wal.upper_bound(0, Bound::Included("c")).is_none());
+
+  let ent = wal.upper_bound(1, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Included("a")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(1, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Included("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(1, Bound::Included("c")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Included("c")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Included("c")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Included("c")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(1, Bound::Included("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Included("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Included("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Included("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+}
+
+fn lt<M>(wal: &mut OrderWal<M>)
+where
+  M: GenericMemtable<str, str> + MutableMemtable + 'static,
+  M::Error: std::fmt::Debug,
+  for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+{
+  wal.insert(1, "a", "a1").unwrap();
+  wal.insert(3, "a", "a2").unwrap();
+  wal.insert(1, "c", "c1").unwrap();
+  wal.insert(3, "c", "c2").unwrap();
+
+  assert!(wal.upper_bound(0, Bound::Excluded("a")).is_none());
+  assert!(wal.upper_bound(0, Bound::Excluded("b")).is_none());
+  assert!(wal.upper_bound(0, Bound::Excluded("c")).is_none());
+  assert!(wal.upper_bound(1, Bound::Excluded("a")).is_none());
+  assert!(wal.upper_bound(2, Bound::Excluded("a")).is_none());
+
+  let ent = wal.upper_bound(1, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Excluded("b")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(1, Bound::Excluded("c")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Excluded("c")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a1");
+  assert_eq!(ent.raw_value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Excluded("c")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Excluded("c")).unwrap();
+  assert_eq!(ent.key(), "a");
+  assert_eq!(ent.raw_key(), b"a");
+  assert_eq!(ent.value(), "a2");
+  assert_eq!(ent.raw_value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(1, Bound::Excluded("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(2, Bound::Excluded("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c1");
+  assert_eq!(ent.raw_value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = wal.upper_bound(3, Bound::Excluded("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = wal.upper_bound(4, Bound::Excluded("d")).unwrap();
+  assert_eq!(ent.key(), "c");
+  assert_eq!(ent.raw_key(), b"c");
+  assert_eq!(ent.value(), "c2");
+  assert_eq!(ent.raw_value(), b"c2");
+  assert_eq!(ent.version(), 3);
 }
 
 #[allow(clippy::needless_borrows_for_generic_args)]
-fn insert<M>(wal: &mut OrderWal<Person, String, M>)
+fn insert<M>(wal: &mut OrderWal<M>)
 where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
+  M: GenericMemtable<Person, String> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
+  for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
+  for<'a> M::Entry<'a, Active>: Entry<'a, Value = Str<'a>> + RawEntry<'a> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Value = Option<Str<'a>>> + RawEntry<'a> + std::fmt::Debug,
 {
   let people = (0..100)
     .map(|_| {
       let p = Person::random();
       let v = std::format!("My name is {}", p.name);
-      wal.insert(&p, &v).unwrap();
+      wal.insert(0, &p, &v).unwrap();
       (p, v)
     })
     .collect::<Vec<_>>();
-
-  assert_eq!(wal.len(), 100);
 
   for (p, pv) in &people {
-    assert!(wal.contains_key(p));
+    assert!(wal.contains_key(0, p));
 
-    assert_eq!(wal.get(p).unwrap().value(), pv);
-  }
-
-  for (p, _) in &people {
-    assert!(wal.contains_key(p));
+    assert_eq!(wal.get(0, p).unwrap().value(), pv);
   }
 }
 
-fn insert_with_value_builder<M>(wal: &mut OrderWal<Person, String, M>)
-where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
-  M::Error: std::fmt::Debug,
-{
-  let people = (0..100)
-    .map(|_| {
-      let p = Person::random();
-      let v = std::format!("My name is {}", p.name);
-      wal
-        .insert_with_value_builder(
-          &p,
-          ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
-            buf.put_slice(v.as_bytes()).map(|_| v.len())
-          }),
-        )
-        .unwrap();
-      (p, v)
-    })
-    .collect::<Vec<_>>();
+macro_rules! insert_with_value_builder {
+  ($wal:ident) => {{
+    let people = (0..100)
+      .map(|_| {
+        let p = Person::random();
+        let v = std::format!("My name is {}", p.name);
+        $wal
+          .insert_with_value_builder(
+            0,
+            &p,
+            ValueBuilder::once(v.len(), |buf: &mut VacantBuffer<'_>| {
+              buf.put_slice(v.as_bytes()).map(|_| v.len())
+            }),
+          )
+          .unwrap();
+        (p, v)
+      })
+      .collect::<Vec<_>>();
 
-  assert_eq!(wal.len(), 100);
-
-  for (p, _) in &people {
-    assert!(wal.contains_key(p));
-    assert!(wal.contains_key(&p.as_ref()));
-  }
+    for (p, _) in &people {
+      assert!($wal.contains_key(0, p));
+      assert!($wal.contains_key(0, &p.as_ref()));
+    }
+  }};
 }
 
-#[allow(clippy::needless_borrows_for_generic_args)]
-fn insert_with_key_builder<M>(wal: &mut OrderWal<Person, String, M>)
-where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
-  M::Error: std::fmt::Debug,
+fn bounded_insert_with_value_builder(wal: &mut OrderWal<BoundedTable<Person, String>>)
 {
-  let people = (0..100)
-    .map(|_| {
-      let p = Person::random();
-      let pvec = p.to_vec();
-      let v = std::format!("My name is {}", p.name);
-      unsafe {
-        wal
+  insert_with_value_builder!(wal);
+}
+
+fn unbounded_insert_with_value_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>)
+{
+  insert_with_value_builder!(wal);
+}
+
+macro_rules! insert_with_key_builder {
+  ($wal:ident) => {{
+    let people = (0..100)
+      .map(|_| {
+        let p = Person::random();
+        let v = std::format!("My name is {}", p.name);
+        $wal
           .insert_with_key_builder(
+            0,
             KeyBuilder::once(p.encoded_len(), |buf| p.encode_to_buffer(buf)),
             &v,
           )
           .unwrap();
-      }
-      (p, v)
-    })
-    .collect::<Vec<_>>();
+        (p, v)
+      })
+      .collect::<Vec<_>>();
 
-  assert_eq!(wal.len(), 100);
-
-  for (p, pv) in &people {
-    assert!(wal.contains_key(p));
-    assert_eq!(wal.get(p).unwrap().value(), pv);
-  }
-
-  for (p, _) in &people {
-    assert!(wal.contains_key(p));
-  }
+    for (p, pv) in &people {
+      assert!($wal.contains_key(0, p));
+      assert_eq!($wal.get(0, p).unwrap().value(), pv);
+    }
+  }};
 }
 
-fn insert_with_bytes<M>(wal: &mut OrderWal<Person, String, M>)
-where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a>,
-  M::Error: std::fmt::Debug,
+fn bounded_insert_with_key_builder(wal: &mut OrderWal<BoundedTable<Person, String>>)
 {
-  let people = (0..100)
-    .map(|_| {
-      let p = Person::random();
-      let v = std::format!("My name is {}", p.name);
-      unsafe {
-        wal
-          .insert(
-            MaybeStructured::from_slice(p.to_vec().as_slice()),
-            MaybeStructured::from_slice(v.as_bytes()),
+  insert_with_key_builder!(wal);
+}
+
+fn unbounded_insert_with_key_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>)
+{
+  insert_with_key_builder!(wal);
+}
+
+macro_rules! insert_with_bytes {
+  ($wal:ident) => {{
+    let people = (0..100)
+      .map(|_| {
+        let p = Person::random();
+        let v = std::format!("My name is {}", p.name);
+        unsafe {
+          $wal
+            .insert(
+              0,
+              MaybeStructured::from_slice(p.to_vec().as_slice()),
+              MaybeStructured::from_slice(v.as_bytes()),
+            )
+            .unwrap();
+        }
+        (p, v)
+      })
+      .collect::<Vec<_>>();
+
+    for (p, pv) in &people {
+      assert!($wal.contains_key(0, p));
+      assert!($wal.contains_key(0, &p.as_ref()));
+      assert_eq!($wal.get(0, p).unwrap().value(), pv);
+    }
+  }};
+}
+
+fn bounded_insert_with_bytes(wal: &mut OrderWal<BoundedTable<Person, String>>) {
+  insert_with_bytes!(wal);
+}
+
+fn unbounded_insert_with_bytes(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
+  insert_with_bytes!(wal);
+}
+
+macro_rules! insert_with_builders {
+  ($wal:ident) => {{
+    let people = (0..1)
+      .map(|_| {
+        let p = Person::random();
+        let pvec = p.to_vec();
+        let v = std::format!("My name is {}", p.name);
+        $wal
+          .insert_with_builders(
+            0,
+            KeyBuilder::new(pvec.len(), |buf: &mut VacantBuffer<'_>| {
+              p.encode_to_buffer(buf)
+            }),
+            ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
+              buf.put_slice(v.as_bytes()).map(|_| v.len())
+            }),
           )
           .unwrap();
-      }
-      (p, v)
-    })
-    .collect::<Vec<_>>();
+        (p, pvec, v)
+      })
+      .collect::<Vec<_>>();
 
-  assert_eq!(wal.len(), 100);
-
-  for (p, pv) in &people {
-    assert!(wal.contains_key(p));
-    assert!(wal.contains_key(&p.as_ref()));
-    assert_eq!(wal.get(p).unwrap().value(), pv);
-  }
-}
-
-fn insert_with_builders<M>(wal: &mut OrderWal<Person, String, M>)
-where
-  M: Memtable<Key = Person, Value = String> + 'static,
-  for<'a> M::Item<'a>: Entry<'a> + std::fmt::Debug,
-  M::Error: std::fmt::Debug,
-{
-  let people = (0..1)
-    .map(|_| {
-      let p = Person::random();
-      let pvec = p.to_vec();
-      let v = std::format!("My name is {}", p.name);
-      wal
-        .insert_with_builders(
-          KeyBuilder::new(pvec.len(), |buf: &mut VacantBuffer<'_>| {
-            p.encode_to_buffer(buf)
-          }),
-          ValueBuilder::new(v.len(), |buf: &mut VacantBuffer<'_>| {
-            buf.put_slice(v.as_bytes()).map(|_| v.len())
-          }),
-        )
-        .unwrap();
-      (p, pvec, v)
-    })
-    .collect::<Vec<_>>();
-
-  assert_eq!(wal.len(), 1);
-
-  for (p, pvec, pv) in &people {
-    assert!(wal.contains_key(p));
-    unsafe {
-      assert_eq!(wal.get_by_bytes(pvec.as_ref()).unwrap().value(), pv);
+    for (p, _, pv) in &people {
+      assert!($wal.contains_key(0, p));
+      assert!($wal.contains_key_with_tombstone(0, p));
+      assert_eq!($wal.get(0, p).unwrap().value(), pv);
+      assert_eq!($wal.get_with_tombstone(0, p).unwrap().value().unwrap(), pv);
     }
-  }
-
-  for (p, _, _) in &people {
-    assert!(wal.contains_key(p));
-  }
+  }};
 }
 
-#[cfg(feature = "std")]
-expand_unit_tests!("linked": OrderWalAlternativeTable<Person, String> [TableOptions::Linked]: crate::memtable::alternative::Table<_, _> {
-  first,
-  last,
-  insert,
-  insert_with_value_builder,
-  insert_with_key_builder,
-  insert_with_bytes,
-  insert_with_builders,
-});
+fn bounded_insert_with_builders(wal: &mut OrderWal<BoundedTable<Person, String>>) {
+  insert_with_builders!(wal);
+}
 
-expand_unit_tests!("arena": OrderWalAlternativeTable<Person, String> [TableOptions::Arena(Default::default())]: crate::memtable::alternative::Table<_, _> {
-  first,
-  last,
-  insert,
-  insert_with_value_builder,
-  insert_with_key_builder,
-  insert_with_bytes,
-  insert_with_builders,
-});
+fn unbounded_insert_with_builders(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
+  insert_with_builders!(wal);
+}

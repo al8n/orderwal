@@ -27,8 +27,8 @@ pub use dbutils::equivalentor::{Ascend, Descend};
 #[cfg(feature = "bounded")]
 use crate::memtable::generic::bounded;
 
-// #[cfg(feature = "unbounded")]
-// use crate::memtable::generic::unbounded;
+#[cfg(feature = "unbounded")]
+use crate::memtable::generic::unbounded;
 
 /// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
 pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
@@ -46,10 +46,10 @@ pub type BoundedTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
 #[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
 pub type BoundedTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
 
-// /// The memory table based on unbounded linked-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
-// #[cfg(feature = "crossbeam-skiplist-mvcc")]
-// #[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
-// pub type UnboundedTable<K, V, C = Ascend> = unbounded::Table<K, V, C>;
+/// The memory table based on unbounded linked-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+#[cfg(feature = "crossbeam-skiplist-mvcc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
+pub type UnboundedTable<K, V, C = Ascend> = unbounded::Table<K, V, C>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K, V>
@@ -669,17 +669,17 @@ where
   ///
   /// See also [`insert_with_value_builder`](Writer::insert_with_value_builder) and [`insert_with_builders`](Writer::insert_with_builders).
   #[inline]
-  fn insert_with_key_builder<E>(
-    &mut self,
+  fn insert_with_key_builder<'a, E>(
+    &'a mut self,
     version: u64,
     kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
-    value: &[u8],
+    value: impl Into<MaybeStructured<'a, V>>,
   ) -> Result<(), Either<E, Error<Self::Memtable>>>
   where
     Self::Checksumer: BuildChecksumer,
     Self::Memtable: GenericMemtable<K, V> + MutableMemtable,
   {
-    Log::insert::<_, &[u8]>(self, version, kb, value).map_err(Among::into_left_right)
+    Log::insert(self, version, kb, value.into()).map_err(Among::into_left_right)
   }
 
   /// Inserts a key-value pair into the WAL. This method
