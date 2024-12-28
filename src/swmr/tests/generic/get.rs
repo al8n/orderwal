@@ -653,10 +653,12 @@ macro_rules! insert_with_value_builder {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_insert_with_value_builder(wal: &mut OrderWal<BoundedTable<Person, String>>) {
   insert_with_value_builder!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_insert_with_value_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
   insert_with_value_builder!(wal);
 }
@@ -685,10 +687,12 @@ macro_rules! insert_with_key_builder {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_insert_with_key_builder(wal: &mut OrderWal<BoundedTable<Person, String>>) {
   insert_with_key_builder!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_insert_with_key_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
   insert_with_key_builder!(wal);
 }
@@ -720,10 +724,12 @@ macro_rules! insert_with_bytes {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_insert_with_bytes(wal: &mut OrderWal<BoundedTable<Person, String>>) {
   insert_with_bytes!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_insert_with_bytes(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
   insert_with_bytes!(wal);
 }
@@ -759,10 +765,12 @@ macro_rules! insert_with_builders {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_insert_with_builders(wal: &mut OrderWal<BoundedTable<Person, String>>) {
   insert_with_builders!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_insert_with_builders(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
   insert_with_builders!(wal);
 }

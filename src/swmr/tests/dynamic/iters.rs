@@ -136,10 +136,12 @@ macro_rules! iter_with_tombstone_mvcc {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_with_tombstone_mvcc(wal: &mut OrderWal<BoundedTable>) {
   iter_with_tombstone_mvcc!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_with_tombstone_mvcc(wal: &mut OrderWal<UnboundedTable>) {
   iter_with_tombstone_mvcc!(wal);
 }
@@ -181,10 +183,12 @@ macro_rules! iter_next {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_next(wal: &mut OrderWal<BoundedTable>) {
   iter_next!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_next(wal: &mut OrderWal<UnboundedTable>) {
   iter_next!(wal);
 }
@@ -226,10 +230,12 @@ macro_rules! iter_with_tombstone_next_by_entry {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_with_tombstone_next_by_entry(wal: &mut OrderWal<BoundedTable>) {
   iter_with_tombstone_next_by_entry!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_with_tombstone_next_by_entry(wal: &mut OrderWal<UnboundedTable>) {
   iter_with_tombstone_next_by_entry!(wal);
 }
@@ -279,10 +285,12 @@ macro_rules! iter_with_tombstone_next_by_with_tombstone_entry {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_with_tombstone_next_by_with_tombstone_entry(wal: &mut OrderWal<BoundedTable>) {
   iter_with_tombstone_next_by_with_tombstone_entry!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_with_tombstone_next_by_with_tombstone_entry(wal: &mut OrderWal<UnboundedTable>) {
   iter_with_tombstone_next_by_with_tombstone_entry!(wal);
 }
@@ -324,10 +332,12 @@ macro_rules! range_next {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_range_next(wal: &mut OrderWal<BoundedTable>) {
   range_next!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_range_next(wal: &mut OrderWal<UnboundedTable>) {
   range_next!(wal);
 }
@@ -364,10 +374,12 @@ macro_rules! iter_prev {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_prev(wal: &mut OrderWal<BoundedTable>) {
   iter_prev!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_prev(wal: &mut OrderWal<UnboundedTable>) {
   iter_prev!(wal);
 }
@@ -395,10 +407,12 @@ macro_rules! iter_with_tombstone_prev_by_entry {
   };
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_with_tombstone_prev_by_entry(wal: &mut OrderWal<BoundedTable>) {
   iter_with_tombstone_prev_by_entry!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_with_tombstone_prev_by_entry(wal: &mut OrderWal<UnboundedTable>) {
   iter_with_tombstone_prev_by_entry!(wal);
 }
@@ -447,10 +461,12 @@ macro_rules! iter_with_tombstone_prev_by_with_tombstone_entry {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_iter_with_tombstone_prev_by_with_tombstone_entry(wal: &mut OrderWal<BoundedTable>) {
   iter_with_tombstone_prev_by_with_tombstone_entry!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_iter_with_tombstone_prev_by_with_tombstone_entry(wal: &mut OrderWal<UnboundedTable>) {
   iter_with_tombstone_prev_by_with_tombstone_entry!(wal);
 }
@@ -496,10 +512,12 @@ macro_rules! range_prev {
   }};
 }
 
+#[cfg(feature = "bounded")]
 fn bounded_range_prev(wal: &mut OrderWal<BoundedTable>) {
   range_prev!(wal);
 }
 
+#[cfg(feature = "unbounded")]
 fn unbounded_range_prev(wal: &mut OrderWal<UnboundedTable>) {
   range_prev!(wal);
 }
