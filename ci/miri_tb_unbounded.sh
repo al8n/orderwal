@@ -27,6 +27,6 @@ cargo miri setup
 # Zmiri-ignore-leaks needed because of https://github.com/crossbeam-rs/crossbeam/issues/579
 # -Zmiri-strict-provenance (crossbeam-epoch is not compatible with this flag) 
 RUSTFLAGS="--cfg test_$CONFIG_FLAGS" \
-MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-symbolic-alignment-check -Zmiri-tree-borrows -Zmiri-ignore-leaks" \
+MIRIFLAGS="-Zmiri-strict-provenance=no -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check -Zmiri-tree-borrows -Zmiri-ignore-leaks" \
 cargo miri test --tests --target $TARGET --lib --no-default-features --features unbounded,std 2>&1 | ts -i '%.s  '
 
