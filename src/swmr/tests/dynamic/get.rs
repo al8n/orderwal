@@ -18,7 +18,7 @@ use crate::dynamic::BoundedTable;
 #[cfg(feature = "unbounded")]
 use crate::dynamic::UnboundedTable;
 
-use super::{Person, MB};
+use super::*;
 
 #[cfg(feature = "unbounded")]
 expand_unit_tests!("unbounded": OrderWal<UnboundedTable> [Default::default()]: UnboundedTable  {

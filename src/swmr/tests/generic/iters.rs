@@ -11,7 +11,7 @@ use crate::generic::BoundedTable;
 #[cfg(feature = "unbounded")]
 use crate::generic::UnboundedTable;
 
-use super::MB;
+use super::*;
 
 #[cfg(feature = "unbounded")]
 expand_unit_tests!("unbounded": OrderWal<UnboundedTable<str, str>> [Default::default()]: UnboundedTable<_, _> {
