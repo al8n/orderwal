@@ -1,84 +1,94 @@
-use crate::{
-  memtable::{BaseTable, Memtable, MemtableEntry, MultipleVersionMemtable, VersionedMemtableEntry},
-  sealed::{Constructable, WithVersion},
-};
-use dbutils::{checksum::Crc32, types::Type};
+use super::{reader::OrderWalReader, wal::OrderCore};
+use crate::{log::Log, memtable::Memtable};
+use dbutils::checksum::Crc32;
 use rarena_allocator::sync::Arena;
+use triomphe::Arc;
+
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use rarena_allocator::Allocator;
 
-use std::sync::Arc;
-
-use super::{reader::OrderWalReader, wal::OrderCore};
-
 /// A ordered write-ahead log implementation for concurrent thread environments.
-pub struct OrderWal<K: ?Sized, V: ?Sized, M, S = Crc32> {
-  pub(super) core: Arc<OrderCore<K, V, M, S>>,
+pub struct OrderWal<M, S = Crc32> {
+  pub(crate) core: Arc<OrderCore<M, S>>,
 }
 
-impl<K, V, M, S> core::fmt::Debug for OrderWal<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+impl<M, S> core::fmt::Debug for OrderWal<M, S> {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_tuple("OrderWal").field(&self.core).finish()
   }
 }
 
-unsafe impl<K: ?Sized, V: ?Sized, M: Send, S: Send> Send for OrderWal<K, V, M, S> {}
-unsafe impl<K: ?Sized, V: ?Sized, M: Send + Sync, S: Send + Sync> Sync for OrderWal<K, V, M, S> {}
+unsafe impl<M: Send, S: Send> Send for OrderWal<M, S> {}
+unsafe impl<M: Send + Sync, S: Send + Sync> Sync for OrderWal<M, S> {}
 
-impl<K: ?Sized, V: ?Sized, P, S> OrderWal<K, V, P, S> {
+impl<P, S> OrderWal<P, S> {
   #[inline]
-  pub(super) const fn construct(core: Arc<OrderCore<K, V, P, S>>) -> Self {
+  pub(super) const fn from_core(core: Arc<OrderCore<P, S>>) -> Self {
     Self { core }
   }
 }
 
-impl<K, V, M, S> Constructable for OrderWal<K, V, M, S>
+impl<M, S> Log for OrderWal<M, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static,
+  M: Memtable + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
-  type Reader = OrderWalReader<K, V, M, S>;
+  type Reader = OrderWalReader<M, S>;
 
   #[inline]
-  fn as_wal(&self) -> &Self::Wal {
-    &self.core
+  fn allocator<'a>(&'a self) -> &'a Self::Allocator
+  where
+    Self::Allocator: 'a,
+  {
+    &self.core.arena
   }
 
   #[inline]
-  fn from_core(core: Self::Wal) -> Self {
+  fn construct(
+    arena: Self::Allocator,
+    base: Self::Memtable,
+    opts: crate::Options,
+    checksumer: Self::Checksumer,
+  ) -> Self {
     Self {
-      core: Arc::new(core),
+      core: Arc::new(OrderCore::construct(arena, base, opts, checksumer)),
     }
+  }
+
+  #[inline]
+  fn options(&self) -> &crate::Options {
+    &self.core.opts
+  }
+
+  #[inline]
+  fn memtable(&self) -> &Self::Memtable {
+    &self.core.map
+  }
+
+  #[inline]
+  fn hasher(&self) -> &Self::Checksumer {
+    &self.core.cks
   }
 }
 
-impl<K, V, M, S> OrderWal<K, V, M, S>
+impl<M, S> OrderWal<M, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static,
+  M: Memtable + 'static,
 {
   /// Returns the path of the WAL if it is backed by a file.
   ///
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::OrderWal, Builder};
+  /// use orderwal::{generic::{OrderWal, BoundedTable}, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal<[u8], [u8]>>().unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal<BoundedTable<str, str>>>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```
@@ -86,36 +96,6 @@ where
   #[cfg_attr(docsrs, doc(cfg(all(feature = "std", not(target_family = "wasm")))))]
   #[inline]
   pub fn path_buf(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
-    self.as_wal().arena.path()
-  }
-}
-
-impl<K, V, M, S> crate::wal::base::Writer for OrderWal<K, V, M, S>
-where
-  K: ?Sized + Type + Ord + 'static,
-  V: ?Sized + Type + 'static,
-  M: Memtable<Key = K, Value = V> + 'static,
-  for<'a> M::Item<'a>: MemtableEntry<'a>,
-  S: 'static,
-{
-  #[inline]
-  fn reader(&self) -> Self::Reader {
-    OrderWalReader::new(self.core.clone())
-  }
-}
-
-impl<K, V, M, S> crate::wal::multiple_version::Writer for OrderWal<K, V, M, S>
-where
-  K: ?Sized + Type + Ord + 'static,
-  V: ?Sized + Type + 'static,
-  M: MultipleVersionMemtable<Key = K, Value = V> + 'static,
-  for<'a> M::Item<'a>: VersionedMemtableEntry<'a>,
-  for<'a> M::VersionedItem<'a>: WithVersion,
-  for<'a> M::Item<'a>: WithVersion,
-  S: 'static,
-{
-  #[inline]
-  fn reader(&self) -> Self::Reader {
-    OrderWalReader::new(self.core.clone())
+    self.core.arena.path()
   }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "orderwal"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 repository = "https://github.com/al8n/orderwal"
 homepage = "https://github.com/al8n/orderwal"
@@ -17,10 +17,13 @@ name = "foo"
 harness = false
 
 [features]
-default = ["memmap"]
-alloc = ["rarena-allocator/alloc", "skl/alloc", "dbutils/alloc"]
-std = ["rarena-allocator/default", "crossbeam-skiplist/default", "crossbeam-skiplist-mvcc/default", "bitflags/std", "dbutils/default", "among/default", "skl/std"]
-memmap = ["std", "rarena-allocator/memmap", "skl/memmap"]
+default = ["bounded", "unbounded", "memmap"]
+alloc = ["rarena-allocator/alloc", "skl?/alloc", "dbutils/alloc"]
+std = ["rarena-allocator/default", "crossbeam-skiplist-mvcc?/default", "either/default", "bitflags/std", "dbutils/default", "among/default", "skl?/std"]
+memmap = ["std", "rarena-allocator/memmap", "skl?/memmap"]
+
+bounded = ["skl", "alloc"]
+unbounded = ["crossbeam-skiplist-mvcc", "std"]
 
 xxhash3 = ["dbutils/xxhash3", "std"]
 xxhash64 = ["dbutils/xxhash64", "std"]
@@ -30,16 +33,20 @@ tracing = ["dep:tracing", "dbutils/tracing"]
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
 bitflags = { version = "2", default-features = false }
-dbutils = { version = "0.9", default-features = false, features = ["crc32fast"] }
+dbutils = { version = "0.12", default-features = false, features = ["crc32fast", "triomphe01"] }
+# dbutils = { version = "0.12", path = "../layer0/dbutils", default-features = false, features = ["crc32fast", "triomphe01"] }
 derive-where = "1"
+either = { version = "1", default-features = false }
 ref-cast = "1"
 rarena-allocator = { version = "0.4", default-features = false }
-crossbeam-skiplist = { version = "0.1", default-features = false, package = "crossbeam-skiplist-pr1132", optional = true }
-crossbeam-skiplist-mvcc = { version = "0.2", optional = true }
-skl = { version = "0.19", default-features = false, features = ["alloc"] }
+crossbeam-skiplist-mvcc = { version = "0.4", optional = true }
+skl = { version = "0.22", default-features = false, optional = true }
+# skl = { version = "0.22", optional = true, default-features = false, path = "../skl-rs" }
 paste = "1"
-
+zerocopy = { version = "0.8", features = ["derive"] }
 tracing = { version = "0.1", default-features = false, optional = true }
+triomphe = "0.1"
+
 
 [dev-dependencies]
 criterion = "0.5"
@@ -66,14 +73,14 @@ rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(all_orderwal_tests)',
-  'cfg(test_swmr_constructor)',
-  'cfg(test_swmr_insert)',
-  'cfg(test_swmr_iters)',
-  'cfg(test_swmr_get)',
-  'cfg(test_swmr_multiple_version_constructor)',
-  'cfg(test_swmr_multiple_version_insert)',
-  'cfg(test_swmr_multiple_version_iters)',
-  'cfg(test_swmr_multiple_version_get)',
+  'cfg(test_generic_constructor)',
+  'cfg(test_generic_insert)',
+  'cfg(test_generic_iters)',
+  'cfg(test_generic_get)',
+  'cfg(test_dynamic_constructor)',
+  'cfg(test_dynamic_insert)',
+  'cfg(test_dynamic_iters)',
+  'cfg(test_dynamic_get)',
 ] }
 
 [[example]]
@@ -82,11 +89,16 @@ path = "examples/zero_cost.rs"
 required-features = ["memmap"]
 
 [[example]]
-name = "multiple_version"
-path = "examples/multiple_version.rs"
+name = "basic"
+path = "examples/basic.rs"
 required-features = ["memmap"]
 
 [[example]]
 name = "generic_not_sized"
 path = "examples/generic_not_sized.rs"
+required-features = ["memmap"]
+
+[[example]]
+name = "descend"
+path = "examples/descend.rs"
 required-features = ["memmap"]

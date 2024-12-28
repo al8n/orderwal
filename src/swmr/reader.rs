@@ -1,65 +1,68 @@
-use std::sync::Arc;
-
+use super::{super::swmr::wal::OrderCore, writer::OrderWal};
+use crate::{log::Log, memtable::Memtable, Immutable};
 use rarena_allocator::sync::Arena;
-
-use crate::{
-  memtable::BaseTable,
-  sealed::{Constructable, Immutable},
-  swmr::wal::OrderCore,
-};
-
-use super::writer::OrderWal;
+use triomphe::Arc;
 
 /// An [`OrderWal`] reader.
-pub struct OrderWalReader<K: ?Sized, V: ?Sized, P, S>(OrderWal<K, V, P, S>);
+pub struct OrderWalReader<M, S>(pub(crate) OrderWal<M, S>);
 
-impl<K, V, M, S> core::fmt::Debug for OrderWalReader<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+impl<M, S> core::fmt::Debug for OrderWalReader<M, S> {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_tuple("OrderWalReader").field(&self.0.core).finish()
   }
 }
 
-impl<K: ?Sized, V: ?Sized, P, S> Immutable for OrderWalReader<K, V, P, S> {}
+impl<P, S> Immutable for OrderWalReader<P, S> {}
 
-impl<K, V, P, S> OrderWalReader<K, V, P, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+impl<P, S> OrderWalReader<P, S> {
   /// Creates a new read-only WAL reader.
   #[inline]
-  pub(super) fn new(wal: Arc<OrderCore<K, V, P, S>>) -> Self {
-    Self(OrderWal::construct(wal))
+  pub(crate) fn from_core(wal: Arc<OrderCore<P, S>>) -> Self {
+    Self(OrderWal::from_core(wal))
   }
 }
 
-impl<K, V, M, S> Constructable for OrderWalReader<K, V, M, S>
+impl<M, S> Log for OrderWalReader<M, S>
 where
-  K: ?Sized + 'static,
-  V: ?Sized + 'static,
   S: 'static,
-  M: BaseTable<Key = K, Value = V> + 'static,
+  M: Memtable + 'static,
 {
   type Allocator = Arena;
-  type Wal = OrderCore<K, V, Self::Memtable, Self::Checksumer>;
   type Memtable = M;
   type Checksumer = S;
-  type Reader = OrderWalReader<K, V, M, S>;
+  type Reader = OrderWalReader<M, S>;
 
   #[inline]
-  fn as_wal(&self) -> &Self::Wal {
-    self.0.as_wal()
+  fn allocator<'a>(&'a self) -> &'a Self::Allocator
+  where
+    Self::Allocator: 'a,
+  {
+    self.0.allocator()
   }
 
   #[inline]
-  fn from_core(core: Self::Wal) -> Self {
-    Self(OrderWal {
-      core: Arc::new(core),
-    })
+  fn construct(
+    arena: Self::Allocator,
+    base: Self::Memtable,
+    opts: crate::Options,
+    checksumer: Self::Checksumer,
+  ) -> Self {
+    Self(OrderWal::construct(arena, base, opts, checksumer))
+  }
+
+  #[inline]
+  fn options(&self) -> &crate::Options {
+    self.0.options()
+  }
+
+  #[inline]
+  fn memtable(&self) -> &Self::Memtable {
+    self.0.memtable()
+  }
+
+  #[inline]
+  fn hasher(&self) -> &Self::Checksumer {
+    self.0.hasher()
   }
 }

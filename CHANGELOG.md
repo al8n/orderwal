@@ -1,4 +1,11 @@
-# Rleases
+# Releases
+
+## 0.6.0 (Dec 28th, 2024)
+
+- Refactor the project to support both dynamic key-value types and generic key-value types
+- Allow users to implement their own memtable
+- Support `range_remove`, `range_set` and `range_unset` operations
+- Make the project comfortable with `-Z miri-strict-provenance`
 
 ## 0.5.0 (Oct 27th, 2024)
 
@@ -8,8 +15,6 @@
 - Support `no-std` environment
 
 ## 0.4.0 (Sep 30th, 2024)
-
-FEATURES
 
 - Support `K: ?Sized` and `V: ?Sized` for `OrderWal`.
 - Use `flush_header_and_range` instead of `flush_range` when insertion.

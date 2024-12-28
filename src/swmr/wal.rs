@@ -1,26 +1,14 @@
-use core::marker::PhantomData;
-
+use crate::{memtable::Memtable, Options};
 use rarena_allocator::sync::Arena;
 
-use crate::{memtable::BaseTable, sealed::Wal, Options};
-
-pub struct OrderCore<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+pub struct OrderCore<M, S> {
   pub(super) arena: Arena,
   pub(super) map: M,
   pub(super) opts: Options,
   pub(super) cks: S,
-  pub(super) _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-impl<K, V, M, S> core::fmt::Debug for OrderCore<K, V, M, S>
-where
-  K: ?Sized,
-  V: ?Sized,
-{
+impl<M, S> core::fmt::Debug for OrderCore<M, S> {
   #[inline]
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("OrderCore")
@@ -30,48 +18,17 @@ where
   }
 }
 
-impl<K, V, M, S> Wal<S> for OrderCore<K, V, M, S>
+impl<M, S> OrderCore<M, S>
 where
-  K: ?Sized,
-  V: ?Sized,
-  M: BaseTable<Key = K, Value = V>,
+  M: Memtable,
 {
-  type Allocator = Arena;
-  type Memtable = M;
-
   #[inline]
-  fn memtable(&self) -> &Self::Memtable {
-    &self.map
-  }
-
-  #[inline]
-  fn memtable_mut(&mut self) -> &mut Self::Memtable {
-    &mut self.map
-  }
-
-  #[inline]
-  fn construct(arena: Self::Allocator, set: Self::Memtable, opts: Options, checksumer: S) -> Self {
+  pub fn construct(arena: Arena, set: M, opts: Options, checksumer: S) -> Self {
     Self {
       arena,
       map: set,
       opts,
       cks: checksumer,
-      _m: PhantomData,
     }
-  }
-
-  #[inline]
-  fn options(&self) -> &Options {
-    &self.opts
-  }
-
-  #[inline]
-  fn allocator(&self) -> &Self::Allocator {
-    &self.arena
-  }
-
-  #[inline]
-  fn hasher(&self) -> &S {
-    &self.cks
   }
 }

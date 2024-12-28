@@ -1,181 +1,250 @@
+use core::{marker::PhantomData, ops::Bound};
+
+use either::Either;
+
 use crate::{
-  memtable::BaseTable,
-  wal::{KeyPointer, ValuePointer},
+  memtable::Memtable,
+  types::{EncodedEntryMeta, EncodedRangeEntryMeta, EntryFlags, RecordPointer},
 };
 
-use super::{
-  sealed::{WithVersion, WithoutVersion},
-  types::{BufWriter, EncodedEntryMeta, EntryFlags},
-};
+pub(crate) enum Data<K, V> {
+  InsertPoint {
+    key: K,
+    value: V,
+    meta: EncodedEntryMeta,
+  },
+  RemovePoint {
+    key: K,
+    meta: EncodedEntryMeta,
+  },
+  RangeRemove {
+    start_bound: Bound<K>,
+    end_bound: Bound<K>,
+    meta: EncodedRangeEntryMeta,
+  },
+  RangeUnset {
+    start_bound: Bound<K>,
+    end_bound: Bound<K>,
+    meta: EncodedRangeEntryMeta,
+  },
+  RangeSet {
+    start_bound: Bound<K>,
+    end_bound: Bound<K>,
+    value: V,
+    meta: EncodedRangeEntryMeta,
+  },
+}
 
 /// An entry can be inserted into the WALs through [`Batch`].
-pub struct BatchEntry<K, V, M: BaseTable> {
-  pub(crate) key: K,
-  pub(crate) value: Option<V>,
+pub struct BatchEntry<K, V, M: Memtable> {
+  pub(crate) data: Data<K, V>,
   pub(crate) flag: EntryFlags,
-  pub(crate) meta: EncodedEntryMeta,
-  pointers: Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)>,
-  pub(crate) version: Option<u64>,
+  pointers: Option<RecordPointer>,
+  pub(crate) version: u64,
+  _m: PhantomData<M>,
 }
 
 impl<K, V, M> BatchEntry<K, V, M>
 where
-  M: BaseTable,
-  for<'a> M::Item<'a>: WithoutVersion,
-{
-  /// Creates a new entry.
-  #[inline]
-  pub const fn new(key: K, value: V) -> Self {
-    Self {
-      key,
-      value: Some(value),
-      flag: EntryFlags::empty(),
-      meta: EncodedEntryMeta::batch_zero(false),
-      pointers: None,
-      version: None,
-    }
-  }
-
-  /// Creates a tombstone entry.
-  #[inline]
-  pub const fn tombstone(key: K) -> Self {
-    Self {
-      key,
-      value: None,
-      flag: EntryFlags::REMOVED,
-      meta: EncodedEntryMeta::batch_zero(false),
-      pointers: None,
-      version: None,
-    }
-  }
-}
-
-impl<K, V, M> BatchEntry<K, V, M>
-where
-  M: BaseTable,
-  for<'a> M::Item<'a>: WithVersion,
+  M: Memtable,
 {
   /// Creates a new entry with version.
   #[inline]
-  pub fn with_version(version: u64, key: K, value: V) -> Self {
+  pub fn insert(version: u64, key: K, value: V) -> Self {
     Self {
-      key,
-      value: Some(value),
-      flag: EntryFlags::empty() | EntryFlags::VERSIONED,
-      meta: EncodedEntryMeta::batch_zero(true),
+      data: Data::InsertPoint {
+        key,
+        value,
+        meta: EncodedEntryMeta::placeholder(),
+      },
+      flag: EntryFlags::empty(),
       pointers: None,
-      version: Some(version),
+      version,
+      _m: PhantomData,
     }
   }
 
   /// Creates a tombstone entry with version.
   #[inline]
-  pub fn tombstone_with_version(version: u64, key: K) -> Self {
+  pub fn remove(version: u64, key: K) -> Self {
     Self {
-      key,
-      value: None,
-      flag: EntryFlags::REMOVED | EntryFlags::VERSIONED,
-      meta: EncodedEntryMeta::batch_zero(true),
+      data: Data::RemovePoint {
+        key,
+        meta: EncodedEntryMeta::placeholder(),
+      },
+      flag: EntryFlags::REMOVED,
       pointers: None,
-      version: Some(version),
+      version,
+      _m: PhantomData,
+    }
+  }
+
+  /// Creates a range remove entry with version.
+  #[inline]
+  pub fn range_remove(version: u64, start_bound: Bound<K>, end_bound: Bound<K>) -> Self {
+    Self {
+      data: Data::RangeRemove {
+        start_bound,
+        end_bound,
+        meta: EncodedRangeEntryMeta::placeholder(),
+      },
+      flag: EntryFlags::RANGE_DELETION,
+      pointers: None,
+      version,
+      _m: PhantomData,
+    }
+  }
+
+  /// Creates a range unset entry with version.
+  #[inline]
+  pub fn range_unset(version: u64, start_bound: Bound<K>, end_bound: Bound<K>) -> Self {
+    Self {
+      data: Data::RangeUnset {
+        start_bound,
+        end_bound,
+        meta: EncodedRangeEntryMeta::placeholder(),
+      },
+      flag: EntryFlags::RANGE_UNSET,
+      pointers: None,
+      version,
+      _m: PhantomData,
+    }
+  }
+
+  /// Creates a range set entry with version.
+  #[inline]
+  pub fn range_set(version: u64, start_bound: Bound<K>, end_bound: Bound<K>, value: V) -> Self {
+    Self {
+      data: Data::RangeSet {
+        start_bound,
+        end_bound,
+        value,
+        meta: EncodedRangeEntryMeta::placeholder(),
+      },
+      flag: EntryFlags::RANGE_SET,
+      pointers: None,
+      version,
+      _m: PhantomData,
     }
   }
 
   /// Returns the version of the entry.
   #[inline]
   pub const fn version(&self) -> u64 {
-    match self.version {
-      Some(version) => version,
-      None => unreachable!(),
-    }
+    self.version
   }
 
   /// Set the version of the entry.
   #[inline]
   pub fn set_version(&mut self, version: u64) {
-    self.version = Some(version);
+    self.version = version;
   }
 }
 
 impl<K, V, M> BatchEntry<K, V, M>
 where
-  M: BaseTable,
+  M: Memtable,
 {
-  /// Returns the length of the key.
-  #[inline]
-  pub fn key_len(&self) -> usize
-  where
-    K: BufWriter,
-  {
-    self.key.encoded_len()
-  }
-
-  /// Returns the length of the value.
-  #[inline]
-  pub fn value_len(&self) -> usize
-  where
-    V: BufWriter,
-  {
-    self.value.as_ref().map_or(0, |v| v.encoded_len())
-  }
-
   /// Returns the key.
   #[inline]
   pub const fn key(&self) -> &K {
-    &self.key
+    match &self.data {
+      Data::InsertPoint { key, .. } | Data::RemovePoint { key, .. } => key,
+      Data::RangeRemove { .. } | Data::RangeUnset { .. } | Data::RangeSet { .. } => {
+        panic!("try to get key from range entry")
+      }
+    }
+  }
+
+  /// Returns the range key.
+  #[inline]
+  pub fn bounds(&self) -> (Bound<&K>, Bound<&K>) {
+    match &self.data {
+      Data::InsertPoint { .. } | Data::RemovePoint { .. } => {
+        panic!("try to get range key from point entry")
+      }
+      Data::RangeRemove {
+        start_bound,
+        end_bound,
+        ..
+      }
+      | Data::RangeUnset {
+        start_bound,
+        end_bound,
+        ..
+      }
+      | Data::RangeSet {
+        start_bound,
+        end_bound,
+        ..
+      } => (start_bound.as_ref(), end_bound.as_ref()),
+    }
   }
 
   /// Returns the value.
   #[inline]
   pub const fn value(&self) -> Option<&V> {
-    self.value.as_ref()
+    match &self.data {
+      Data::InsertPoint { value, .. } => Some(value),
+      Data::RemovePoint { .. } => None,
+      Data::RangeRemove { .. } | Data::RangeUnset { .. } => None,
+      Data::RangeSet { value, .. } => Some(value),
+    }
   }
 
   /// Consumes the entry and returns the key and value.
   #[inline]
-  pub fn into_components(self) -> (K, Option<V>) {
-    (self.key, self.value)
+  pub fn into_components(self) -> (Either<K, (Bound<K>, Bound<K>)>, Option<V>) {
+    match self.data {
+      Data::InsertPoint { key, value, .. } => (Either::Left(key), Some(value)),
+      Data::RemovePoint { key, .. } => (Either::Left(key), None),
+      Data::RangeRemove {
+        start_bound,
+        end_bound,
+        ..
+      }
+      | Data::RangeUnset {
+        start_bound,
+        end_bound,
+        ..
+      } => (Either::Right((start_bound, end_bound)), None),
+      Data::RangeSet {
+        start_bound,
+        end_bound,
+        value,
+        ..
+      } => (Either::Right((start_bound, end_bound)), Some(value)),
+    }
   }
 
   #[inline]
-  pub(crate) fn encoded_key_len(&self) -> usize
-  where
-    K: BufWriter,
-    V: BufWriter,
-  {
-    self.key.encoded_len()
-  }
-
-  #[inline]
-  pub(crate) const fn internal_version(&self) -> Option<u64> {
+  pub(crate) const fn internal_version(&self) -> u64 {
     self.version
   }
 
   #[inline]
-  pub(crate) fn take_pointer(
-    &mut self,
-  ) -> Option<(KeyPointer<M::Key>, Option<ValuePointer<M::Value>>)> {
+  pub(crate) fn take_pointer(&mut self) -> Option<RecordPointer> {
     self.pointers.take()
   }
 
   #[inline]
-  pub(crate) fn set_pointer(&mut self, kp: KeyPointer<M::Key>, vp: Option<ValuePointer<M::Value>>) {
-    self.pointers = Some((kp, vp));
+  pub(crate) fn set_pointer(&mut self, p: RecordPointer) {
+    self.pointers = Some(p);
   }
 
   #[inline]
-  pub(crate) fn set_encoded_meta(&mut self, meta: EncodedEntryMeta) {
-    self.meta = meta;
-  }
-
-  #[inline]
-  pub(crate) fn encoded_meta(&self) -> &EncodedEntryMeta {
-    &self.meta
+  pub(crate) fn encoded_meta(&self) -> Either<&EncodedEntryMeta, &EncodedRangeEntryMeta> {
+    match &self.data {
+      Data::InsertPoint { meta, .. } | Data::RemovePoint { meta, .. } => Either::Left(meta),
+      Data::RangeRemove { meta, .. }
+      | Data::RangeUnset { meta, .. }
+      | Data::RangeSet { meta, .. } => Either::Right(meta),
+    }
   }
 }
 
 /// A trait for batch insertions.
-pub trait Batch<M: BaseTable> {
+pub trait Batch<M: Memtable> {
   /// Any type that can be converted into a key.
   type Key;
   /// Any type that can be converted into a value.
@@ -200,7 +269,7 @@ pub trait Batch<M: BaseTable> {
 
 impl<K, V, M, T> Batch<M> for T
 where
-  M: BaseTable,
+  M: Memtable,
   for<'a> &'a mut T: IntoIterator<Item = &'a mut BatchEntry<K, V, M>>,
 {
   type Key = K;

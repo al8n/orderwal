@@ -17,6 +17,8 @@ on:
       - 'LICENSE-*'
       - '**.md'
       - '**.txt'
+  workflow_dispatch:
+  schedule: [cron: "0 1 */7 * *"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -85,6 +87,8 @@ jobs:
           - wasm32-unknown-unknown
           - wasm32-unknown-emscripten
           - wasm32-wasip1
+          - wasm32-wasip1-threads
+          - wasm32-wasip2
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -103,13 +107,7 @@ jobs:
       - name: cargo build --target ${{ matrix.target }}
         run: |
           rustup target add ${{ matrix.target }}
-          cargo build --target ${{ matrix.target }}
-        if: matrix.target != 'wasm32-unknown-unknown' && matrix.target != 'wasm32-unknown-emscripten' && matrix.target != 'wasm32-wasip1'
-      - name: cargo build --target ${{ matrix.target }}
-        run: |
-          rustup target add ${{ matrix.target }}
-          cargo build --target ${{ matrix.target }} --no-default-features --features alloc
-        if: matrix.target == 'wasm32-unknown-unknown' || matrix.target == 'wasm32-unknown-emscripten' || matrix.target == 'wasm32-wasip1'
+          cargo build --target ${{ matrix.target }} --no-default-features --features bounded,unbounded,std
 
   build:
     name: build
@@ -176,13 +174,13 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test (Unix)
-      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --no-default-features --features alloc
+      run: RUSTFLAGS="--cfg all_orderwal_tests" cargo test --no-default-features --features bounded --lib
       if: matrix.os != 'windows-latest'
     - name: Run test (Windows)
       shell: pwsh
       run: |
         $env:RUSTFLAGS="--cfg all_orderwal_tests"
-        cargo test --no-default-features --features alloc
+        cargo test --no-default-features --features bounded --lib
       if: matrix.os == 'windows-latest'
  
   test:
@@ -258,8 +256,8 @@ jobs:
         run: ci/sanitizer_generic.sh
         if: matrix.os != 'ubuntu-latest'
 
-  miri-tb:
-    name: miri-tb-${{ matrix.target }}-${{ matrix.cfg }}
+  miri-tb-bounded:
+    name: miri-tb-bounded-${{ matrix.target }}-${{ matrix.cfg }}
     strategy:
       matrix:
         os:
@@ -272,14 +270,14 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         cfg:
-          - swmr_insert
-          - swmr_iters
-          - swmr_get
-          - swmr_constructor
-          - swmr_multiple_version_insert
-          - swmr_multiple_version_iters
-          - swmr_multiple_version_get
-          - swmr_multiple_version_constructor
+          - generic_insert
+          - generic_iters
+          - generic_get
+          - generic_constructor
+          - dynamic_insert
+          - dynamic_iters
+          - dynamic_get
+          - dynamic_constructor
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -309,15 +307,15 @@ jobs:
         run: cargo install cargo-hack
       - name: Miri
         run: |
-          bash ci/miri_tb.sh ${{ matrix.target }} ${{ matrix.cfg }}
+          bash ci/miri_tb_bounded.sh ${{ matrix.target }} ${{ matrix.cfg }} 
 
-  # miri-sb:
-  #   name: miri-sb-${{ matrix.target }}-${{ matrix.cfg }}
+  # miri-tb-unbounded:
+  #   name: miri-tb-unbounded-${{ matrix.target }}-${{ matrix.cfg }}
   #   strategy:
   #     matrix:
   #       os:
   #         - ubuntu-latest
-  #         - macos-latest
+  #         # - macos-latest
   #       target:
   #         - x86_64-unknown-linux-gnu
   #         - i686-unknown-linux-gnu
@@ -325,30 +323,26 @@ jobs:
   #         - x86_64-apple-darwin
   #         - aarch64-apple-darwin
   #       cfg:
-  #         - unsync_insert
-  #         - unsync_iters
-  #         - unsync_get
-  #         - unsync_constructor
-  #         - swmr_insert
-  #         - swmr_iters
-  #         - swmr_get
-  #         - swmr_constructor
-  #         - swmr_insert
-  #         - swmr_iters
-  #         - swmr_get
-  #         - swmr_constructor
+  #         - generic_insert
+  #         - generic_iters
+  #         - generic_get
+  #         - generic_constructor
+  #         - dynamic_insert
+  #         - dynamic_iters
+  #         - dynamic_get
+  #         - dynamic_constructor
   #       # Exclude invalid combinations
   #       exclude:
   #         - os: ubuntu-latest
   #           target: x86_64-apple-darwin
   #         - os: ubuntu-latest
   #           target: aarch64-apple-darwin
-  #         - os: macos-latest
-  #           target: x86_64-unknown-linux-gnu
-  #         - os: macos-latest
-  #           target: i686-unknown-linux-gnu
-  #         - os: macos-latest
-  #           target: powerpc64-unknown-linux-gnu
+  #         # - os: macos-latest
+  #         #   target: x86_64-unknown-linux-gnu
+  #         # - os: macos-latest
+  #         #   target: i686-unknown-linux-gnu
+  #         # - os: macos-latest
+  #         #   target: powerpc64-unknown-linux-gnu
   #   runs-on: ${{ matrix.os }}
   #   steps:
   #     - uses: actions/checkout@v4
@@ -366,7 +360,7 @@ jobs:
   #       run: cargo install cargo-hack
   #     - name: Miri
   #       run: |
-  #         bash ci/miri_sb.sh ${{ matrix.target }} ${{ matrix.cfg }}
+  #         bash ci/miri_tb_unbounded.sh ${{ matrix.target }} ${{ matrix.cfg }}
 
   # valgrind
   valgrind:

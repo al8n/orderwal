@@ -1,0 +1,1035 @@
+use core::{
+  borrow::Borrow,
+  ops::{Bound, RangeBounds},
+};
+
+use among::Among;
+use dbutils::{
+  buffer::VacantBuffer,
+  checksum::{BuildChecksumer, Crc32},
+  state::{Active, MaybeTombstone},
+};
+use either::Either;
+use rarena_allocator::Allocator;
+
+#[cfg(feature = "bounded")]
+use crate::memtable;
+use crate::{
+  batch::Batch,
+  error::Error,
+  log::Log,
+  memtable::{Memtable, MutableMemtable},
+  swmr,
+  types::{BufWriter, KeyBuilder, Remove, Update, ValueBuilder},
+  HEADER_SIZE,
+};
+
+pub use crate::memtable::dynamic::DynamicMemtable;
+pub use dbutils::equivalentor::{Ascend, Descend};
+
+#[cfg(feature = "bounded")]
+use crate::memtable::dynamic::bounded;
+
+#[cfg(feature = "unbounded")]
+use crate::memtable::dynamic::unbounded;
+
+/// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
+pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
+
+/// The read-only view for the ordered write-ahead log [`OrderWal`].
+pub type OrderWalReader<M, S = Crc32> = swmr::OrderWalReader<M, S>;
+
+/// The memory table based on bounded ARENA-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+#[cfg(feature = "skl")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
+pub type BoundedTable<C = Ascend> = bounded::Table<C>;
+
+/// The options for the [`BoundedTable`].
+#[cfg(feature = "skl")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
+pub type BoundedTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
+
+/// The memory table based on unbounded linked-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+#[cfg(feature = "crossbeam-skiplist-mvcc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
+pub type UnboundedTable<C = Ascend> = unbounded::Table<C>;
+
+/// An abstract layer for the immutable write-ahead log.
+pub trait Reader: Log {
+  /// Returns the reserved space in the WAL.
+  ///
+  /// ## Safety
+  /// - The writer must ensure that the returned slice is not modified.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  unsafe fn reserved_slice(&self) -> &[u8] {
+    &self.allocator().reserved_slice()[HEADER_SIZE..]
+  }
+
+  /// Returns the path of the WAL if it is backed by a file.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  fn path(&self) -> Option<&<<Self as Log>::Allocator as Allocator>::Path> {
+    self.allocator().path()
+  }
+
+  /// Returns the maximum key size allowed in the WAL.
+  #[inline]
+  fn maximum_key_size(&self) -> u32 {
+    self.options().maximum_key_size()
+  }
+
+  /// Returns the maximum value size allowed in the WAL.
+  #[inline]
+  fn maximum_value_size(&self) -> u32 {
+    self.options().maximum_value_size()
+  }
+
+  /// Returns the maximum version in the WAL.
+  #[inline]
+  fn maximum_version(&self) -> u64
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().maximum_version()
+  }
+
+  /// Returns the minimum version in the WAL.
+  #[inline]
+  fn minimum_version(&self) -> u64
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().minimum_version()
+  }
+
+  /// Returns `true` if the WAL may contain an entry whose version is less or equal to the given version.
+  #[inline]
+  fn may_contain_version(&self, version: u64) -> bool
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().may_contain_version(version)
+  }
+
+  /// Returns the number of entries in the WAL.
+  #[inline]
+  fn len(&self) -> usize
+  where
+    Self::Memtable: Memtable,
+  {
+    self.memtable().len()
+  }
+
+  /// Returns `true` if the WAL is empty.
+  #[inline]
+  fn is_empty(&self) -> bool
+  where
+    Self::Memtable: Memtable,
+  {
+    self.memtable().is_empty()
+  }
+
+  /// Returns the remaining capacity of the WAL.
+  #[inline]
+  fn remaining(&self) -> u32 {
+    self.allocator().remaining() as u32
+  }
+
+  /// Returns the capacity of the WAL.
+  #[inline]
+  fn capacity(&self) -> u32 {
+    self.allocator().capacity() as u32
+  }
+
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  fn iter(&self, version: u64) -> <Self::Memtable as DynamicMemtable>::Iterator<'_, Active>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter(version)
+  }
+
+  /// Returns an iterator over a subset of entries in the WAL.
+  #[inline]
+  fn range<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::Range<'_, Active, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range(version, range)
+  }
+
+  /// Returns an iterator over the entries in the WAL.
+  #[inline]
+  fn iter_all(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::Iterator<'_, MaybeTombstone>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter_all(version)
+  }
+
+  /// Returns an iterator over a subset of entries in the WAL.
+  #[inline]
+  fn range_all<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::Range<'_, MaybeTombstone, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_all(version, range)
+  }
+
+  /// Returns an iterator over point entries in the memtable.
+  #[inline]
+  fn iter_points(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, Active>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter_points(version)
+  }
+
+  /// Returns an iterator over all(including all versions and tombstones) the point entries in the memtable.
+  #[inline]
+  fn iter_all_points(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::PointsIterator<'_, MaybeTombstone>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter_all_points(version)
+  }
+
+  /// Returns an iterator over a subset of point entries in the memtable.
+  #[inline]
+  fn range_points<Q, R>(
+    &self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::RangePoints<'_, Active, Q, R>
+  where
+    R: RangeBounds<Q>,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_points(version, range)
+  }
+
+  /// Returns an iterator over all(including all versions and tombstones) the point entries in a subset of the memtable.
+  #[inline]
+  fn range_all_points<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::RangePoints<'a, MaybeTombstone, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_all_points(version, range)
+  }
+
+  /// Returns an iterator over range deletions entries in the memtable.
+  #[inline]
+  fn iter_bulk_removes(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsIterator<'_, Active, Remove>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter_bulk_removes(version)
+  }
+
+  /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in the memtable.
+  #[inline]
+  fn iter_all_bulk_removes(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsIterator<'_, MaybeTombstone, Remove>
+  where
+    Self::Memtable: DynamicMemtable + 'static,
+  {
+    self.memtable().iter_all_bulk_removes(version)
+  }
+
+  /// Returns an iterator over a subset of range deletions entries in the memtable.
+  #[inline]
+  fn range_bulk_removes<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsRange<'a, Active, Remove, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_bulk_removes(version, range)
+  }
+
+  /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in a subset of the memtable.
+  #[inline]
+  fn range_all_bulk_removes<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsRange<'a, MaybeTombstone, Remove, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_all_bulk_removes(version, range)
+  }
+
+  /// Returns an iterator over range updates entries in the memtable.
+  #[inline]
+  fn iter_bulk_updates(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsIterator<'_, Active, Update>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().iter_bulk_updates(version)
+  }
+
+  /// Returns an iterator over all(including all versions and tombstones) the range updates entries in the memtable.
+  #[inline]
+  fn iter_all_bulk_updates(
+    &self,
+    version: u64,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsIterator<'_, MaybeTombstone, Update>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().iter_all_bulk_updates(version)
+  }
+
+  /// Returns an iterator over a subset of range updates entries in the memtable.
+  #[inline]
+  fn range_bulk_updates<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsRange<'a, Active, Update, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_bulk_updates(version, range)
+  }
+
+  /// Returns an iterator over all(including all versions and tombstones) the range updates entries in a subset of the memtable.
+  #[inline]
+  fn range_all_bulk_updates<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> <Self::Memtable as DynamicMemtable>::BulkOperationsRange<'a, MaybeTombstone, Update, Q, R>
+  where
+    R: RangeBounds<Q> + 'a,
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().range_all_bulk_updates(version, range)
+  }
+
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  #[inline]
+  fn first(&self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, Active>>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().first(version)
+  }
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  #[inline]
+  fn last(&self, version: u64) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, Active>>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().last(version)
+  }
+
+  /// Returns the first key-value pair in the map. The key in this pair is the minimum key in the wal.
+  #[inline]
+  fn first_with_tombstone(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, MaybeTombstone>>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().first_with_tombstone(version)
+  }
+
+  /// Returns the last key-value pair in the map. The key in this pair is the maximum key in the wal.
+  #[inline]
+  fn last_with_tombstone(
+    &self,
+    version: u64,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'_, MaybeTombstone>>
+  where
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().last_with_tombstone(version)
+  }
+
+  /// Returns `true` if the key exists in the WAL.
+  #[inline]
+  fn contains_key<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().contains(version, key)
+  }
+
+  /// Gets the value associated with the key.
+  #[inline]
+  fn get<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, Active>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().get(version, key)
+  }
+
+  /// Returns `true` if the key exists in the WAL.
+  #[inline]
+  fn contains_key_with_tombstone<Q>(&self, version: u64, key: &Q) -> bool
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().contains_with_tombsone(version, key)
+  }
+
+  /// Gets the value associated with the key.
+  #[inline]
+  fn get_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    key: &Q,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().get_with_tombstone(version, key)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn upper_bound<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, Active>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().upper_bound(version, bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn lower_bound<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, Active>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().lower_bound(version, bound)
+  }
+
+  /// Returns a value associated to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn upper_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().upper_bound_with_tombstone(version, bound)
+  }
+
+  /// Returns a value associated to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn lower_bound_with_tombstone<'a, Q>(
+    &'a self,
+    version: u64,
+    bound: Bound<&'a Q>,
+  ) -> Option<<Self::Memtable as DynamicMemtable>::Entry<'a, MaybeTombstone>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    Self::Memtable: DynamicMemtable,
+  {
+    self.memtable().lower_bound_with_tombstone(version, bound)
+  }
+}
+
+impl<T> Reader for T
+where
+  T: Log,
+  T::Memtable: DynamicMemtable,
+{
+}
+
+/// An abstract layer for the write-ahead log.
+pub trait Writer: Reader
+where
+  Self::Reader: Reader<Memtable = Self::Memtable>,
+{
+  /// Returns `true` if this WAL instance is read-only.
+  #[inline]
+  fn read_only(&self) -> bool {
+    self.allocator().read_only()
+  }
+
+  /// Returns the mutable reference to the reserved slice.
+  ///
+  /// ## Safety
+  /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
+  /// - This method is not thread-safe, so be careful when using it.
+  #[inline]
+  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
+    &mut self.allocator().reserved_slice_mut()[HEADER_SIZE..]
+  }
+
+  /// Flushes the to disk.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  fn flush(&self) -> Result<(), Error<Self::Memtable>> {
+    self.allocator().flush().map_err(Into::into)
+  }
+
+  /// Flushes the to disk.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  fn flush_async(&self) -> Result<(), Error<Self::Memtable>> {
+    self.allocator().flush_async().map_err(Into::into)
+  }
+
+  /// Returns the read-only view for the WAL.
+  fn reader(&self) -> Self::Reader;
+
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the key in place.
+  ///
+  /// See also [`insert_with_value_builder`](Writer::insert_with_value_builder) and [`insert_with_builders`](Writer::insert_with_builders).
+  #[inline]
+  fn insert_with_key_builder<E>(
+    &mut self,
+    version: u64,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
+    value: &[u8],
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::insert::<_, &[u8]>(self, version, kb, value).map_err(Among::into_left_right)
+  }
+
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the value in place.
+  ///
+  /// See also [`insert_with_key_builder`](Writer::insert_with_key_builder) and [`insert_with_builders`](Writer::insert_with_builders).
+  #[inline]
+  fn insert_with_value_builder<E>(
+    &mut self,
+    version: u64,
+    key: &[u8],
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::insert::<&[u8], _>(self, version, key, vb).map_err(Among::into_middle_right)
+  }
+
+  /// Inserts a key-value pair into the WAL. This method
+  /// allows the caller to build the key and value in place.
+  #[inline]
+  fn insert_with_builders<KE, VE>(
+    &mut self,
+    version: u64,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
+    vb: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, VE>>,
+  ) -> Result<(), Among<KE, VE, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::insert(self, version, kb, vb)
+  }
+
+  /// Inserts a key-value pair into the WAL.
+  #[inline]
+  fn insert(&mut self, version: u64, key: &[u8], value: &[u8]) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::insert(self, version, key, value).map_err(Among::unwrap_right)
+  }
+
+  /// Removes a key-value pair from the WAL. This method
+  /// allows the caller to build the key in place.
+  #[inline]
+  fn remove_with_builder<KE>(
+    &mut self,
+    version: u64,
+    kb: KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, KE>>,
+  ) -> Result<(), Either<KE, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::remove(self, version, kb)
+  }
+
+  /// Removes a key-value pair from the WAL.
+  #[inline]
+  fn remove(&mut self, version: u64, key: &[u8]) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::remove(self, version, key).map_err(Either::unwrap_right)
+  }
+
+  /// Mark all keys in the range as removed.
+  ///
+  /// This is not a contra operation to [`range_set`](Writer::range_set).
+  /// See also [`range_set`](Writer::range_set) and [`range_set`](Writer::range_unset).
+  #[inline]
+  fn range_remove(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound).map_err(Among::unwrap_right)
+  }
+
+  /// Mark all keys in the range as removed, which allows the caller to build the start bound in place.
+  ///
+  /// See [`range_remove`](Writer::range_remove).
+  #[inline]
+  fn range_remove_with_start_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Mark all keys in the range as removed, which allows the caller to build the end bound in place.
+  ///
+  /// See [`range_remove`](Writer::range_remove).
+  #[inline]
+  fn range_remove_with_end_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(_) => unreachable!(),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Mark all keys in the range as removed, which allows the caller to build both bounds in place.
+  ///
+  /// See [`range_remove`](Writer::range_remove).
+  #[inline]
+  fn range_remove_with_builders<S, E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_remove(self, version, start_bound, end_bound)
+  }
+
+  /// Set all keys in the range to the `value`.
+  #[inline]
+  fn range_set(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+    value: &[u8],
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(Among::unwrap_right)
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the start bound in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_start_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    end_bound: Bound<&[u8]>,
+    value: &[u8],
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e.unwrap_left()),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the end bound in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_end_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: &[u8],
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e.unwrap_right()),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_value_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(_) => unreachable!(),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the start bound key and value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_start_bound_builder_and_value_builder<S, V>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<&[u8]>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, V>>,
+  ) -> Result<(), Among<S, V, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Among::Left(e.unwrap_left()),
+      Among::Middle(e) => Among::Middle(e),
+      Among::Right(e) => Among::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build the end bound key and value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_end_bound_builder_and_value_builder<E, V>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, V>>,
+  ) -> Result<(), Among<E, V, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(e) => Among::Left(e.unwrap_right()),
+      Among::Middle(e) => Among::Middle(e),
+      Among::Right(e) => Among::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build both bounds in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_bound_builders<S, E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: &[u8],
+  ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value).map_err(|e| match e {
+      Among::Left(Either::Left(e)) => Among::Left(e),
+      Among::Left(Either::Right(e)) => Among::Middle(e),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Among::Right(e),
+    })
+  }
+
+  /// Set all keys in the range to the `value`, which allows the caller to build both bounds and value in place.
+  ///
+  /// See [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_set_with_builders<S, E, V>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    value: ValueBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, V>>,
+  ) -> Result<(), Among<Either<S, E>, V, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_set(self, version, start_bound, end_bound, value)
+  }
+
+  /// Unsets all keys in the range to their original value.
+  ///
+  /// This is a contra operation to [`range_set`](Writer::range_set).
+  #[inline]
+  fn range_unset(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Error<Self::Memtable>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound).map_err(Among::unwrap_right)
+  }
+
+  /// Unsets all keys in the range to their original value, which allows the caller to build the start bound in place.
+  ///
+  /// See [`range_unset`](Writer::range_unset).
+  #[inline]
+  fn range_unset_with_start_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+    end_bound: Bound<&[u8]>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(e) => Either::Left(e),
+      Among::Middle(_) => unreachable!(),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Unsets all keys in the range to their original value, which allows the caller to build the end bound in place.
+  ///
+  /// See [`range_unset`](Writer::range_unset).
+  #[inline]
+  fn range_unset_with_end_bound_builder<E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<&[u8]>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Either<E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound).map_err(|e| match e {
+      Among::Left(_) => unreachable!(),
+      Among::Middle(e) => Either::Left(e),
+      Among::Right(e) => Either::Right(e),
+    })
+  }
+
+  /// Unsets all keys in the range to their original value, which allows the caller to build both bounds in place.
+  ///
+  /// See [`range_unset`](Writer::range_unset).
+  #[inline]
+  fn range_unset_with_builders<S, E>(
+    &mut self,
+    version: u64,
+    start_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, S>>>,
+    end_bound: Bound<KeyBuilder<impl FnOnce(&mut VacantBuffer<'_>) -> Result<usize, E>>>,
+  ) -> Result<(), Among<S, E, Error<Self::Memtable>>>
+  where
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::range_unset(self, version, start_bound, end_bound)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn apply<B>(&mut self, batch: &mut B) -> Result<(), Error<Self::Memtable>>
+  where
+    B: Batch<Self::Memtable>,
+    B::Key: AsRef<[u8]>,
+    B::Value: AsRef<[u8]>,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::apply(self, batch).map_err(Among::unwrap_right)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn apply_with_key_builder<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<<B::Key as BufWriter>::Error, Error<Self::Memtable>>>
+  where
+    B: Batch<Self::Memtable>,
+    B::Key: BufWriter,
+    B::Value: AsRef<[u8]>,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::apply::<B>(self, batch).map_err(Among::into_left_right)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn apply_with_value_builder<B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Either<<B::Value as BufWriter>::Error, Error<Self::Memtable>>>
+  where
+    B: Batch<Self::Memtable>,
+    B::Key: AsRef<[u8]>,
+    B::Value: BufWriter,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::apply::<B>(self, batch).map_err(Among::into_middle_right)
+  }
+
+  /// Inserts a batch of key-value pairs into the WAL.
+  #[inline]
+  fn apply_with_builders<KB, VB, B>(
+    &mut self,
+    batch: &mut B,
+  ) -> Result<(), Among<KB::Error, VB::Error, Error<Self::Memtable>>>
+  where
+    B: Batch<Self::Memtable, Key = KB, Value = VB>,
+    KB: BufWriter,
+    VB: BufWriter,
+    Self::Checksumer: BuildChecksumer,
+    Self::Memtable: DynamicMemtable + MutableMemtable,
+  {
+    Log::apply::<B>(self, batch)
+  }
+}
+
+impl<M, S> Writer for swmr::OrderWal<M, S>
+where
+  M: DynamicMemtable + 'static,
+  S: 'static,
+{
+  #[inline]
+  fn reader(&self) -> Self::Reader {
+    swmr::OrderWalReader::from_core(self.core.clone())
+  }
+}

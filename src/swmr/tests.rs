@@ -8,11 +8,10 @@ use std::{
   vec::Vec,
 };
 
-use base::{AlternativeTable, OrderWal, OrderWalReader};
 use dbutils::{
   equivalent::{Comparable, Equivalent},
   leb128::{decode_u64_varint, encode_u64_varint, encoded_u64_varint_len},
-  types::{KeyRef, Type, TypeRef},
+  types::{Type, TypeRef},
 };
 
 use super::*;
@@ -151,14 +150,6 @@ macro_rules! expand_unit_tests {
   };
 }
 
-type OrderWalAlternativeTable<K, V> = OrderWal<K, V, AlternativeTable<K, V>>;
-type OrderWalReaderAlternativeTable<K, V> = OrderWalReader<K, V, AlternativeTable<K, V>>;
-
-type MultipleVersionOrderWalAlternativeTable<K, V> =
-  multiple_version::OrderWal<K, V, multiple_version::AlternativeTable<K, V>>;
-type MultipleVersionOrderWalReaderAlternativeTable<K, V> =
-  multiple_version::OrderWalReader<K, V, multiple_version::AlternativeTable<K, V>>;
-
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Person {
@@ -253,28 +244,6 @@ impl Comparable<PersonRef<'_>> for Person {
   }
 }
 
-impl KeyRef<'_, Person> for PersonRef<'_> {
-  fn compare<Q>(&self, a: &Q) -> cmp::Ordering
-  where
-    Q: ?Sized + Comparable<Self>,
-  {
-    Comparable::compare(a, self).reverse()
-  }
-
-  unsafe fn compare_binary(this: &[u8], other: &[u8]) -> cmp::Ordering {
-    let (this_id_size, this_id) = decode_u64_varint(this).unwrap();
-    let (other_id_size, other_id) = decode_u64_varint(other).unwrap();
-    PersonRef {
-      id: this_id,
-      name: std::str::from_utf8(&this[this_id_size..]).unwrap(),
-    }
-    .cmp(&PersonRef {
-      id: other_id,
-      name: std::str::from_utf8(&other[other_id_size..]).unwrap(),
-    })
-  }
-}
-
 impl Type for Person {
   type Ref<'a> = PersonRef<'a>;
   type Error = dbutils::error::InsufficientBuffer;
@@ -319,26 +288,26 @@ impl PersonRef<'_> {
   }
 }
 
-#[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
-mod constructor;
+#[cfg(all(
+  test,
+  any(
+    test_generic_iters,
+    test_generic_get,
+    test_generic_insert,
+    test_generic_constructor,
+    all_orderwal_tests
+  )
+))]
+mod generic;
 
-#[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
-mod insert;
-
-#[cfg(all(test, any(test_swmr_iters, all_orderwal_tests)))]
-mod iters;
-
-#[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
-mod get;
-
-#[cfg(all(test, any(test_swmr_multiple_version_constructor, all_orderwal_tests)))]
-mod multiple_version_constructor;
-
-#[cfg(all(test, any(test_swmr_multiple_version_get, all_orderwal_tests)))]
-mod multiple_version_get;
-
-#[cfg(all(test, any(test_swmr_multiple_version_insert, all_orderwal_tests)))]
-mod multiple_version_insert;
-
-#[cfg(all(test, any(test_swmr_multiple_version_iters, all_orderwal_tests)))]
-mod multiple_version_iters;
+#[cfg(all(
+  test,
+  any(
+    test_dynamic_iters,
+    test_dynamic_get,
+    test_dynamic_insert,
+    test_dynamic_constructor,
+    all_orderwal_tests
+  )
+))]
+mod dynamic;

@@ -1,280 +1,472 @@
-use core::ops::{Bound, RangeBounds};
-use dbutils::equivalent::Comparable;
+use core::ops::Bound;
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+use core::ops::RangeBounds;
 
-use crate::{
-  sealed::{WithVersion, WithoutVersion},
-  types::Kind,
-  wal::{KeyPointer, ValuePointer},
-};
+use crate::types::{RecordPointer, WithValue};
 
-/// Memtable implementation based on linked based [`SkipMap`][`crossbeam_skiplist`].
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-pub mod linked;
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+use crate::types::Query;
 
-/// Memtable implementation based on ARNEA based [`SkipMap`](skl).
-pub mod arena;
+#[cfg(feature = "skl")]
+pub(crate) mod bounded;
+#[cfg(feature = "crossbeam-skiplist-mvcc")]
+pub(crate) mod unbounded;
 
-/// Sum type for different memtable implementations.
-pub mod alternative;
+/// Memtables for dynamic(bytes) key-value order WALs.
+pub mod dynamic;
+
+/// Memtables for generic(structured) key-value order WALs.
+pub mod generic;
 
 /// An entry which is stored in the memory table.
-pub trait BaseEntry<'a>: Sized {
+pub trait Entry<'a>
+where
+  Self: Sized,
+{
   /// The key type.
-  type Key: ?Sized;
+  type Key: 'a;
+
   /// The value type.
-  type Value: ?Sized;
+  type Value: 'a;
 
   /// Returns the key in the entry.
-  fn key(&self) -> KeyPointer<Self::Key>;
+  fn key(&self) -> Self::Key;
+
+  /// Returns the value in the entry.
+  fn value(&self) -> Self::Value;
 
   /// Returns the next entry in the memory table.
-  fn next(&mut self) -> Option<Self>;
+  fn next(&self) -> Option<Self>;
 
   /// Returns the previous entry in the memory table.
-  fn prev(&mut self) -> Option<Self>;
-}
+  fn prev(&self) -> Option<Self>;
 
-/// An entry which is stored in the memory table.
-pub trait MemtableEntry<'a>: BaseEntry<'a> + WithoutVersion {
-  /// Returns the value in the entry.
-  fn value(&self) -> ValuePointer<Self::Value>;
-}
-
-/// An entry which is stored in the multiple versioned memory table.
-pub trait VersionedMemtableEntry<'a>: BaseEntry<'a> + WithVersion {
-  /// Returns the value in the entry.
-  fn value(&self) -> Option<ValuePointer<Self::Value>>;
-
-  /// Returns the version of the entry if it is versioned.
+  /// Returns the version of the entry.
   fn version(&self) -> u64;
 }
 
-/// A memory table which is used to store pointers to the underlying entries.
-pub trait BaseTable {
+/// An entry which means that the entry can return key and value in bytes format.
+pub trait RawEntry<'a>
+where
+  Self: Sized,
+{
+  /// The raw value type.
+  type RawValue: 'a;
+
+  /// Returns the raw key in the entry.
+  fn raw_key(&self) -> &'a [u8];
+
+  /// Returns the raw value in the entry.
+  fn raw_value(&self) -> Self::RawValue;
+}
+
+/// A raw range entry which means that the entry can return start bound and ent bound in bytes format.
+pub trait RawRangeEntry<'a, O>
+where
+  Self: Sized,
+{
+  /// The raw value type.
+  type RawValue: 'a
+  where
+    O: WithValue;
+
+  /// Returns the start bound of the range entry in bytes.
+  fn raw_start_bound(&self) -> Bound<&'a [u8]>;
+
+  /// Returns the end bound of the range entry in bytes.
+  fn raw_end_bound(&self) -> Bound<&'a [u8]>;
+
+  /// Returns the raw value in the entry.
+  fn raw_value(&self) -> Self::RawValue
+  where
+    O: WithValue;
+}
+
+/// An range entry which is stored in the memory table.
+pub trait RangeEntry<'a, O> {
   /// The key type.
-  type Key: ?Sized;
-
+  type Key: 'a;
   /// The value type.
-  type Value: ?Sized;
+  type Value: 'a
+  where
+    O: WithValue;
 
+  /// Returns the start bound of the range entry.
+  fn start_bound(&self) -> Bound<Self::Key>;
+
+  /// Returns the end bound of the range entry.
+  fn end_bound(&self) -> Bound<Self::Key>;
+
+  /// Returns the value in the entry.
+  fn value(&self) -> Self::Value
+  where
+    O: WithValue;
+
+  /// Returns the range of the entry.
+  fn range(&self) -> (Bound<Self::Key>, Bound<Self::Key>) {
+    (self.start_bound(), self.end_bound())
+  }
+
+  /// Returns the next entry in the memory table.
+  fn next(&mut self) -> Option<Self>
+  where
+    Self: Sized;
+
+  /// Returns the previous entry in the memory table.
+  fn prev(&mut self) -> Option<Self>
+  where
+    Self: Sized;
+
+  /// Returns the version of the entry.
+  fn version(&self) -> u64;
+}
+
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+trait RangeEntryExt<'a, O>: RangeEntry<'a, O> {
+  /// Returns the start bound of the range entry.
+  fn query_start_bound(&self) -> Bound<Query<Self::Key>> {
+    match self.start_bound() {
+      Bound::Included(key) => Bound::Included(Query(key)),
+      Bound::Excluded(key) => Bound::Excluded(Query(key)),
+      Bound::Unbounded => Bound::Unbounded,
+    }
+  }
+
+  /// Returns the end bound of the range entry.
+  fn query_end_bound(&self) -> Bound<Query<Self::Key>> {
+    match self.end_bound() {
+      Bound::Included(key) => Bound::Included(Query(key)),
+      Bound::Excluded(key) => Bound::Excluded(Query(key)),
+      Bound::Unbounded => Bound::Unbounded,
+    }
+  }
+
+  /// Returns the range of the entry.
+  fn query_range(&self) -> impl RangeBounds<Query<Self::Key>> + 'a {
+    (self.query_start_bound(), self.query_end_bound())
+  }
+}
+
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+impl<'a, O, T> RangeEntryExt<'a, O> for T where T: RangeEntry<'a, O> {}
+
+/// A memory table which is used to store pointers to the underlying entries.
+pub trait Memtable {
   /// The configuration options for the memtable.
   type Options;
 
   /// The error type may be returned when constructing the memtable.
   type Error;
 
-  /// The item returned by the iterator or query methods.
-  type Item<'a>: BaseEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
-  where
-    Self: 'a;
-
-  /// The iterator type.
-  type Iterator<'a>: DoubleEndedIterator<Item = Self::Item<'a>>
-  where
-    Self: 'a;
-
-  /// The range iterator type.
-  type Range<'a, Q, R>: DoubleEndedIterator<Item = Self::Item<'a>>
-  where
-    Self: 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
-
   /// Creates a new memtable with the specified options.
-  fn new(opts: Self::Options) -> Result<Self, Self::Error>
+  fn new<A>(arena: A, opts: Self::Options) -> Result<Self, Self::Error>
   where
-    Self: Sized;
+    Self: Sized,
+    A: rarena_allocator::Allocator;
 
-  /// Inserts a pointer into the memtable.
-  fn insert(
-    &self,
-    version: Option<u64>,
-    kp: KeyPointer<Self::Key>,
-    vp: ValuePointer<Self::Value>,
-  ) -> Result<(), Self::Error>
-  where
-    KeyPointer<Self::Key>: Ord + 'static;
-
-  /// Removes the pointer associated with the key.
-  fn remove(&self, version: Option<u64>, key: KeyPointer<Self::Key>) -> Result<(), Self::Error>
-  where
-    KeyPointer<Self::Key>: Ord + 'static;
-
-  /// Returns the kind of the memtable.
-  fn kind() -> Kind;
-}
-
-/// A memory table which is used to store pointers to the underlying entries.
-pub trait Memtable: BaseTable
-where
-  for<'a> Self::Item<'a>: MemtableEntry<'a>,
-{
-  /// Returns the number of entries in the memtable.
+  /// Returns the total number of entries in the memtable.
   fn len(&self) -> usize;
 
   /// Returns `true` if the memtable is empty.
   fn is_empty(&self) -> bool {
     self.len() == 0
   }
-
-  /// Returns the upper bound of the memtable.
-  fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
-
-  /// Returns the lower bound of the memtable.
-  fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
-
-  /// Returns the first pointer in the memtable.
-  fn first(&self) -> Option<Self::Item<'_>>
-  where
-    KeyPointer<Self::Key>: Ord;
-
-  /// Returns the last pointer in the memtable.
-  fn last(&self) -> Option<Self::Item<'_>>
-  where
-    KeyPointer<Self::Key>: Ord;
-
-  /// Returns the pointer associated with the key.
-  fn get<Q>(&self, key: &Q) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
-
-  /// Returns `true` if the memtable contains the specified pointer.
-  fn contains<Q>(&self, key: &Q) -> bool
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
-
-  /// Returns an iterator over the memtable.
-  fn iter(&self) -> Self::Iterator<'_>;
-
-  /// Returns an iterator over a subset of the memtable.
-  fn range<'a, Q, R>(&'a self, range: R) -> Self::Range<'a, Q, R>
-  where
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
 }
 
 /// A memory table which is used to store pointers to the underlying entries.
-pub trait MultipleVersionMemtable: BaseTable
-where
-  for<'a> Self::Item<'a>: VersionedMemtableEntry<'a>,
-{
-  /// The item returned by the iterator or query methods.
-  type VersionedItem<'a>: VersionedMemtableEntry<'a, Key = Self::Key, Value = Self::Value> + Clone
+pub trait MutableMemtable: Memtable {
+  /// Inserts a pointer into the memtable.
+  fn insert(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
+
+  /// Removes the pointer associated with the key.
+  fn remove(&self, version: u64, key: RecordPointer) -> Result<(), Self::Error>;
+
+  /// Inserts a range deletion pointer into the memtable, a range deletion is a deletion of a range of keys,
+  /// which means that keys in the range are marked as deleted.
+  ///
+  /// This is not a contra operation to [`range_set`](MutableMemtable::range_set).
+  /// See also [`range_set`](MutableMemtable::range_set) and [`range_set`](MutableMemtable::range_unset).
+  fn range_remove(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
+
+  /// Inserts an range update pointer into the memtable.
+  fn range_set(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
+
+  /// Unset a range from the memtable, this is a contra operation to [`range_set`](MutableMemtable::range_set).
+  fn range_unset(&self, version: u64, pointer: RecordPointer) -> Result<(), Self::Error>;
+}
+
+/// Transfer trait for converting data between different states.
+pub trait Transfer<'a, D>: sealed::Sealed<'a, D> {}
+
+impl<'a, D, T> Transfer<'a, D> for T where T: sealed::Sealed<'a, D> {}
+
+mod sealed {
+  use dbutils::types::{LazyRef, Type};
+
+  #[cfg(all(feature = "crossbeam-skiplist-mvcc", not(feature = "skl")))]
+  pub trait Sealed<'a, I>:
+    crossbeam_skiplist_mvcc::Transfer<
+    'a,
+    crate::types::RecordPointer,
+    To = <Self as dbutils::state::State>::Data<'a, &'a crate::types::RecordPointer>,
+  >
+  {
+    type Value;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  #[cfg(all(feature = "skl", not(feature = "crossbeam-skiplist-mvcc")))]
+  pub trait Sealed<'a, I>:
+    skl::Transfer<'a, LazyRef<'a, crate::types::RecordPointer>, To = crate::types::RecordPointer>
+  {
+    type Value;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  #[cfg(all(feature = "skl", feature = "crossbeam-skiplist-mvcc"))]
+  pub trait Sealed<'a, I>:
+    skl::Transfer<'a, LazyRef<'a, crate::types::RecordPointer>, To = crate::types::RecordPointer>
+    + crossbeam_skiplist_mvcc::Transfer<
+      'a,
+      crate::types::RecordPointer,
+      To = <Self as dbutils::state::State>::Data<'a, &'a crate::types::RecordPointer>,
+    >
+  {
+    type Value;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  #[cfg(not(any(feature = "skl", feature = "crossbeam-skiplist-mvcc")))]
+  pub trait Sealed<'a, I>: dbutils::state::State {
+    type Value;
+
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
+
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
+
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D>;
+  }
+
+  impl<'a, I> Sealed<'a, LazyRef<'a, I>> for dbutils::state::Active
   where
-    KeyPointer<Self::Key>: 'a,
-    Self: 'a;
+    I: Type + ?Sized,
+  {
+    type Value = I::Ref<'a>;
 
-  /// The iterator type which can yields all the entries in the memtable.
-  type IterAll<'a>: DoubleEndedIterator<Item = Self::VersionedItem<'a>>
+    #[inline]
+    fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, &'a [u8]> {
+      data.raw().expect("entry in Active state must have value")
+    }
+
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> LazyRef<'a, I>
+    where
+      Self: Sized,
+    {
+      unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
+    }
+
+    #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
+    }
+
+    #[inline]
+    fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
+      *data.get()
+    }
+
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      Some(data)
+    }
+
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.expect("entry in Active state must have value")
+    }
+  }
+
+  impl<'a, I> Sealed<'a, LazyRef<'a, I>> for dbutils::state::MaybeTombstone
   where
-    KeyPointer<Self::Key>: 'a,
-    Self: 'a;
+    I: Type + ?Sized,
+  {
+    type Value = I::Ref<'a>;
 
-  /// The range iterator type which can yields all the entries in the memtable.
-  type RangeAll<'a, Q, R>: DoubleEndedIterator<Item = Self::VersionedItem<'a>>
-  where
-    KeyPointer<Self::Key>: 'a,
-    Self: 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Option<&'a [u8]> {
+      data
+        .as_ref()
+        .map(|v| v.raw().expect("entry in Active state must have value"))
+    }
 
-  /// Returns the maximum version of the memtable.
-  fn maximum_version(&self) -> u64;
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Option<LazyRef<'a, I>>
+    where
+      Self: Sized,
+    {
+      unsafe { input.map(|v| LazyRef::from_raw(v)) }
+    }
 
-  /// Returns the minimum version of the memtable.
-  fn minimum_version(&self) -> u64;
+    #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
 
-  /// Returns `true` if the memtable may contain an entry whose version is less than or equal to the specified version.
-  fn may_contain_version(&self, version: u64) -> bool;
+    #[inline]
+    fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
+      data.as_ref().map(|v| *v.get())
+    }
 
-  /// Returns the upper bound of the memtable.
-  fn upper_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      data
+    }
 
-  /// Returns the upper bound of the memtable.
-  fn upper_bound_versioned<Q>(
-    &self,
-    version: u64,
-    bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.flatten()
+    }
+  }
 
-  /// Returns the lower bound of the memtable.
-  fn lower_bound<Q>(&self, version: u64, bound: Bound<&Q>) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+  impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::Active {
+    type Value = &'a [u8];
 
-  /// Returns the lower bound of the memtable.
-  fn lower_bound_versioned<Q>(
-    &self,
-    version: u64,
-    bound: Bound<&Q>,
-  ) -> Option<Self::VersionedItem<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn input(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, &'a [u8]> {
+      *data
+    }
 
-  /// Returns the first pointer in the memtable.
-  fn first(&self, version: u64) -> Option<Self::Item<'_>>
-  where
-    KeyPointer<Self::Key>: Ord;
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
+    }
 
-  /// Returns the first pointer in the memtable.
-  fn first_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
-  where
-    KeyPointer<Self::Key>: Ord;
+    #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
+    }
 
-  /// Returns the last pointer in the memtable.
-  fn last(&self, version: u64) -> Option<Self::Item<'_>>
-  where
-    KeyPointer<Self::Key>: Ord;
+    #[inline]
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Value> {
+      *data
+    }
 
-  /// Returns the last pointer in the memtable.
-  fn last_versioned(&self, version: u64) -> Option<Self::VersionedItem<'_>>
-  where
-    KeyPointer<Self::Key>: Ord;
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      Some(data)
+    }
 
-  /// Returns the pointer associated with the key.
-  fn get<Q>(&self, version: u64, key: &Q) -> Option<Self::Item<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.expect("entry in Active state must have value")
+    }
+  }
 
-  /// Returns the pointer associated with the key.
-  fn get_versioned<Q>(&self, version: u64, key: &Q) -> Option<Self::VersionedItem<'_>>
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+  impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::MaybeTombstone {
+    type Value = &'a [u8];
 
-  /// Returns `true` if the memtable contains the specified pointer.
-  fn contains<Q>(&self, version: u64, key: &Q) -> bool
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn input(data: &Self::Data<'a, &'a [u8]>) -> Option<&'a [u8]> {
+      data.as_ref().copied()
+    }
 
-  /// Returns `true` if the memtable contains the specified pointer.
-  fn contains_versioned<Q>(&self, version: u64, key: &Q) -> bool
-  where
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
 
-  /// Returns an iterator over the memtable.
-  fn iter(&self, version: u64) -> Self::Iterator<'_>;
+    #[inline]
+    fn raw(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
 
-  /// Returns an iterator over all the entries in the memtable.
-  fn iter_all_versions(&self, version: u64) -> Self::IterAll<'_>;
+    #[inline]
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::Value> {
+      data.as_ref().copied()
+    }
 
-  /// Returns an iterator over a subset of the memtable.
-  fn range<'a, Q, R>(&'a self, version: u64, range: R) -> Self::Range<'a, Q, R>
-  where
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn leak<T>(data: Self::Data<'a, T>) -> Option<T> {
+      data
+    }
 
-  /// Returns an iterator over all the entries in a subset of the memtable.
-  fn range_all_versions<'a, Q, R>(&'a self, version: u64, range: R) -> Self::RangeAll<'a, Q, R>
-  where
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized + Comparable<KeyPointer<Self::Key>>;
+    #[inline]
+    fn into_state<D>(data: Option<Self::Data<'a, D>>) -> Self::Data<'a, D> {
+      data.flatten()
+    }
+  }
 }

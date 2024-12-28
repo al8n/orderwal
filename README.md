@@ -27,25 +27,31 @@ English | [简体中文][zh-cn-url]
 
 ## Installation
 
+> [!TIP]
+> 
+> - `bounded` feature will enable a memory table implementation based on ARENA-style [`SkipMap`](https://github.com/al8n/skl)
+> 
+> - `unbouned` feature (cannot compile without `std`) will enable a memory table implementation based on linked-style [`SkipMap`](https://github.com/al8n/crossbeam-skiplist-mvcc)
+
 - Default (with on-disk support)
   
   ```toml
   [dependencies]
-  orderwal = "0.5"
+  orderwal = "0.6"
   ```
 
-- `std` only (without on-disk support)
+- `std` (without on-disk support)
 
   ```toml
   [dependencies]
-  orderwal = { version = "0.5", default-features = false, features = ["std"] } 
+  orderwal = { version = "0.6", default-features = false, features = ["std", "bounded", "unbounded"] } 
   ```
 
 - `no-std` (`alloc` required)
 
   ```toml
   [dependencies]
-  orderwal = { version = "0.5", default-features = false, features = ["alloc"] }
+  orderwal = { version = "0.6", default-features = false, features = ["alloc", "bounded"] }
   ```
 
 ## Example
