@@ -3,7 +3,7 @@ use skl::KeySize;
 
 use crate::memtable::{
   alternative::{MultipleVersionTable, TableOptions},
-  MultipleVersionMemtable, MultipleVersionEntry,
+  MultipleVersionEntry, MultipleVersionMemtable,
 };
 
 use super::*;

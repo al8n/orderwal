@@ -1,5 +1,6 @@
 use core::{
   cell::OnceCell,
+  marker::PhantomData,
   ops::{Bound, RangeBounds},
 };
 
@@ -13,44 +14,50 @@ use crate::{
   memtable::{sealed, Transfer},
   types::{
     sealed::{Pointee, RangeComparator},
-    Mode, Query, QueryRange, RawRangeUpdateRef, RecordPointer,
+    BulkOperation, Mode, Query, QueryRange, RecordPointer, WithValue,
   },
 };
 
-/// Range update entry.
-pub struct RangeUpdateEntry<'a, S, C, T>
+/// Range entry.
+pub struct RangeEntryRef<'a, S, O, C, T>
 where
+  O: BulkOperation,
   S: State,
   T: Mode,
 {
   pub(crate) ent: Entry<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
-  data: OnceCell<RawRangeUpdateRef<'a>>,
+  data: OnceCell<O::Output<'a>>,
   start_bound: OnceCell<Bound<T::Key<'a>>>,
   end_bound: OnceCell<Bound<T::Key<'a>>>,
   value: OnceCell<S::Data<'a, T::Value<'a>>>,
 }
 
-impl<S, C, T> core::fmt::Debug for RangeUpdateEntry<'_, S, C, T>
+impl<S, O, C, T> core::fmt::Debug for RangeEntryRef<'_, S, O, C, T>
 where
   C: 'static,
+  O: BulkOperation,
   S: State,
   T: Mode,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    use RangeComparator;
-    self
-      .data
-      .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()))
-      .write_fmt("RangeUpdateEntry", f)
+    O::fmt(
+      self
+        .data
+        .get_or_init(|| O::fetch(self.ent.comparator(), self.ent.key())),
+      "RangeEntryRef",
+      f,
+    )
   }
 }
 
-impl<'a, S, C, T> Clone for RangeUpdateEntry<'a, S, C, T>
+impl<'a, S, O, C, T> Clone for RangeEntryRef<'a, S, O, C, T>
 where
+  O: BulkOperation,
   S: State,
   T: Mode,
   S::Data<'a, T::Value<'a>>: Clone,
+  O::Output<'a>: Clone,
   T::Key<'a>: Clone,
 {
   #[inline]
@@ -65,8 +72,9 @@ where
   }
 }
 
-impl<'a, S, C, T> RangeUpdateEntry<'a, S, C, T>
+impl<'a, S, O, C, T> RangeEntryRef<'a, S, O, C, T>
 where
+  O: BulkOperation,
   S: State,
   T: Mode,
 {
@@ -83,48 +91,72 @@ where
   }
 }
 
-impl<'a, S, C, T> crate::memtable::RawRangeEntry<'a> for RangeUpdateEntry<'a, S, C, T>
+impl<'a, S, O, C, T> crate::memtable::RawRangeEntry<'a, O> for RangeEntryRef<'a, S, O, C, T>
 where
   C: 'static,
-  S: State,
+  O: BulkOperation,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, &'a [u8]>: 'a,
   T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
+  type RawValue = S::Data<'a, &'a [u8]> where O: WithValue;
+
   #[inline]
   fn raw_start_bound(&self) -> Bound<&'a [u8]> {
     let ent = self
       .data
-      .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-    ent.start_bound()
+      .get_or_init(|| O::fetch(self.ent.comparator(), self.ent.key()));
+    O::start_bound(ent)
   }
 
   #[inline]
   fn raw_end_bound(&self) -> Bound<&'a [u8]> {
     let ent = self
       .data
-      .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-    ent.end_bound()
+      .get_or_init(|| O::fetch(self.ent.comparator(), self.ent.key()));
+    O::end_bound(ent)
+  }
+
+  #[inline]
+  fn raw_value(&self) -> Self::RawValue
+  where
+    O: WithValue,
+  {
+    let ent = self.data.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      match ptr {
+        Some(ptr) => O::fetch(self.ent.comparator(), ptr),
+        None => O::fetch(self.ent.comparator(), self.ent.key()),
+      }
+    });
+
+    S::raw(O::value(ent))
   }
 }
 
-impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeUpdateEntry<'a, S, C, T>
+impl<'a, S, O, C, T> crate::memtable::RangeEntry<'a, O> for RangeEntryRef<'a, S, O, C, T>
 where
   C: 'static,
-  S: State,
+  O: BulkOperation,
+  S: Transfer<'a, T::Value<'a>>,
+  S::Data<'a, S::Value>: 'a,
   T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
+  type Value = S::Data<'a, S::Value> where O: WithValue;
 
   #[inline]
   fn start_bound(&self) -> Bound<Self::Key> {
     let start_bound = self.start_bound.get_or_init(|| {
       let ent = self
         .data
-        .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-      ent.start_bound().map(<T::Key<'a> as Pointee>::from_input)
+        .get_or_init(|| O::fetch(self.ent.comparator(), self.ent.key()));
+      O::start_bound(ent).map(<T::Key<'a> as Pointee>::from_input)
     });
     start_bound.as_ref().map(|k| k.output())
   }
@@ -134,10 +166,30 @@ where
     let end_bound = self.end_bound.get_or_init(|| {
       let ent = self
         .data
-        .get_or_init(|| self.ent.comparator().fetch_range_update(self.ent.key()));
-      ent.end_bound().map(<T::Key<'a> as Pointee>::from_input)
+        .get_or_init(|| O::fetch(self.ent.comparator(), self.ent.key()));
+      O::end_bound(ent).map(<T::Key<'a> as Pointee>::from_input)
     });
     end_bound.as_ref().map(|k| k.output())
+  }
+
+  #[inline]
+  fn value(&self) -> Self::Value
+  where
+    O: WithValue,
+  {
+    let val = self.value.get_or_init(|| {
+      let ptr = S::leak(self.ent.value());
+
+      let data = ptr.map(|ptr| {
+        let ent = self
+          .data
+          .get_or_init(|| O::fetch(self.ent.comparator(), ptr));
+
+        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(O::value(ent))
+      });
+      S::into_state(data)
+    });
+    <S as sealed::Sealed<'_, T::Value<'_>>>::transfer(val)
   }
 
   #[inline]
@@ -156,77 +208,10 @@ where
   }
 }
 
-impl<S, C, T> RangeUpdateEntry<'_, S, C, T>
+impl<'a, S, O, C, T> RangeEntryRef<'a, S, O, C, T>
 where
   C: 'static,
-  S: State,
-  T: Mode,
-{
-  /// Returns the version of the entry.
-  #[inline]
-  pub fn version(&self) -> u64 {
-    self.ent.version()
-  }
-}
-
-impl<'a, S, C, T> crate::memtable::RawRangeUpdateEntry<'a> for RangeUpdateEntry<'a, S, C, T>
-where
-  C: 'static,
-  S: Transfer<'a, T::Value<'a>>,
-  S::Data<'a, &'a [u8]>: 'a,
-  T: Mode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
-{
-  type RawValue = S::Data<'a, &'a [u8]>;
-
-  #[inline]
-  fn raw_value(&self) -> Self::RawValue {
-    let ent = self.data.get_or_init(|| {
-      let ptr = S::leak(self.ent.value());
-
-      match ptr {
-        Some(ptr) => self.ent.comparator().fetch_range_update(ptr),
-        None => self.ent.comparator().fetch_range_update(self.ent.key()),
-      }
-    });
-
-    S::raw(ent.value())
-  }
-}
-
-impl<'a, S, C, T> crate::memtable::RangeUpdateEntry<'a> for RangeUpdateEntry<'a, S, C, T>
-where
-  C: 'static,
-  S: Transfer<'a, T::Value<'a>>,
-  S::Data<'a, S::Value>: 'a,
-  T: Mode,
-  T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
-  T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
-{
-  type Value = S::Data<'a, S::Value>;
-
-  #[inline]
-  fn value(&self) -> Self::Value {
-    let val = self.value.get_or_init(|| {
-      let ptr = S::leak(self.ent.value());
-
-      let data = ptr.map(|ptr| {
-        let ent = self
-          .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(ptr));
-
-        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
-      });
-      S::into_state(data)
-    });
-    <S as sealed::Sealed<'_, T::Value<'_>>>::transfer(val)
-  }
-}
-
-impl<'a, S, C, T> RangeUpdateEntry<'a, S, C, T>
-where
-  C: 'static,
+  O: WithValue,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
   T: Mode,
@@ -241,9 +226,9 @@ where
       let data = ptr.map(|ptr| {
         let ent = self
           .data
-          .get_or_init(|| self.ent.comparator().fetch_range_update(ptr));
+          .get_or_init(|| O::fetch(self.ent.comparator(), ptr));
 
-        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(ent.value())
+        <S as sealed::Sealed<'_, T::Value<'_>>>::from_input(O::value(ent))
       });
       S::into_state(data)
     });
@@ -252,16 +237,19 @@ where
 }
 
 /// The iterator for point entries.
-pub struct IterRangeUpdate<'a, S, C, T>
+pub struct IterBulkOperations<'a, S, O, C, T>
 where
+  O: BulkOperation,
   S: State,
   T: Mode,
 {
   iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
+  _op: PhantomData<O>,
 }
 
-impl<'a, S, C, T> IterRangeUpdate<'a, S, C, T>
+impl<'a, S, O, C, T> IterBulkOperations<'a, S, O, C, T>
 where
+  O: BulkOperation,
   S: State,
   T: Mode,
 {
@@ -269,41 +257,47 @@ where
   pub(in crate::memtable) const fn new(
     iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
   ) -> Self {
-    Self { iter }
+    Self {
+      iter,
+      _op: PhantomData,
+    }
   }
 }
 
-impl<'a, S, C, T> Iterator for IterRangeUpdate<'a, S, C, T>
+impl<'a, S, O, C, T> Iterator for IterBulkOperations<'a, S, O, C, T>
 where
   C: 'static,
+  O: BulkOperation,
   S: State,
   T: Mode,
   T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
-  type Item = RangeUpdateEntry<'a, S, C, T>;
+  type Item = RangeEntryRef<'a, S, O, C, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.iter.next().map(RangeUpdateEntry::new)
+    self.iter.next().map(RangeEntryRef::new)
   }
 }
 
-impl<'a, S, C, T> DoubleEndedIterator for IterRangeUpdate<'a, S, C, T>
+impl<'a, S, O, C, T> DoubleEndedIterator for IterBulkOperations<'a, S, O, C, T>
 where
   C: 'static,
+  O: BulkOperation,
   S: State,
   T: Mode,
   T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.iter.next_back().map(RangeUpdateEntry::new)
+    self.iter.next_back().map(RangeEntryRef::new)
   }
 }
 
 /// The iterator over a subset of point entries.
-pub struct RangeRangeUpdate<'a, S, Q, R, C, T>
+pub struct RangeBulkOperations<'a, S, O, Q, R, C, T>
 where
+  O: BulkOperation,
   S: State,
   Q: ?Sized,
   T: Mode,
@@ -311,10 +305,12 @@ where
 {
   range:
     Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::RangeComparator<C>>,
+  _op: PhantomData<O>,
 }
 
-impl<'a, S, Q, R, C, T> RangeRangeUpdate<'a, S, Q, R, C, T>
+impl<'a, S, O, Q, R, C, T> RangeBulkOperations<'a, S, O, Q, R, C, T>
 where
+  O: BulkOperation,
   S: State,
   Q: ?Sized,
   T: Mode,
@@ -332,29 +328,34 @@ where
       T::RangeComparator<C>,
     >,
   ) -> Self {
-    Self { range }
+    Self {
+      range,
+      _op: PhantomData,
+    }
   }
 }
 
-impl<'a, S, Q, R, C, T> Iterator for RangeRangeUpdate<'a, S, Q, R, C, T>
+impl<'a, S, O, Q, R, C, T> Iterator for RangeBulkOperations<'a, S, O, Q, R, C, T>
 where
   C: 'static,
+  O: BulkOperation,
   S: State,
   R: RangeBounds<Q>,
   Q: ?Sized,
   T: Mode,
   T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
-  type Item = RangeUpdateEntry<'a, S, C, T>;
+  type Item = RangeEntryRef<'a, S, O, C, T>;
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.range.next().map(RangeUpdateEntry::new)
+    self.range.next().map(RangeEntryRef::new)
   }
 }
 
-impl<'a, S, Q, R, C, T> DoubleEndedIterator for RangeRangeUpdate<'a, S, Q, R, C, T>
+impl<'a, S, O, Q, R, C, T> DoubleEndedIterator for RangeBulkOperations<'a, S, O, Q, R, C, T>
 where
   C: 'static,
+  O: BulkOperation,
   S: State,
   R: RangeBounds<Q>,
   Q: ?Sized,
@@ -363,6 +364,6 @@ where
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.range.next_back().map(RangeUpdateEntry::new)
+    self.range.next_back().map(RangeEntryRef::new)
   }
 }

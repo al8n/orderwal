@@ -1,6 +1,6 @@
 use core::ops::{Bound, RangeBounds};
 
-use crate::types::{Query, RecordPointer};
+use crate::types::{Query, RecordPointer, WithValue};
 
 #[cfg(feature = "skl")]
 pub(crate) mod bounded;
@@ -56,27 +56,46 @@ where
 }
 
 /// A raw range entry which means that the entry can return start bound and ent bound in bytes format.
-pub trait RawRangeEntry<'a>
+pub trait RawRangeEntry<'a, O>
 where
   Self: Sized,
 {
+  /// The raw value type.
+  type RawValue: 'a
+  where
+    O: WithValue;
+
   /// Returns the start bound of the range entry in bytes.
   fn raw_start_bound(&self) -> Bound<&'a [u8]>;
 
   /// Returns the end bound of the range entry in bytes.
   fn raw_end_bound(&self) -> Bound<&'a [u8]>;
+
+  /// Returns the raw value in the entry.
+  fn raw_value(&self) -> Self::RawValue
+  where
+    O: WithValue;
 }
 
 /// An range entry which is stored in the memory table.
-pub trait RangeEntry<'a> {
+pub trait RangeEntry<'a, O> {
   /// The key type.
   type Key: 'a;
+  /// The value type.
+  type Value: 'a
+  where
+    O: WithValue;
 
   /// Returns the start bound of the range entry.
   fn start_bound(&self) -> Bound<Self::Key>;
 
   /// Returns the end bound of the range entry.
   fn end_bound(&self) -> Bound<Self::Key>;
+
+  /// Returns the value in the entry.
+  fn value(&self) -> Self::Value
+  where
+    O: WithValue;
 
   /// Returns the range of the entry.
   fn range(&self) -> (Bound<Self::Key>, Bound<Self::Key>) {
@@ -97,7 +116,7 @@ pub trait RangeEntry<'a> {
   fn version(&self) -> u64;
 }
 
-trait RangeEntryExt<'a>: RangeEntry<'a> {
+trait RangeEntryExt<'a, O>: RangeEntry<'a, O> {
   /// Returns the start bound of the range entry.
   fn query_start_bound(&self) -> Bound<Query<Self::Key>> {
     match self.start_bound() {
@@ -122,34 +141,31 @@ trait RangeEntryExt<'a>: RangeEntry<'a> {
   }
 }
 
-impl<'a, T> RangeEntryExt<'a> for T where T: RangeEntry<'a> {}
+impl<'a, O, T> RangeEntryExt<'a, O> for T where T: RangeEntry<'a, O> {}
 
-/// A range remove entry which is stored in the memory table.
-pub trait RangeRemoveEntry<'a>: RangeEntry<'a> {}
+// /// A range update entry which is stored in the memory table.
+// pub trait RangeUpdateEntry<'a>
+// where
+//   Self: RangeEntry<'a>,
+// {
+//   /// The value type.
+//   type Value: 'a;
 
-/// A range update entry which is stored in the memory table.
-pub trait RangeUpdateEntry<'a>
-where
-  Self: RangeEntry<'a>,
-{
-  /// The value type.
-  type Value: 'a;
+//   /// Returns the value in the entry.
+//   fn value(&self) -> Self::Value;
+// }
 
-  /// Returns the value in the entry.
-  fn value(&self) -> Self::Value;
-}
+// /// A entry which is stored in the memory table.
+// pub trait RawRangeUpdateEntry<'a>
+// where
+//   Self: RangeEntry<'a>,
+// {
+//   /// The value type.
+//   type RawValue: 'a;
 
-/// A entry which is stored in the memory table.
-pub trait RawRangeUpdateEntry<'a>
-where
-  Self: RangeEntry<'a>,
-{
-  /// The value type.
-  type RawValue: 'a;
-
-  /// Returns the value in the entry.
-  fn raw_value(&self) -> Self::RawValue;
-}
+//   /// Returns the value in the entry.
+//   fn raw_value(&self) -> Self::RawValue;
+// }
 
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait Memtable {

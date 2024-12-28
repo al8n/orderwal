@@ -7,28 +7,23 @@ use dbutils::{
 
 use crate::{
   memtable::{
-    sealed, Entry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait,
-    RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
+    sealed, Entry, RangeEntry, Transfer,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
-    Query, RecordPointer, RefQuery, TypeMode,
+    Mode, Query, RecordPointer, RefQuery, Remove, Update,
   },
 };
 
 use super::{
-  EntryRef,
-  IterPoints, RangePoints,
-  RangeRemoveEntry,
-  RangeUpdateEntry,
-  PointEntryRef, Table,
+  EntryRef, IterPoints, PointEntryRef, RangeEntryRef, RangePoints, Table
 };
 
 /// An iterator over the entries of a `Memtable`.
 pub struct Iter<'a, S, C, T>
 where
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   S: State,
 {
   table: &'a Table<C, T>,
@@ -39,7 +34,7 @@ where
 impl<'a, C, T> Iter<'a, MaybeTombstone, C, T>
 where
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: 'static,
 {
   pub(in crate::memtable) fn with_tombstone(version: u64, table: &'a Table<C, T>) -> Self {
@@ -54,7 +49,7 @@ where
 impl<'a, C, T> Iter<'a, Active, C, T>
 where
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: 'static,
 {
   pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>) -> Self {
@@ -71,7 +66,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Comparator<C>: PointComparator<C>
     + Comparator<RecordPointer>
@@ -81,17 +76,18 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeRemoveEntry<'a, Active, C, T>:
-    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
+    'a,
+    Update,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <MaybeTombstone as State>::Data<
       'a,
-      Value = <MaybeTombstone as State>::Data<
-        'a,
-        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
-      >,
-    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+      <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+    >,
+  >,
 {
   type Item = EntryRef<'a, S, C, T>;
 
@@ -112,7 +108,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Comparator<C>: PointComparator<C>
     + Comparator<RecordPointer>
@@ -122,17 +118,18 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeRemoveEntry<'a, Active, C, T>:
-    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
+    'a,
+    Update,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <MaybeTombstone as State>::Data<
       'a,
-      Value = <MaybeTombstone as State>::Data<
-        'a,
-        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
-      >,
-    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+      <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+    >,
+  >,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -152,7 +149,7 @@ where
   R: RangeBounds<Q>,
   Q: ?Sized,
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   S: State,
 {
   table: &'a Table<C, T>,
@@ -165,7 +162,7 @@ where
   C: 'static,
   R: RangeBounds<Q> + 'a,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: 'static,
 {
   pub(in crate::memtable) fn new(version: u64, table: &'a Table<C, T>, r: R) -> Self {
@@ -182,7 +179,7 @@ where
   C: 'static,
   R: RangeBounds<Q> + 'a,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: 'static,
 {
   pub(in crate::memtable) fn with_tombstone(version: u64, table: &'a Table<C, T>, r: R) -> Self {
@@ -201,7 +198,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Comparator<C>: PointComparator<C>
     + Comparator<RecordPointer>
@@ -212,17 +209,18 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeRemoveEntry<'a, Active, C, T>:
-    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
+    'a,
+    Update,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <MaybeTombstone as State>::Data<
       'a,
-      Value = <MaybeTombstone as State>::Data<
-        'a,
-        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
-      >,
-    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+      <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+    >,
+  >,
 {
   type Item = EntryRef<'a, S, C, T>;
 
@@ -245,7 +243,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Comparator<C>: PointComparator<C>
     + Comparator<RecordPointer>
@@ -256,17 +254,18 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeRemoveEntry<'a, Active, C, T>:
-    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
+    'a,
+    Update,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <MaybeTombstone as State>::Data<
       'a,
-      Value = <MaybeTombstone as State>::Data<
-        'a,
-        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
-      >,
-    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+      <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+    >,
+  >,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

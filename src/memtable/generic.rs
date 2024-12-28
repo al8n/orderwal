@@ -6,7 +6,10 @@ use dbutils::{
   types::{Type, TypeRef},
 };
 
-use crate::memtable::Memtable;
+use crate::{
+  memtable::Memtable,
+  types::{BulkOperation, Remove, Update},
+};
 
 /// Bounded memtable implementation based on ARNEA based [`SkipMap`](skl::generic::multiple_version::sync::SkipMap)s.
 #[cfg(feature = "skl")]
@@ -46,17 +49,12 @@ where
     Self: 'a,
     S: State + 'a;
 
-  /// The item returned by the bulk deletions iterators
-  type RangeRemoveEntry<'a, S>
+  /// The range entry type.
+  type RangeEntry<'a, S, O>
   where
     Self: 'a,
-    S: State + 'a;
-
-  /// The item returned by the bulk updates iterators
-  type RangeUpdateEntry<'a, S>
-  where
-    Self: 'a,
-    S: State + 'a;
+    S: State + 'a,
+    O: BulkOperation;
 
   /// The iterator type.
   type Iterator<'a, S>
@@ -89,32 +87,19 @@ where
     Q: ?Sized;
 
   /// The iterator over range deletions entries.
-  type BulkRemoveIterator<'a, S>
+  type BulkOperationsIterator<'a, S, O>
   where
     Self: 'a,
-    S: State + 'a;
+    S: State + 'a,
+    O: BulkOperation;
 
   /// The range iterator over range deletions entries.
-  type BulkRemoveRange<'a, S, Q, R>
+  type BulkOperationsRange<'a, S, O, Q, R>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     S: State + 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
-
-  /// The iterator over range updates entries.
-  type BulkUpdateIterator<'a, S>
-  where
-    Self: 'a,
-    S: State + 'a;
-
-  /// The range iterator over range updates entries.
-  type BulkUpdateRange<'a, S, Q, R>
-  where
-    Self: 'a,
-    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
-    S: State + 'a,
+    O: BulkOperation,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -270,48 +255,51 @@ where
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over range deletions entries in the memtable.
-  fn iter_bulk_deletions(&self, version: u64) -> Self::BulkRemoveIterator<'_, Active>;
+  fn iter_bulk_removes(&self, version: u64) -> Self::BulkOperationsIterator<'_, Active, Remove>;
 
   /// Returns an iterator over all the range deletions entries in the memtable.
-  fn iter_all_bulk_deletions(
+  fn iter_all_bulk_removes(
     &self,
     version: u64,
-  ) -> Self::BulkRemoveIterator<'_, MaybeTombstone>;
+  ) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Remove>;
 
   /// Returns an iterator over a subset of range deletions entries in the memtable.
-  fn range_bulk_deletions<'a, Q, R>(
+  fn range_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkRemoveRange<'a, Active, Q, R>
+  ) -> Self::BulkOperationsRange<'a, Active, Remove, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over all the range deletions entries in a subset of the memtable.
-  fn range_all_bulk_deletions<'a, Q, R>(
+  fn range_all_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkRemoveRange<'a, MaybeTombstone, Q, R>
+  ) -> Self::BulkOperationsRange<'a, MaybeTombstone, Remove, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>;
 
   /// Returns an iterator over range updates entries in the memtable.
-  fn iter_bulk_updates(&self, version: u64) -> Self::BulkUpdateIterator<'_, Active>;
+  fn iter_bulk_updates(&self, version: u64) -> Self::BulkOperationsIterator<'_, Active, Update>;
 
   /// Returns an iterator over all the range updates entries in the memtable.
-  fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkUpdateIterator<'_, MaybeTombstone>;
+  fn iter_all_bulk_updates(
+    &self,
+    version: u64,
+  ) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Update>;
 
   /// Returns an iterator over a subset of range updates entries in the memtable.
   fn range_bulk_updates<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdateRange<'a, Active, Q, R>
+  ) -> Self::BulkOperationsRange<'a, Active, Update, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -322,7 +310,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdateRange<'a, MaybeTombstone, Q, R>
+  ) -> Self::BulkOperationsRange<'a, MaybeTombstone, Update, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,

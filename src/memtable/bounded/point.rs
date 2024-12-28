@@ -12,7 +12,7 @@ use crate::{
   memtable::{sealed, Transfer},
   types::{
     sealed::{PointComparator, Pointee},
-    Query, QueryRange, RawEntryRef, RecordPointer, TypeMode,
+    Mode, Query, QueryRange, RawEntryRef, RecordPointer,
   },
 };
 
@@ -20,7 +20,7 @@ use crate::{
 pub struct PointEntryRef<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   pub(in crate::memtable) ent: Entry<'a, RecordPointer, RecordPointer, S, T::Comparator<C>>,
   data: OnceCell<RawEntryRef<'a>>,
@@ -31,7 +31,7 @@ where
 impl<S, C, T> core::fmt::Debug for PointEntryRef<'_, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: PointComparator<C>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -47,7 +47,7 @@ where
   S: State,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   S::Data<'a, T::Value<'a>>: Clone,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Clone,
 {
   #[inline]
@@ -63,7 +63,7 @@ where
 impl<'a, S, C, T> PointEntryRef<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   #[inline]
   pub(in crate::memtable) fn new(
@@ -83,7 +83,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, &'a [u8]>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
 {
@@ -123,7 +123,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
 {
@@ -188,7 +188,7 @@ impl<S, C, T> PointEntryRef<'_, S, C, T>
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -201,7 +201,7 @@ where
 pub struct IterPoints<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   iter: Iter<'a, RecordPointer, RecordPointer, S, T::Comparator<C>>,
 }
@@ -209,7 +209,7 @@ where
 impl<'a, S, C, T> IterPoints<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   #[inline]
   pub(in crate::memtable) const fn new(
@@ -224,7 +224,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
   type Item = PointEntryRef<'a, S, C, T>;
@@ -239,7 +239,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: TypeRefComparator<'a, RecordPointer> + 'a,
 {
   #[inline]
@@ -253,7 +253,7 @@ pub struct RangePoints<'a, S, Q, R, C, T>
 where
   S: State,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
 {
   range: Range<'a, RecordPointer, RecordPointer, S, Query<Q>, QueryRange<Q, R>, T::Comparator<C>>,
 }
@@ -262,7 +262,7 @@ impl<'a, S, Q, R, C, T> RangePoints<'a, S, Q, R, C, T>
 where
   S: State,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
 {
   #[inline]
   pub(in crate::memtable) const fn new(
@@ -279,7 +279,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
 {
   type Item = PointEntryRef<'a, S, C, T>;
@@ -296,7 +296,7 @@ where
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
   R: RangeBounds<Q>,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: TypeRefQueryComparator<'a, RecordPointer, Query<Q>> + 'a,
 {
   #[inline]

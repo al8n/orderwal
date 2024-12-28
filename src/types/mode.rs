@@ -1,5 +1,5 @@
 /// The type mode of the memtable, either dynamic key-value or generic structured key-value.
-pub trait TypeMode: sealed::Sealed {}
+pub trait Mode: sealed::Sealed {}
 
 #[doc(hidden)]
 #[derive(Copy, Clone)]
@@ -30,7 +30,7 @@ pub(crate) mod sealed {
 
   use super::{
     super::{RawEntryRef, RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer},
-    Dynamic, Generic, TypeMode,
+    Dynamic, Generic, Mode,
   };
 
   pub trait ComparatorConstructor<C: ?Sized>: Sized {
@@ -109,7 +109,7 @@ pub(crate) mod sealed {
     type RangeComparator<C>: ComparatorConstructor<C>;
   }
 
-  impl<T: Sealed> TypeMode for T {}
+  impl<T: Sealed> Mode for T {}
 
   impl Sealed for Dynamic {
     type Key<'a> = &'a [u8];

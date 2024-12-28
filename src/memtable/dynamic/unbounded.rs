@@ -47,8 +47,7 @@ pub type RangePoints<'a, S, Q, R, C> = unbounded::RangePoints<'a, S, Q, R, C, Dy
 pub type IterRangeRemove<'a, S, C> = unbounded::IterRangeRemove<'a, S, C, Dynamic>;
 
 /// Bulk deletions range iterator of the [`Table`].
-pub type RangeRangeRemove<'a, S, Q, R, C> =
-  unbounded::RangeRangeRemove<'a, S, Q, R, C, Dynamic>;
+pub type RangeRangeRemove<'a, S, Q, R, C> = unbounded::RangeRangeRemove<'a, S, Q, R, C, Dynamic>;
 
 /// Bulk updates iterator of the [`Table`].
 pub type IterRangeUpdate<'a, S, C> = unbounded::IterRangeUpdate<'a, S, C, Dynamic>;
@@ -112,13 +111,13 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
-  type BulkRemoveIterator<'a, S>
+  type RemoveIterator<'a, S>
     = IterRangeRemove<'a, S, C>
   where
     Self: 'a,
     S: State + 'a;
 
-  type BulkRemoveRange<'a, S, Q, R>
+  type RemoveRange<'a, S, Q, R>
     = RangeRangeRemove<'a, S, Q, R, C>
   where
     Self: 'a,
@@ -126,13 +125,13 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>;
 
-  type BulkUpdateIterator<'a, S>
+  type UpdateIterator<'a, S>
     = IterRangeUpdate<'a, S, C>
   where
     Self: 'a,
     S: State + 'a;
 
-  type BulkUpdateRange<'a, S, Q, R>
+  type UpdateRange<'a, S, Q, R>
     = RangeRangeUpdate<'a, S, Q, R, C>
   where
     Self: 'a,
@@ -330,24 +329,21 @@ where
   }
 
   #[inline]
-  fn iter_bulk_deletions(&self, version: u64) -> Self::BulkRemoveIterator<'_, skl::Active> {
+  fn iter_bulk_removes(&self, version: u64) -> Self::RemoveIterator<'_, skl::Active> {
     IterRangeRemove::new(self.range_deletions_skl.iter(version))
   }
 
   #[inline]
-  fn iter_all_bulk_deletions(
-    &self,
-    version: u64,
-  ) -> Self::BulkRemoveIterator<'_, MaybeTombstone> {
+  fn iter_all_bulk_removes(&self, version: u64) -> Self::RemoveIterator<'_, MaybeTombstone> {
     IterRangeRemove::new(self.range_deletions_skl.iter_all(version))
   }
 
   #[inline]
-  fn range_bulk_deletions<'a, Q, R>(
+  fn range_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkRemoveRange<'a, skl::Active, Q, R>
+  ) -> Self::RemoveRange<'a, skl::Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -356,11 +352,11 @@ where
   }
 
   #[inline]
-  fn range_all_bulk_deletions<'a, Q, R>(
+  fn range_all_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkRemoveRange<'a, MaybeTombstone, Q, R>
+  ) -> Self::RemoveRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -369,12 +365,12 @@ where
   }
 
   #[inline]
-  fn iter_bulk_updates(&self, version: u64) -> Self::BulkUpdateIterator<'_, skl::Active> {
+  fn iter_bulk_updates(&self, version: u64) -> Self::UpdateIterator<'_, skl::Active> {
     IterRangeUpdate::new(self.range_updates_skl.iter(version))
   }
 
   #[inline]
-  fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkUpdateIterator<'_, MaybeTombstone> {
+  fn iter_all_bulk_updates(&self, version: u64) -> Self::UpdateIterator<'_, MaybeTombstone> {
     IterRangeUpdate::new(self.range_updates_skl.iter_all(version))
   }
 
@@ -383,7 +379,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdateRange<'a, skl::Active, Q, R>
+  ) -> Self::UpdateRange<'a, skl::Active, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,
@@ -396,7 +392,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdateRange<'a, MaybeTombstone, Q, R>
+  ) -> Self::UpdateRange<'a, MaybeTombstone, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized + Borrow<[u8]>,

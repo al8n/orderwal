@@ -7,21 +7,21 @@ use skl::{
 
 use crate::{
   memtable::{
-    sealed, Entry, RangeEntry, RangeRemoveEntry as RangeRemoveEntryTrait, RangeUpdateEntry as RangeUpdateEntryTrait, RawEntry, Transfer
+    sealed, Entry, RangeEntry, RawEntry, Transfer,
   },
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
-    Query, RecordPointer, RefQuery, TypeMode,
+    Mode, Query, RecordPointer, RefQuery, Remove, Update,
   },
 };
 
-use super::{PointEntryRef, RangeRemoveEntry, RangeUpdateEntry, Table};
+use super::{PointEntryRef, RangeEntryRef, Table};
 
 /// Entry in the memtable.
 pub struct EntryRef<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   table: &'a Table<C, T>,
   point_ent: PointEntryRef<'a, S, C, T>,
@@ -36,7 +36,7 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: core::fmt::Debug,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   <T::Key<'a> as Pointee<'a>>::Output: core::fmt::Debug,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
@@ -57,7 +57,7 @@ where
   S: State,
   S::Data<'a, T::Value<'a>>: Clone,
   PointEntryRef<'a, S, C, T>: Clone,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Clone,
   T::Value<'a>: Clone,
 {
@@ -79,11 +79,10 @@ where
   C: 'static,
   S: Transfer<'a, T::Value<'a>>,
   S::Data<'a, &'a [u8]>: 'a,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
-  PointEntryRef<'a, S, C, T>:
-    RawEntry<'a, RawValue = S::Data<'a, &'a [u8]>>,
+  PointEntryRef<'a, S, C, T>: RawEntry<'a, RawValue = S::Data<'a, &'a [u8]>>,
 {
   type RawValue = S::Data<'a, &'a [u8]>;
 
@@ -108,7 +107,7 @@ where
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
   S::Data<'a, S::Value>: 'a,
   S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Comparator<C>: PointComparator<C>
     + TypeRefComparator<'a, RecordPointer>
@@ -120,15 +119,17 @@ where
     + 'static,
   PointEntryRef<'a, S, C, T>:
     Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output, Value = S::Data<'a, S::Value>>,
-  RangeRemoveEntry<'a, Active, C, T>:
-    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
-  RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+  RangeEntryRef<'a, Active, Remove, C, T>:
+    RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
+    'a,
+    Update,
+    Key = <T::Key<'a> as Pointee<'a>>::Output,
+    Value = <MaybeTombstone as State>::Data<
       'a,
-      Value = <MaybeTombstone as State>::Data<
-        'a,
-        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
-      >,
-    > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+      <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+    >,
+  >,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
@@ -177,7 +178,7 @@ where
 impl<'a, S, C, T> EntryRef<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   #[inline]
   pub(crate) fn new(
@@ -202,9 +203,8 @@ where
 impl<'a, S, C, T> EntryRef<'a, S, C, T>
 where
   C: 'static,
-  S: State,
   S: Transfer<'a, T::Value<'a>>,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::Comparator<C>: PointComparator<C> + TypeRefComparator<'a, RecordPointer>,
   PointEntryRef<'a, S, C, T>:

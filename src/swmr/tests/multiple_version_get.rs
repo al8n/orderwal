@@ -3,7 +3,7 @@ use core::ops::Bound;
 use crate::{
   memtable::{
     alternative::{MultipleVersionTable, TableOptions},
-    MultipleVersionMemtable, MultipleVersionEntry,
+    MultipleVersionEntry, MultipleVersionMemtable,
   },
   types::{KeyBuilder, ValueBuilder},
 };

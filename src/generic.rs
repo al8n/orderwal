@@ -18,7 +18,7 @@ use crate::{
   log::Log,
   memtable::{self, Memtable, MutableMemtable},
   swmr,
-  types::{BufWriter, KeyBuilder, ValueBuilder},
+  types::{BufWriter, KeyBuilder, Remove, Update, ValueBuilder},
 };
 
 pub use crate::memtable::generic::GenericMemtable;
@@ -27,8 +27,8 @@ pub use dbutils::equivalentor::{Ascend, Descend};
 #[cfg(feature = "bounded")]
 use crate::memtable::generic::bounded;
 
-#[cfg(feature = "unbounded")]
-use crate::memtable::generic::unbounded;
+// #[cfg(feature = "unbounded")]
+// use crate::memtable::generic::unbounded;
 
 /// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
 pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;
@@ -46,10 +46,10 @@ pub type BoundedTable<K, V, C = Ascend> = bounded::Table<K, V, C>;
 #[cfg_attr(docsrs, doc(cfg(feature = "bounded")))]
 pub type BoundedTableOptions<C = Ascend> = memtable::bounded::TableOptions<C>;
 
-/// The memory table based on unbounded linked-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
-#[cfg(feature = "crossbeam-skiplist-mvcc")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
-pub type UnboundedTable<K, V, C = Ascend> = unbounded::Table<K, V, C>;
+// /// The memory table based on unbounded linked-style `SkipMap` for the ordered write-ahead log [`OrderWal`].
+// #[cfg(feature = "crossbeam-skiplist-mvcc")]
+// #[cfg_attr(docsrs, doc(cfg(feature = "unbounded")))]
+// pub type UnboundedTable<K, V, C = Ascend> = unbounded::Table<K, V, C>;
 
 /// An abstract layer for the immutable write-ahead log.
 pub trait Reader<K, V>
@@ -278,39 +278,39 @@ where
 
   /// Returns an iterator over range deletions entries in the memtable.
   #[inline]
-  fn iter_bulk_deletions(
+  fn iter_bulk_removes(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsIterator<'_, Active, Remove>
   where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
   {
-    self.memtable().iter_bulk_deletions(version)
+    self.memtable().iter_bulk_removes(version)
   }
 
   /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in the memtable.
   #[inline]
-  fn iter_all_bulk_deletions(
+  fn iter_all_bulk_removes(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsIterator<'_, MaybeTombstone, Remove>
   where
     K: Type + 'static,
     V: Type + 'static,
     Self::Memtable: GenericMemtable<K, V>,
   {
-    self.memtable().iter_all_bulk_deletions(version)
+    self.memtable().iter_all_bulk_removes(version)
   }
 
   /// Returns an iterator over a subset of range deletions entries in the memtable.
   #[inline]
-  fn range_bulk_deletions<'a, Q, R>(
+  fn range_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<'a, Active, Remove, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -319,16 +319,16 @@ where
     Self::Memtable: GenericMemtable<K, V>,
     <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
-    self.memtable().range_bulk_deletions(version, range)
+    self.memtable().range_bulk_removes(version, range)
   }
 
   /// Returns an iterator over all(including all versions and tombstones) the range deletions entries in a subset of the memtable.
   #[inline]
-  fn range_all_bulk_deletions<'a, Q, R>(
+  fn range_all_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkRemoveRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<'a, MaybeTombstone, Remove, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -337,7 +337,7 @@ where
     Self::Memtable: GenericMemtable<K, V>,
     <Self::Memtable as GenericMemtable<K, V>>::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
-    self.memtable().range_all_bulk_deletions(version, range)
+    self.memtable().range_all_bulk_removes(version, range)
   }
 
   /// Returns an iterator over range updates entries in the memtable.
@@ -345,7 +345,7 @@ where
   fn iter_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateIterator<'_, Active>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsIterator<'_, Active, Update>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -359,7 +359,7 @@ where
   fn iter_all_bulk_updates(
     &self,
     version: u64,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateIterator<'_, MaybeTombstone>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsIterator<'_, MaybeTombstone, Update>
   where
     K: Type + 'static,
     V: Type + 'static,
@@ -374,7 +374,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateRange<'a, Active, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<'a, Active, Update, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -392,7 +392,7 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkUpdateRange<'a, MaybeTombstone, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<'a, MaybeTombstone, Update, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,

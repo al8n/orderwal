@@ -5,7 +5,7 @@ use dbutils::{buffer::VacantBuffer, types::MaybeStructured};
 use std::collections::BTreeMap;
 
 use crate::{
-  memtable::{alternative::TableOptions, Memtable, Entry},
+  memtable::{alternative::TableOptions, Entry, Memtable},
   swmr::base::{Reader, Writer},
   types::{KeyBuilder, ValueBuilder},
 };

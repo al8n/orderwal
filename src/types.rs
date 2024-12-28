@@ -20,7 +20,7 @@ pub use dbutils::{
 mod mode;
 mod raw;
 pub(crate) use mode::sealed;
-pub use mode::{Dynamic, Generic, TypeMode};
+pub use mode::{Dynamic, Generic, Mode};
 pub(crate) use raw::*;
 
 #[doc(hidden)]
@@ -368,23 +368,144 @@ impl Pointer {
   }
 }
 
-/// The range operation.
-pub trait RangeOperation: range_operation::Sealed {}
+/// The marker trait for the entry kind.
+pub trait EntryMode: entry_mode::Sealed {}
 
-impl<T: range_operation::Sealed> RangeOperation for T {}
+impl<T: entry_mode::Sealed> EntryMode for T {}
+
+/// Combined
+pub struct Combined;
+
+/// Point
+pub struct Point;
+
+/// Range
+pub struct Range;
+
+mod entry_mode {
+  use super::{Combined, Point, Range};
+
+  pub trait Sealed: Send + Sync + 'static {}
+
+  impl Sealed for Combined {}
+  impl Sealed for Point {}
+  impl Sealed for Range {}
+}
+
+/// A marker trait for the entry, which may have a value.
+pub trait WithValue: BulkOperation {}
+
+/// The range operation.
+pub trait BulkOperation: range_operation::Sealed {}
+
+impl<T: range_operation::Sealed> BulkOperation for T {}
 
 mod range_operation {
-  pub trait Sealed {}
+  use core::ops::Bound;
+
+  use super::{RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer, Remove, Update};
+
+  pub trait Sealed: Send + Sync + 'static {
+    type Output<'a>;
+
+    fn fetch<'a, C, RC>(cmp: &RC, rp: &RecordPointer) -> Self::Output<'a>
+    where
+      RC: crate::types::sealed::RangeComparator<C>;
+
+    fn fmt(
+      output: &Self::Output<'_>,
+      wrapper_name: &'static str,
+      f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result;
+
+    fn start_bound<'a>(output: &Self::Output<'a>) -> Bound<&'a [u8]>;
+
+    fn end_bound<'a>(output: &Self::Output<'a>) -> Bound<&'a [u8]>;
+
+    fn value<'a>(output: &Self::Output<'a>) -> Option<&'a [u8]>
+    where
+      Self: super::WithValue;
+  }
+
+  impl Sealed for Update {
+    type Output<'a> = RawRangeUpdateRef<'a>;
+
+    #[inline]
+    fn fetch<'a, C, RC>(cmp: &RC, rp: &RecordPointer) -> Self::Output<'a>
+    where
+      RC: crate::types::sealed::RangeComparator<C>,
+    {
+      cmp.fetch_range_update(rp)
+    }
+
+    #[inline]
+    fn fmt(
+      output: &Self::Output<'_>,
+      wrapper_name: &'static str,
+      f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+      output.write_fmt(wrapper_name, f)
+    }
+
+    #[inline]
+    fn start_bound<'a>(output: &Self::Output<'a>) -> Bound<&'a [u8]> {
+      output.start_bound()
+    }
+
+    #[inline]
+    fn end_bound<'a>(output: &Self::Output<'a>) -> Bound<&'a [u8]> {
+      output.end_bound()
+    }
+
+    #[inline]
+    fn value<'a>(output: &Self::Output<'a>) -> Option<&'a [u8]> {
+      output.value()
+    }
+  }
+
+  impl Sealed for Remove {
+    type Output<'a> = RawRangeRemoveRef<'a>;
+
+    #[inline]
+    fn fetch<'a, C, RC>(cmp: &RC, rp: &RecordPointer) -> Self::Output<'a>
+    where
+      RC: crate::types::sealed::RangeComparator<C>,
+    {
+      cmp.fetch_range_deletion(rp)
+    }
+
+    #[inline]
+    fn fmt(
+      output: &Self::Output<'_>,
+      wrapper_name: &'static str,
+      f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+      output.write_fmt(wrapper_name, f)
+    }
+
+    #[inline]
+    fn start_bound<'a>(output: &Self::Output<'a>) -> Bound<&'a [u8]> {
+      output.start_bound()
+    }
+
+    #[inline]
+    fn end_bound<'a>(output: &Self::Output<'a>) -> Bound<&'a [u8]> {
+      output.end_bound()
+    }
+
+    #[inline]
+    fn value<'a>(_: &Self::Output<'a>) -> Option<&'a [u8]> {
+      None
+    }
+  }
 }
 
 /// The range update operation.
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
-pub struct RangeUpdate;
+pub struct Update;
 
-impl range_operation::Sealed for RangeUpdate {}
+impl WithValue for Update {}
 
 /// The range remove operation.
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
-pub struct RangeRemove;
-
-impl range_operation::Sealed for RangeRemove {}
+pub struct Remove;

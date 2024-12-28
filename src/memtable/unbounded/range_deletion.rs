@@ -11,14 +11,14 @@ use dbutils::{
 
 use crate::types::{
   sealed::{Pointee, RangeComparator},
-  Query, QueryRange, RawRangeRemoveRef, RecordPointer, TypeMode,
+  Mode, Query, QueryRange, RawRangeRemoveRef, RecordPointer,
 };
 
 /// Range deletion entry.
 pub struct RangeRemoveEntry<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   pub(crate) ent: Entry<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
   data: OnceCell<RawRangeRemoveRef<'a>>,
@@ -29,7 +29,7 @@ impl<S, C, T> core::fmt::Debug for RangeRemoveEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -43,7 +43,7 @@ impl<'a, S, C, T> Clone for RangeRemoveEntry<'a, S, C, T>
 where
   S: State,
   // S::Data<'a, LazyRef<'a, RecordPointer>>: Clone,
-  T: TypeMode,
+  T: Mode,
   S::Data<'a, T::Value<'a>>: Clone,
   T::Key<'a>: Clone,
 {
@@ -60,7 +60,7 @@ where
 impl<'a, S, C, T> RangeRemoveEntry<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   pub(in crate::memtable) fn new(
     ent: Entry<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
@@ -78,7 +78,7 @@ impl<'a, S, C, T> crate::memtable::RawRangeEntry<'a> for RangeRemoveEntry<'a, S,
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
@@ -103,7 +103,7 @@ impl<'a, S, C, T> crate::memtable::RangeEntry<'a> for RangeRemoveEntry<'a, S, C,
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
@@ -150,7 +150,7 @@ impl<S, C, T> RangeRemoveEntry<'_, S, C, T>
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   /// Returns the version of the entry.
   #[inline]
@@ -163,7 +163,7 @@ impl<'a, S, C, T> crate::memtable::RangeRemoveEntry<'a> for RangeRemoveEntry<'a,
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
@@ -173,14 +173,14 @@ where
 pub struct IterRangeRemove<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   iter: Iter<'a, RecordPointer, RecordPointer, S, T::RangeComparator<C>>,
 }
 impl<'a, S, C, T> IterRangeRemove<'a, S, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
 {
   #[inline]
   pub(in crate::memtable) const fn new(
@@ -193,7 +193,7 @@ impl<'a, S, C, T> Iterator for IterRangeRemove<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   type Item = RangeRemoveEntry<'a, S, C, T>;
@@ -206,7 +206,7 @@ impl<'a, S, C, T> DoubleEndedIterator for IterRangeRemove<'a, S, C, T>
 where
   C: 'static,
   S: State,
-  T: TypeMode,
+  T: Mode,
   T::RangeComparator<C>: Comparator<RecordPointer> + 'a,
 {
   #[inline]
@@ -218,7 +218,7 @@ where
 pub struct RangeRangeRemove<'a, S, Q, R, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
   Q: ?Sized,
   R: RangeBounds<Q>,
 {
@@ -229,7 +229,7 @@ where
 impl<'a, S, Q, R, C, T> RangeRangeRemove<'a, S, Q, R, C, T>
 where
   S: State,
-  T: TypeMode,
+  T: Mode,
   Q: ?Sized,
   R: RangeBounds<Q>,
 {
@@ -254,7 +254,7 @@ where
   S: State,
   R: RangeBounds<Q>,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
   T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
   type Item = RangeRemoveEntry<'a, S, C, T>;
@@ -269,7 +269,7 @@ where
   S: State,
   R: RangeBounds<Q>,
   Q: ?Sized,
-  T: TypeMode,
+  T: Mode,
   T::RangeComparator<C>: QueryComparator<RecordPointer, Query<Q>> + 'a,
 {
   #[inline]

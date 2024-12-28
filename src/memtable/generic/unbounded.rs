@@ -9,7 +9,7 @@ use ref_cast::RefCast;
 
 use crate::{
   memtable::unbounded,
-  types::{Generic, Query},
+  types::{BulkOperation, Generic, Query, Remove, Update},
 };
 
 use super::GenericMemtable;
@@ -23,11 +23,8 @@ pub type EntryRef<'a, K, V, S, C> = unbounded::EntryRef<'a, S, C, Generic<K, V>>
 /// Point entry of the [`Table`].
 pub type PointEntryRef<'a, K, V, S, C> = unbounded::PointEntryRef<'a, S, C, Generic<K, V>>;
 
-/// Range deletion entry of the [`Table`].
-pub type RangeRemoveEntry<'a, K, V, S, C> = unbounded::RangeRemoveEntry<'a, S, C, Generic<K, V>>;
-
-/// Range update entry of the [`Table`].
-pub type RangeUpdateEntry<'a, K, V, S, C> = unbounded::RangeUpdateEntry<'a, S, C, Generic<K, V>>;
+/// Range entry of the [`Table`].
+pub type RangeEntryRef<'a, K, V, S, O, C> = unbounded::RangeEntryRef<'a, S, O, C, Generic<K, V>>;
 
 /// Iterator of the [`Table`].
 pub type Iter<'a, K, V, S, C> = unbounded::Iter<'a, S, C, Generic<K, V>>;
@@ -41,19 +38,12 @@ pub type IterPoints<'a, K, V, S, C> = unbounded::IterPoints<'a, S, C, Generic<K,
 /// Range point iterator of the [`Table`].
 pub type RangePoints<'a, K, V, S, Q, R, C> = unbounded::RangePoints<'a, S, Q, R, C, Generic<K, V>>;
 
-/// Bulk deletions iterator of the [`Table`].
-pub type IterRangeRemove<'a, K, V, S, C> = unbounded::IterRangeRemove<'a, S, C, Generic<K, V>>;
+/// Bulk operations iterator of the [`Table`].
+pub type IterBulkOperations<'a, K, V, S, O, C> = unbounded::IterBulkOperations<'a, S, O, C, Generic<K, V>>;
 
-/// Bulk deletions range iterator of the [`Table`].
-pub type RangeRangeRemove<'a, K, V, S, Q, R, C> =
-  unbounded::RangeRangeRemove<'a, S, Q, R, C, Generic<K, V>>;
-
-/// Bulk updates iterator of the [`Table`].
-pub type IterRangeUpdate<'a, K, V, S, C> = unbounded::IterRangeUpdate<'a, S, C, Generic<K, V>>;
-
-/// Bulk updates range iterator of the [`Table`].
-pub type RangeRangeUpdate<'a, K, V, S, Q, R, C> =
-  unbounded::RangeRangeUpdate<'a, S, Q, R, C, Generic<K, V>>;
+/// Bulk operations range iterator of the [`Table`].
+pub type RangeBulkOperations<'a, K, V, S, O, Q, R, C> =
+  unbounded::RangeBulkOperations<'a, S, O, Q, R, C, Generic<K, V>>;
 
 impl<K, V, C> GenericMemtable<K, V> for Table<K, V, C>
 where
@@ -75,17 +65,11 @@ where
     Self: 'a,
     S: State + 'a;
 
-  type RangeRemoveEntry<'a, S>
-    = RangeRemoveEntry<'a, K, V, S, C>
+  type RangeEntry<'a, S, O> = RangeEntryRef<'a, K, V, S, O, C>
   where
     Self: 'a,
-    S: State + 'a;
-
-  type RangeUpdateEntry<'a, S>
-    = RangeUpdateEntry<'a, K, V, S, C>
-  where
-    Self: 'a,
-    S: State + 'a;
+    S: State + 'a,
+    O: BulkOperation;
 
   type Iterator<'a, S>
     = Iter<'a, K, V, S, C>
@@ -117,33 +101,18 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
-  type BulkRemoveIterator<'a, S>
-    = IterRangeRemove<'a, K, V, S, C>
+  type BulkOperationsIterator<'a, S, O> = IterBulkOperations<'a, K, V, S, O, C>
   where
     Self: 'a,
-    S: State + 'a;
+    S: State + 'a,
+    O: crate::types::BulkOperation;
 
-  type BulkRemoveRange<'a, S, Q, R>
-    = RangeRangeRemove<'a, K, V, S, Q, R, C>
+  type BulkOperationsRange<'a, S, O, Q, R> = RangeBulkOperations<'a, K, V, S, O, Q, R, C>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
     S: State + 'a,
-    R: RangeBounds<Q> + 'a,
-    Q: ?Sized;
-
-  type BulkUpdateIterator<'a, S>
-    = IterRangeUpdate<'a, K, V, S, C>
-  where
-    Self: 'a,
-    S: State + 'a;
-
-  type BulkUpdateRange<'a, S, Q, R>
-    = RangeRangeUpdate<'a, K, V, S, Q, R, C>
-  where
-    Self: 'a,
-    Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
-    S: State + 'a,
+    O: crate::types::BulkOperation,
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
@@ -359,54 +328,51 @@ where
   }
 
   #[inline]
-  fn iter_bulk_deletions(&self, version: u64) -> Self::BulkRemoveIterator<'_, Active> {
-    IterRangeRemove::new(self.range_deletions_skl.iter(version))
+  fn iter_bulk_removes(&self, version: u64) -> Self::BulkOperationsIterator<'_, Active, Remove> {
+    IterBulkOperations::new(self.range_deletions_skl.iter(version))
   }
 
   #[inline]
-  fn iter_all_bulk_deletions(
-    &self,
-    version: u64,
-  ) -> Self::BulkRemoveIterator<'_, MaybeTombstone> {
-    IterRangeRemove::new(self.range_deletions_skl.iter_all(version))
+  fn iter_all_bulk_removes(&self, version: u64) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Remove> {
+    IterBulkOperations::new(self.range_deletions_skl.iter_all(version))
   }
 
   #[inline]
-  fn range_bulk_deletions<'a, Q, R>(
+  fn range_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkRemoveRange<'a, Active, Q, R>
+  ) -> Self::BulkOperationsRange<'a, Active, Remove, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
-    RangeRangeRemove::new(self.range_deletions_skl.range(version, range.into()))
+    RangeBulkOperations::new(self.range_deletions_skl.range(version, range.into()))
   }
 
   #[inline]
-  fn range_all_bulk_deletions<'a, Q, R>(
+  fn range_all_bulk_removes<'a, Q, R>(
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkRemoveRange<'a, MaybeTombstone, Q, R>
+  ) -> Self::BulkOperationsRange<'a, MaybeTombstone, Remove, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
-    RangeRangeRemove::new(self.range_deletions_skl.range_all(version, range.into()))
+    RangeBulkOperations::new(self.range_deletions_skl.range_all(version, range.into()))
   }
 
   #[inline]
-  fn iter_bulk_updates(&self, version: u64) -> Self::BulkUpdateIterator<'_, Active> {
-    IterRangeUpdate::new(self.range_updates_skl.iter(version))
+  fn iter_bulk_updates(&self, version: u64) -> Self::BulkOperationsIterator<'_, Active, Update> {
+    IterBulkOperations::new(self.range_updates_skl.iter(version))
   }
 
   #[inline]
-  fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkUpdateIterator<'_, MaybeTombstone> {
-    IterRangeUpdate::new(self.range_updates_skl.iter_all(version))
+  fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Update> {
+    IterBulkOperations::new(self.range_updates_skl.iter_all(version))
   }
 
   #[inline]
@@ -414,13 +380,13 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdateRange<'a, Active, Q, R>
+  ) -> Self::BulkOperationsRange<'a, Active, Update, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
-    RangeRangeUpdate::new(self.range_updates_skl.range(version, range.into()))
+    RangeBulkOperations::new(self.range_updates_skl.range(version, range.into()))
   }
 
   #[inline]
@@ -428,12 +394,12 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> Self::BulkUpdateRange<'a, MaybeTombstone, Q, R>
+  ) -> Self::BulkOperationsRange<'a, MaybeTombstone, Update, Q, R>
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
   {
-    RangeRangeUpdate::new(self.range_updates_skl.range_all(version, range.into()))
+    RangeBulkOperations::new(self.range_updates_skl.range_all(version, range.into()))
   }
 }

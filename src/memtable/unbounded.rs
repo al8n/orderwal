@@ -14,30 +14,27 @@ use triomphe::Arc;
 
 use crate::types::{
   sealed::{ComparatorConstructor, PointComparator, Pointee, RangeComparator},
-  Query, RecordPointer, RefQuery, TypeMode,
+  Mode, Query, RecordPointer, RefQuery, Remove, Update,
 };
 
 use super::{
-  sealed, Memtable, Entry, MutableMemtable, RangeEntry, RangeEntryExt,
-  RangeRemoveEntry as RangeRemoveEntryTrait, RangeUpdateEntry as RangeUpdateEntryTrait, Transfer,
+  sealed, Entry, Memtable, MutableMemtable, RangeEntry, RangeEntryExt, Transfer,
 };
 
 pub use entry::*;
 pub use iter::*;
 pub use point::*;
-pub use range_deletion::*;
-pub use range_update::*;
+pub use range_entry::*;
 
 mod entry;
 mod iter;
 mod point;
-mod range_deletion;
-mod range_update;
+mod range_entry;
 
 /// A memory table implementation based on ARENA [`SkipMap`](crossbeam_skiplist_mvcc::nested::SkipMap).
 pub struct Table<C, T>
 where
-  T: TypeMode,
+  T: Mode,
 {
   pub(in crate::memtable) skl: SkipMap<RecordPointer, RecordPointer, T::Comparator<C>>,
   pub(in crate::memtable) range_deletions_skl:
@@ -50,7 +47,7 @@ where
 impl<C, T> Memtable for Table<C, T>
 where
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: 'static,
   T::RangeComparator<C>: 'static,
 {
@@ -87,7 +84,7 @@ where
 impl<C, T> MutableMemtable for Table<C, T>
 where
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   T::Comparator<C>: Comparator<RecordPointer> + Send + 'static,
   T::RangeComparator<C>: Comparator<RecordPointer> + Send + 'static,
 {
@@ -134,7 +131,7 @@ where
 impl<'a, C, T> Table<C, T>
 where
   C: 'static,
-  T: TypeMode,
+  T: Mode,
   T::Key<'a>: Pointee<'a, Input = &'a [u8]>,
   T::Comparator<C>: PointComparator<C>
     + Comparator<RecordPointer>
@@ -144,8 +141,8 @@ where
     + QueryComparator<RecordPointer, RefQuery<<T::Key<'a> as Pointee<'a>>::Output>>
     + RangeComparator<C>
     + 'static,
-  RangeRemoveEntry<'a, Active, C, T>:
-    RangeRemoveEntryTrait<'a> + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, Active, Remove, C, T>:
+    RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
 {
   pub(in crate::memtable) fn validate<S>(
     &'a self,
@@ -157,13 +154,15 @@ where
     S::Data<'a, S::Value>: 'a,
     PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
     MaybeTombstone: Transfer<'a, T::Value<'a>>,
-    RangeUpdateEntry<'a, MaybeTombstone, C, T>: RangeUpdateEntryTrait<
+    RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
+      'a,
+      Update,
+      Key = <T::Key<'a> as Pointee<'a>>::Output,
+      Value = <MaybeTombstone as State>::Data<
         'a,
-        Value = <MaybeTombstone as State>::Data<
-          'a,
-          <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
-        >,
-      > + RangeEntry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+        <MaybeTombstone as sealed::Sealed<'a, T::Value<'a>>>::Value,
+      >,
+    >,
   {
     let key = ent.key();
     let cmp = ent.ent.comparator();
@@ -177,7 +176,7 @@ where
         if !(version <= del_ent_version && del_ent_version <= query_version) {
           return false;
         }
-        let ent = RangeRemoveEntry::<Active, C, T>::new(ent);
+        let ent = RangeEntryRef::<Active, Remove, C, T>::new(ent);
         dbutils::equivalentor::RangeComparator::contains(
           cmp,
           &ent.query_range(),
@@ -195,7 +194,7 @@ where
         if !(version <= range_ent_version && range_ent_version <= query_version) {
           return None;
         }
-        let ent = RangeUpdateEntry::<MaybeTombstone, C, T>::new(ent);
+        let ent = RangeEntryRef::<MaybeTombstone, Update, C, T>::new(ent);
         if dbutils::equivalentor::RangeComparator::contains(
           cmp,
           &ent.query_range(),

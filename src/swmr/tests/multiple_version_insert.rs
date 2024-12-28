@@ -5,7 +5,7 @@ use crate::{
   batch::BatchEntry,
   memtable::{
     alternative::{MultipleVersionTable, TableOptions},
-    MultipleVersionMemtable, MultipleVersionEntry,
+    MultipleVersionEntry, MultipleVersionMemtable,
   },
   types::{KeyBuilder, ValueBuilder},
   Builder,
