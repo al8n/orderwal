@@ -274,14 +274,14 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         cfg:
-          - swmr_insert
-          - swmr_iters
-          - swmr_get
-          - swmr_constructor
-          - swmr_multiple_version_insert
-          - swmr_multiple_version_iters
-          - swmr_multiple_version_get
-          - swmr_multiple_version_constructor
+          - generic_insert
+          - generic_iters
+          - generic_get
+          - generic_constructor
+          - dynamic_insert
+          - dynamic_iters
+          - dynamic_get
+          - dynamic_constructor
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest

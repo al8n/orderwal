@@ -77,7 +77,6 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(test_generic_insert)',
   'cfg(test_generic_iters)',
   'cfg(test_generic_get)',
-
   'cfg(test_dynamic_constructor)',
   'cfg(test_dynamic_insert)',
   'cfg(test_dynamic_iters)',
