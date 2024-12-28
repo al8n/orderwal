@@ -6,7 +6,7 @@ use crate::dynamic::BoundedTable;
 #[cfg(feature = "unbounded")]
 use crate::dynamic::UnboundedTable;
 
-use super::MB;
+use super::*;
 
 fn zero_reserved<M>(wal: &mut OrderWal<M>)
 where
