@@ -390,7 +390,7 @@ expand_unit_tests!(
   }
 );
 
-#[cfg(feature = "bounded")]
+#[cfg(all(feature = "bounded", feature = "std"))]
 expand_unit_tests!(
   move "bounded": OrderWal<BoundedTable> [Default::default()]: BoundedTable {
     concurrent_basic |p, _res| {
