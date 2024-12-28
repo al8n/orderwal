@@ -85,10 +85,10 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{base::OrderWal, Builder};
+  /// use orderwal::{generic::{OrderWal, BoundedTable}, Builder};
   ///
   /// // A in-memory WAL
-  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal<[u8], [u8]>>().unwrap();
+  /// let wal = Builder::new().with_capacity(100).alloc::<OrderWal<BoundedTable<str, str>>>().unwrap();
   ///
   /// assert!(wal.path_buf().is_none());
   /// ```

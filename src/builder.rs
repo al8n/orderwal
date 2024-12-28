@@ -56,9 +56,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Crc32, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, checksum::Crc32, generic::BoundedTable};
   ///
-  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().with_checksumer(Crc32::new());
+  /// let opts = Builder::<BoundedTable<str, str>>::new().with_checksumer(Crc32::new());
   /// ```
   #[inline]
   pub fn with_checksumer<NS>(self, cks: NS) -> Builder<M, NS> {
@@ -74,9 +74,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, Options, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, Options, generic::BoundedTable};
   ///
-  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().with_options(Options::default());
+  /// let opts = Builder::<BoundedTable<str, str>>::new().with_options(Options::default());
   /// ```
   #[inline]
   pub fn with_options(self, opts: Options) -> Self {
@@ -92,9 +92,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::{BoundedTable, BoundedTableOptions}};
+  /// use orderwal::{Builder, generic::{BoundedTable, BoundedTableOptions}};
   ///
-  /// let opts = Builder::<BoundedTable<[u8], [u8]>>::new().with_memtable_options(BoundedTableOptions::default());
+  /// let opts = Builder::<BoundedTable<str, str>>::new().with_memtable_options(BoundedTableOptions::default());
   /// ```
   #[inline]
   pub fn with_memtable_options(self, opts: M::Options) -> Self {
@@ -110,9 +110,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::{DefaultTable, BoundedTable}};
+  /// use orderwal::{Builder, generic::{UnboundedTable, BoundedTable}};
   ///
-  /// let opts = Builder::<BoundedTable<[u8], [u8]>>::new().change_memtable::<DefaultTable<[u8], [u8]>>();
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().change_memtable::<BoundedTable<str, str>>();
   /// ```
   #[inline]
   pub fn change_memtable<NM>(self) -> Builder<NM, S>
@@ -132,9 +132,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::{DefaultTable, BoundedTable, BoundedTableOptions}};
+  /// use orderwal::{Builder, generic::{UnboundedTable, BoundedTable, BoundedTableOptions}};
   ///
-  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().change_memtable_with_options::<BoundedTable<[u8], [u8]>>(BoundedTableOptions::default().with_capacity(1000));
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().change_memtable_with_options::<BoundedTable<str, str>>(BoundedTableOptions::default().with_capacity(1000));
   /// ```
   #[inline]
   pub fn change_memtable_with_options<NM>(self, opts: NM::Options) -> Builder<NM, S>
@@ -158,9 +158,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().with_reserved(8);
+  /// let opts = Builder::<BoundedTable<str, str>>::new().with_reserved(8);
   /// ```
   #[inline]
   pub const fn with_reserved(mut self, reserved: u32) -> Self {
@@ -178,9 +178,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let opts = Builder::<DefaultTable<[u8], [u8]>>::new().with_reserved(8);
+  /// let opts = Builder::<BoundedTable<str, str>>::new().with_reserved(8);
   ///
   /// assert_eq!(opts.reserved(), 8);
   /// ```
@@ -196,9 +196,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_magic_version(1);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]
@@ -213,9 +213,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_capacity(1000);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_capacity(1000);
   /// assert_eq!(options.capacity(), 1000);
   /// ```
   #[inline]
@@ -230,9 +230,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
@@ -247,9 +247,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_value_size(1024);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
   #[inline]
@@ -264,9 +264,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new();
+  /// let options = Builder::<BoundedTable<str, str>>::new();
   /// assert_eq!(options.sync(), true);
   /// ```
   #[inline]
@@ -283,9 +283,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_capacity(100);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_capacity(100);
   /// assert_eq!(options.capacity(), 100);
   /// ```
   #[inline]
@@ -299,9 +299,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, KeySize, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_key_size(1024);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_maximum_key_size(1024);
   /// assert_eq!(options.maximum_key_size(), 1024);
   /// ```
   #[inline]
@@ -315,9 +315,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_maximum_value_size(1024);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_maximum_value_size(1024);
   /// assert_eq!(options.maximum_value_size(), 1024);
   /// ```
   #[inline]
@@ -333,9 +333,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_sync(false);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_sync(false);
   /// assert_eq!(options.sync(), false);
   /// ```
   #[inline]
@@ -352,9 +352,9 @@ where
   ///
   /// ```rust
   ///
-  /// use orderwal::{Builder, multiple_version::DefaultTable};
+  /// use orderwal::{Builder, generic::BoundedTable};
   ///
-  /// let options = Builder::<DefaultTable<[u8], [u8]>>::new().with_magic_version(1);
+  /// let options = Builder::<BoundedTable<str, str>>::new().with_magic_version(1);
   /// assert_eq!(options.magic_version(), 1);
   /// ```
   #[inline]
@@ -370,15 +370,27 @@ where
 {
   /// Creates a new in-memory write-ahead log backed by an aligned vec.
   ///
-  /// ## Example
+  /// ## Examples
+  ///
+  /// ### Generic order WAL example
   ///
   /// ```rust
-  ///
-  /// use orderwal::{base::OrderWal, Builder};
+  /// use orderwal::{generic::{OrderWal, BoundedTable}, Builder};
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .alloc::<OrderWal<[u8], [u8]>>()
+  ///   .alloc::<OrderWal<BoundedTable<str, str>>>()
+  ///   .unwrap();
+  /// ```
+  ///
+  /// ### Dynamic order WAL example
+  ///
+  /// ```rust
+  /// use orderwal::{dynamic::{OrderWal, BoundedTable}, Builder};
+  ///
+  /// let wal = Builder::new()
+  ///   .with_capacity(1024)
+  ///   .alloc::<OrderWal<BoundedTable>>()
   ///   .unwrap();
   /// ```
   pub fn alloc<L>(self) -> Result<L, Error<L::Memtable>>

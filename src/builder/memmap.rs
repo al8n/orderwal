@@ -21,9 +21,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_lock_meta(false);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_lock_meta(false);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -41,9 +41,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_read(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_read(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -64,9 +64,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_write(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -111,9 +111,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_append(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_append(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -134,9 +134,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true).with_truncate(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_write(true).with_truncate(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -159,9 +159,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true).with_create(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_write(true).with_create(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -192,9 +192,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new()
+  /// let opts = Builder::<UnboundedTable<str, str>>::new()
   ///   .with_write(true)
   ///   .with_create_new(true);
   /// ```
@@ -215,9 +215,9 @@ where
   /// ## Example
   ///
   /// ```
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let stack = Builder::<LinkedTable<[u8], [u8]>>::new().with_stack(true);
+  /// let stack = Builder::<UnboundedTable<str, str>>::new().with_stack(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -240,9 +240,9 @@ where
   /// ## Example
   ///
   /// ```
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_huge(Some(8));
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_huge(Some(8));
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -263,9 +263,9 @@ where
   /// ## Example
   ///
   /// ```
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_populate(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_populate(true);
   /// ```
   #[inline]
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -290,9 +290,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_lock_meta(false);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_lock_meta(false);
   /// assert_eq!(opts.lock_meta(), false);
   /// ```
   #[inline]
@@ -307,9 +307,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_read(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_read(true);
   /// assert_eq!(opts.read(), true);
   /// ```
   #[inline]
@@ -324,9 +324,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_write(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_write(true);
   /// assert_eq!(opts.write(), true);
   /// ```
   #[inline]
@@ -341,9 +341,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_append(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_append(true);
   /// assert_eq!(opts.append(), true);
   /// ```
   #[inline]
@@ -358,9 +358,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_truncate(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_truncate(true);
   /// assert_eq!(opts.truncate(), true);
   /// ```
   #[inline]
@@ -375,9 +375,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_create(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_create(true);
   /// assert_eq!(opts.create(), true);
   /// ```
   #[inline]
@@ -392,9 +392,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_create_new(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_create_new(true);
   /// assert_eq!(opts.create_new(), true);
   /// ```
   #[inline]
@@ -409,9 +409,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_stack(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_stack(true);
   /// assert_eq!(opts.stack(), true);
   /// ```
   #[inline]
@@ -426,9 +426,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_huge(Some(8));
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_huge(Some(8));
   /// assert_eq!(opts.huge(), Some(8));
   /// ```
   #[inline]
@@ -443,9 +443,9 @@ where
   /// ## Examples
   ///
   /// ```rust
-  /// use orderwal::{Builder, multiple_version::LinkedTable};
+  /// use orderwal::{Builder, generic::UnboundedTable};
   ///
-  /// let opts = Builder::<LinkedTable<[u8], [u8]>>::new().with_populate(true);
+  /// let opts = Builder::<UnboundedTable<str, str>>::new().with_populate(true);
   /// assert_eq!(opts.populate(), true);
   /// ```
   #[inline]
@@ -462,14 +462,27 @@ where
 {
   /// Creates a new in-memory write-ahead log but backed by an anonymous mmap.
   ///
-  /// ## Example
+  /// ## Examples
+  ///
+  /// ### Generic order WAL example
   ///
   /// ```rust
-  /// use orderwal::{base::OrderWal, Builder};
+  /// use orderwal::{generic::{OrderWal, BoundedTable}, Builder};
   ///
   /// let wal = Builder::new()
   ///   .with_capacity(1024)
-  ///   .map_anon::<OrderWal<[u8], [u8]>>()
+  ///   .map_anon::<OrderWal<BoundedTable<str, str>>>()
+  ///   .unwrap();
+  /// ```
+  ///
+  /// ### Dynamic order WAL example
+  ///
+  /// ```rust
+  /// use orderwal::{dynamic::{OrderWal, BoundedTable}, Builder};
+  ///
+  /// let wal = Builder::new()
+  ///   .with_capacity(1024)
+  ///   .map_anon::<OrderWal<BoundedTable>>()
   ///   .unwrap();
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -500,27 +513,47 @@ where
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
   ///
-  /// ## Example
+  /// ## Examples
   ///
-  /// ```rust
-  /// use orderwal::{base::OrderWalReader, Builder};
+  /// ### Generic order WAL example
   ///
-  /// # let dir = tempfile::tempdir().unwrap();
-  /// # let path = dir.path().join("map.wal");
+  ///   ```rust
+  ///   use orderwal::{generic::{OrderWalReader, BoundedTable}, Builder};
+  ///   # let dir = tempfile::tempdir().unwrap();
+  ///   # let path = dir.path().join("map_with_path_builder.wal");
+  ///   # let wal = unsafe {
+  ///   #  Builder::new()
+  ///   #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
+  ///   #  .map_mut::<orderwal::generic::OrderWal<BoundedTable<str, str>>, _>(&path)
+  ///   #  .unwrap()
+  ///   # };
   ///
-  /// # let wal = unsafe {
-  /// #  Builder::new()
-  /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<orderwal::base::OrderWal<[u8], [u8]>, _>(&path)
-  /// #  .unwrap()
-  /// # };
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .map::<OrderWalReader<BoundedTable<str, str>>, _>(path)
+  ///       .unwrap()
+  ///   };
+  ///   ```
   ///
-  /// let wal = unsafe {
-  ///   Builder::new()
-  ///     .map::<OrderWalReader<[u8], [u8]>, _>(&path)
-  ///     .unwrap()
-  /// };
-  /// ```
+  /// ### Dynamic order WAL example
+  ///
+  ///   ```rust
+  ///   use orderwal::{dynamic::{OrderWalReader, BoundedTable}, Builder};
+  ///   # let dir = tempfile::tempdir().unwrap();
+  ///   # let path = dir.path().join("map_with_path_builder.wal");
+  ///   # let wal = unsafe {
+  ///   #  Builder::new()
+  ///   #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
+  ///   #  .map_mut::<orderwal::dynamic::OrderWal<BoundedTable>, _>(&path)
+  ///   #  .unwrap()
+  ///   # };
+  ///
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .map::<OrderWalReader<BoundedTable>, _>(path)
+  ///       .unwrap()
+  ///   };
+  ///   ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map<L, P>(self, path: P) -> Result<L, Error<L::Memtable>>
@@ -545,26 +578,47 @@ where
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
   ///
-  /// ## Example
+  /// ## Examples
   ///
-  /// ```rust
-  /// use orderwal::{base::OrderWalReader, Builder};
+  /// ### Generic order WAL example
   ///
-  /// # let dir = tempfile::tempdir().unwrap();
-  /// # let path = dir.path().join("map_with_path_builder.wal");
+  ///   ```rust
+  ///   use orderwal::{generic::{OrderWalReader, BoundedTable}, Builder};
+  ///   # let dir = tempfile::tempdir().unwrap();
+  ///   # let path = dir.path().join("map_with_path_builder.wal");
+  ///   # let wal = unsafe {
+  ///   #  Builder::new()
+  ///   #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
+  ///   #  .map_mut::<orderwal::generic::OrderWal<BoundedTable<str, str>>, _>(&path)
+  ///   #  .unwrap()
+  ///   # };
   ///
-  /// # let wal = unsafe {
-  /// #  Builder::new()
-  /// #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
-  /// #  .map_mut::<orderwal::base::OrderWal<[u8], [u8]>, _>(&path)
-  /// #  .unwrap()
-  /// # };
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .map_with_path_builder::<OrderWalReader<BoundedTable<str, str>>, _, ()>(|| Ok(path))
+  ///       .unwrap()
+  ///   };
+  ///   ```
   ///
-  /// let wal = unsafe {
-  ///   Builder::new()
-  ///     .map_with_path_builder::<OrderWalReader<[u8], [u8]>, _, ()>(|| Ok(path))
-  ///     .unwrap()
-  /// };
+  /// ### Dynamic order WAL example
+  ///
+  ///   ```rust
+  ///   use orderwal::{dynamic::{OrderWalReader, BoundedTable}, Builder};
+  ///   # let dir = tempfile::tempdir().unwrap();
+  ///   # let path = dir.path().join("map_with_path_builder.wal");
+  ///   # let wal = unsafe {
+  ///   #  Builder::new()
+  ///   #  .with_capacity(1000).with_create(true).with_read(true).with_write(true)
+  ///   #  .map_mut::<orderwal::dynamic::OrderWal<BoundedTable>, _>(&path)
+  ///   #  .unwrap()
+  ///   # };
+  ///
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .map_with_path_builder::<OrderWalReader<BoundedTable>, _, ()>(|| Ok(path))
+  ///       .unwrap()
+  ///   };
+  ///   ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_with_path_builder<L, PB, E>(
@@ -603,24 +657,44 @@ where
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
   ///
-  /// ## Example
+  /// ## Examples
   ///
-  /// ```rust
-  /// use orderwal::{base::OrderWal, Builder};
+  /// ### Generic order WAL example
   ///
-  /// let dir = tempfile::tempdir().unwrap();
-  /// let path = dir.path().join("map_mut_with_path_builder_example.wal");
+  ///   ```rust
+  ///   use orderwal::{generic::{OrderWal, BoundedTable}, Builder};
   ///
-  /// let wal = unsafe {
-  ///   Builder::new()
-  ///     .with_create_new(true)
-  ///     .with_read(true)
-  ///     .with_write(true)
-  ///     .with_capacity(1000)
-  ///     .map_mut::<OrderWal<[u8], [u8]>, _>(&path)
-  ///     .unwrap()
-  /// };
-  /// ```
+  ///   let dir = tempfile::tempdir().unwrap();
+  ///   let path = dir.path().join("map_mut_with_path_builder_example.wal");
+  ///
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .with_create_new(true)
+  ///       .with_read(true)
+  ///       .with_write(true)
+  ///       .with_capacity(1000)
+  ///       .map_mut::<OrderWal<BoundedTable<str, str>>, _>(&path)
+  ///       .unwrap()
+  ///   };
+  ///   ```
+  /// ### Dynamic order WAL example
+  ///   
+  ///   ```rust
+  ///   use orderwal::{dynamic::{OrderWal, BoundedTable}, Builder};
+  ///
+  ///   let dir = tempfile::tempdir().unwrap();
+  ///   let path = dir.path().join("map_mut_with_path_builder_example.wal");
+  ///
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .with_create_new(true)
+  ///       .with_read(true)
+  ///       .with_write(true)
+  ///       .with_capacity(1000)
+  ///       .map_mut::<OrderWal<BoundedTable>, _>(&path)
+  ///       .unwrap()
+  ///   };
+  ///   ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_mut<L, P>(self, path: P) -> Result<L, Error<L::Memtable>>
@@ -645,25 +719,47 @@ where
   /// using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   /// unlinked) files exist but are platform specific and limited.
   ///
-  /// ## Example
+  /// ## Examples
   ///
-  /// ```rust
-  /// use orderwal::{base::OrderWal, Builder};
+  /// ### Generic order WAL example
   ///
-  /// let dir = tempfile::tempdir().unwrap();
+  ///   ```rust
+  ///   use orderwal::{generic::{OrderWal, BoundedTable}, Builder};
+  ///
+  ///   let dir = tempfile::tempdir().unwrap();
   ///  
-  /// let wal = unsafe {
-  ///   Builder::new()
-  ///     .with_create_new(true)
-  ///     .with_read(true)
-  ///     .with_write(true)
-  ///     .with_capacity(1000)
-  ///     .map_mut_with_path_builder::<OrderWal<[u8], [u8]>, _, ()>(
-  ///       || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
-  ///     )
-  ///     .unwrap()
-  /// };
-  /// ```
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .with_create_new(true)
+  ///       .with_read(true)
+  ///       .with_write(true)
+  ///       .with_capacity(1000)
+  ///       .map_mut_with_path_builder::<OrderWal<BoundedTable<str, str>>, _, ()>(
+  ///         || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
+  ///       )
+  ///       .unwrap()
+  ///   };
+  ///   ```
+  ///
+  /// ### Dynamic order WAL example
+  ///
+  ///   ```rust
+  ///   use orderwal::{dynamic::{OrderWal, BoundedTable}, Builder};
+  ///
+  ///   let dir = tempfile::tempdir().unwrap();
+  ///  
+  ///   let wal = unsafe {
+  ///     Builder::new()
+  ///       .with_create_new(true)
+  ///       .with_read(true)
+  ///       .with_write(true)
+  ///       .with_capacity(1000)
+  ///       .map_mut_with_path_builder::<OrderWal<BoundedTable>, _, ()>(
+  ///         || Ok(dir.path().join("map_mut_with_path_builder_example.wal")),
+  ///       )
+  ///       .unwrap()
+  ///   };
+  ///   ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_mut_with_path_builder<L, PB, E>(

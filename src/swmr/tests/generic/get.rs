@@ -2,16 +2,13 @@ use dbutils::{
   buffer::VacantBuffer,
   equivalentor::{TypeRefComparator, TypeRefQueryComparator},
   state::{Active, MaybeTombstone},
-  types::{MaybeStructured, Type},
+  types::{MaybeStructured, Str, Type},
 };
-use skl::generic::Str;
 
 use core::ops::Bound;
 
 use crate::{
-  generic::{
-    BoundedTable, GenericMemtable, OrderWal, Reader, UnboundedTable, Writer,
-  },
+  generic::{BoundedTable, GenericMemtable, OrderWal, Reader, UnboundedTable, Writer},
   memtable::{Entry, MutableMemtable, RawEntry},
   types::{KeyBuilder, ValueBuilder},
 };
@@ -57,8 +54,11 @@ where
   M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
-  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
-  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+  for<'a> M::Entry<'a, Active>:
+    Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>>
+    + RawEntry<'a, RawValue = Option<&'a [u8]>>
+    + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -136,8 +136,11 @@ where
   M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
-  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
-  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+  for<'a> M::Entry<'a, Active>:
+    Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>>
+    + RawEntry<'a, RawValue = Option<&'a [u8]>>
+    + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -244,8 +247,11 @@ where
   M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
-  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
-  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+  for<'a> M::Entry<'a, Active>:
+    Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>>
+    + RawEntry<'a, RawValue = Option<&'a [u8]>>
+    + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -352,8 +358,11 @@ where
   M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
-  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
-  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+  for<'a> M::Entry<'a, Active>:
+    Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>>
+    + RawEntry<'a, RawValue = Option<&'a [u8]>>
+    + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -482,8 +491,11 @@ where
   M: GenericMemtable<str, str> + MutableMemtable + 'static,
   M::Error: std::fmt::Debug,
   for<'a> M::Comparator: TypeRefComparator<'a, str> + TypeRefQueryComparator<'a, str, str>,
-  for<'a> M::Entry<'a, Active>: Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
-  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>> + RawEntry<'a, RawValue = Option<&'a [u8]>> + std::fmt::Debug,
+  for<'a> M::Entry<'a, Active>:
+    Entry<'a, Key = Str<'a>, Value = Str<'a>> + RawEntry<'a, RawValue = &'a [u8]> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Key = Str<'a>, Value = Option<Str<'a>>>
+    + RawEntry<'a, RawValue = Option<&'a [u8]>>
+    + std::fmt::Debug,
 {
   wal.insert(1, "a", "a1").unwrap();
   wal.insert(3, "a", "a2").unwrap();
@@ -588,7 +600,8 @@ where
   M::Error: std::fmt::Debug,
   for<'a> M::Comparator: TypeRefComparator<'a, Person> + TypeRefQueryComparator<'a, Person, Person>,
   for<'a> M::Entry<'a, Active>: Entry<'a, Value = Str<'a>> + RawEntry<'a> + std::fmt::Debug,
-  for<'a> M::Entry<'a, MaybeTombstone>: Entry<'a, Value = Option<Str<'a>>> + RawEntry<'a> + std::fmt::Debug,
+  for<'a> M::Entry<'a, MaybeTombstone>:
+    Entry<'a, Value = Option<Str<'a>>> + RawEntry<'a> + std::fmt::Debug,
 {
   let people = (0..100)
     .map(|_| {
@@ -632,13 +645,11 @@ macro_rules! insert_with_value_builder {
   }};
 }
 
-fn bounded_insert_with_value_builder(wal: &mut OrderWal<BoundedTable<Person, String>>)
-{
+fn bounded_insert_with_value_builder(wal: &mut OrderWal<BoundedTable<Person, String>>) {
   insert_with_value_builder!(wal);
 }
 
-fn unbounded_insert_with_value_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>)
-{
+fn unbounded_insert_with_value_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
   insert_with_value_builder!(wal);
 }
 
@@ -666,13 +677,11 @@ macro_rules! insert_with_key_builder {
   }};
 }
 
-fn bounded_insert_with_key_builder(wal: &mut OrderWal<BoundedTable<Person, String>>)
-{
+fn bounded_insert_with_key_builder(wal: &mut OrderWal<BoundedTable<Person, String>>) {
   insert_with_key_builder!(wal);
 }
 
-fn unbounded_insert_with_key_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>)
-{
+fn unbounded_insert_with_key_builder(wal: &mut OrderWal<UnboundedTable<Person, String>>) {
   insert_with_key_builder!(wal);
 }
 

@@ -288,14 +288,26 @@ impl PersonRef<'_> {
   }
 }
 
-#[cfg(all(test, any(test_swmr_insert, all_orderwal_tests)))]
-mod insert;
+#[cfg(all(
+  test,
+  any(
+    test_generic_iters,
+    test_generic_get,
+    test_generic_insert,
+    test_generic_constructor,
+    all_orderwal_tests
+  )
+))]
+mod generic;
 
-#[cfg(all(test, any(test_swmr_iters, all_orderwal_tests)))]
-mod iters;
-
-#[cfg(all(test, any(test_swmr_get, all_orderwal_tests)))]
-mod get;
-
-// #[cfg(all(test, any(test_swmr_constructor, all_orderwal_tests)))]
-mod constructor;
+#[cfg(all(
+  test,
+  any(
+    test_dynamic_iters,
+    test_dynamic_get,
+    test_dynamic_insert,
+    test_dynamic_constructor,
+    all_orderwal_tests
+  )
+))]
+mod dynamic;

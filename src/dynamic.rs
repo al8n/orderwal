@@ -21,6 +21,7 @@ use crate::{
   memtable::{self, Memtable, MutableMemtable},
   swmr,
   types::{BufWriter, KeyBuilder, Remove, Update, ValueBuilder},
+  HEADER_SIZE,
 };
 
 #[cfg(feature = "bounded")]
@@ -61,7 +62,7 @@ pub trait Reader: Log {
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
   unsafe fn reserved_slice(&self) -> &[u8] {
-    self.allocator().reserved_slice()
+    &self.allocator().reserved_slice()[HEADER_SIZE..]
   }
 
   /// Returns the path of the WAL if it is backed by a file.
@@ -529,11 +530,8 @@ where
   /// - The caller must ensure that the there is no others accessing reserved slice for either read or write.
   /// - This method is not thread-safe, so be careful when using it.
   #[inline]
-  unsafe fn reserved_slice_mut<'a>(&'a mut self) -> &'a mut [u8]
-  where
-    Self::Allocator: 'a,
-  {
-    self.allocator().reserved_slice_mut()
+  unsafe fn reserved_slice_mut(&mut self) -> &mut [u8] {
+    &mut self.allocator().reserved_slice_mut()[HEADER_SIZE..]
   }
 
   /// Flushes the to disk.

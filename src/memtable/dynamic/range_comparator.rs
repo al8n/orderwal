@@ -18,6 +18,9 @@ pub struct MemtableRangeComparator<C: ?Sized> {
   cmp: Arc<C>,
 }
 
+unsafe impl<C: ?Sized> Send for MemtableRangeComparator<C> {}
+unsafe impl<C: ?Sized> Sync for MemtableRangeComparator<C> {}
+
 impl<C: ?Sized> crate::types::sealed::ComparatorConstructor<C> for MemtableRangeComparator<C> {
   #[inline]
   fn new(ptr: *const u8, cmp: Arc<C>) -> Self {
