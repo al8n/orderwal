@@ -15,7 +15,7 @@ use crate::{
 
 use super::{Person, MB};
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!("unbounded": OrderWal<UnboundedTable<str, str>> [Default::default()]: UnboundedTable<_, _>  {
   mvcc,
   gt,
@@ -24,6 +24,7 @@ expand_unit_tests!("unbounded": OrderWal<UnboundedTable<str, str>> [Default::def
   lt,
 });
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!("bounded": OrderWal<BoundedTable<str, str>> [Default::default()]: BoundedTable<_, _>  {
   mvcc,
   gt,
@@ -32,7 +33,7 @@ expand_unit_tests!("bounded": OrderWal<BoundedTable<str, str>> [Default::default
   lt,
 });
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!("unbounded": OrderWal<UnboundedTable<Person, String>> [Default::default()]: UnboundedTable<_, _> {
   insert,
   unbounded_insert_with_value_builder,
@@ -41,6 +42,7 @@ expand_unit_tests!("unbounded": OrderWal<UnboundedTable<Person, String>> [Defaul
   unbounded_insert_with_builders,
 });
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!("bounded": OrderWal<BoundedTable<Person, String>> [Default::default()]: BoundedTable<_, _> {
   insert,
   bounded_insert_with_value_builder,

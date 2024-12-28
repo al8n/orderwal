@@ -7,16 +7,17 @@ use crate::{
 
 use super::MB;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!("unbounded": OrderWal<UnboundedTable> [Default::default()]: UnboundedTable {
   unbounded_iter_with_tombstone_mvcc,
 });
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!("bounded": OrderWal<BoundedTable> [Default::default()]: BoundedTable {
   bounded_iter_with_tombstone_mvcc,
 });
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!("unbounded": OrderWal<UnboundedTable> [Default::default()]: UnboundedTable {
   unbounded_iter_with_tombstone_next_by_entry,
   unbounded_iter_with_tombstone_next_by_with_tombstone_entry,
@@ -40,6 +41,7 @@ macro_rules! bounded_builder {
   }};
 }
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!("bounded": OrderWal<BoundedTable> [Default::default()]: BoundedTable {
   bounded_iter_with_tombstone_next_by_entry(bounded_builder!()),
   bounded_iter_with_tombstone_next_by_with_tombstone_entry(bounded_builder!()),

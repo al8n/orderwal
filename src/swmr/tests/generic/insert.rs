@@ -311,7 +311,7 @@ where
   (rp1, output, rp2)
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!(
   move "unbounded": OrderWal<UnboundedTable<u32, [u8; 4]>> [Default::default()]: UnboundedTable<_, _> {
     concurrent_basic |p, _res| {
@@ -328,6 +328,7 @@ expand_unit_tests!(
   }
 );
 
+#[cfg(feature = "unbounded")]
 expand_unit_tests!(
   move "unbounded": OrderWal<UnboundedTable<Person, String>> [Default::default()]: UnboundedTable<_, _> {
     apply |p, (rp1, data, rp2)| {
@@ -385,7 +386,7 @@ expand_unit_tests!(
   }
 );
 
-#[cfg(feature = "std")]
+#[cfg(feature = "bounded")]
 expand_unit_tests!(
   move "bounded": OrderWal<BoundedTable<u32, [u8; 4]>> [Default::default()]: BoundedTable<_, _> {
     concurrent_basic |p, _res| {
@@ -402,6 +403,7 @@ expand_unit_tests!(
   }
 );
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!(
   move "bounded": OrderWal<BoundedTable<Person, String>> [Default::default()]: BoundedTable<_, _> {
     apply |p, (rp1, data, rp2)| {

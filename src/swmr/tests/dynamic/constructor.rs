@@ -32,14 +32,14 @@ where
   }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!(
   "unbounded": OrderWal<UnboundedTable> [Default::default()]: UnboundedTable {
     zero_reserved,
   }
 );
 
-#[cfg(feature = "std")]
+#[cfg(feature = "unbounded")]
 expand_unit_tests!(
   "unbounded": OrderWal<UnboundedTable> [Default::default()]: UnboundedTable {
     reserved({
@@ -50,12 +50,14 @@ expand_unit_tests!(
   }
 );
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!(
   "bounded": OrderWal<BoundedTable> [Default::default()]: BoundedTable {
     zero_reserved,
   }
 );
 
+#[cfg(feature = "bounded")]
 expand_unit_tests!(
   "bounded": OrderWal<BoundedTable> [Default::default()]: BoundedTable {
     reserved({
