@@ -11,11 +11,13 @@ use dbutils::{
 use either::Either;
 use rarena_allocator::Allocator;
 
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+use crate::memtable;
 use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::{self, Memtable, MutableMemtable},
+  memtable::{Memtable, MutableMemtable},
   swmr,
   types::{BufWriter, KeyBuilder, Remove, Update, ValueBuilder},
   HEADER_SIZE,

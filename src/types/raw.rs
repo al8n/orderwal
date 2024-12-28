@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use core::{ops::Bound, slice};
 
 use dbutils::leb128::decode_u64_varint;

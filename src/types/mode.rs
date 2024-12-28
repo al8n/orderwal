@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// The type mode of the memtable, either dynamic key-value or generic structured key-value.
 pub trait Mode: sealed::Sealed {}
 

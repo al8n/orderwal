@@ -7,29 +7,31 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   checksum::{BuildChecksumer, Crc32},
-  equivalentor::Ascend,
   state::{Active, MaybeTombstone},
 };
 use either::Either;
 use rarena_allocator::Allocator;
 
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+use crate::memtable;
 use crate::{
   batch::Batch,
   error::Error,
   log::Log,
-  memtable::{self, Memtable, MutableMemtable},
+  memtable::{Memtable, MutableMemtable},
   swmr,
   types::{BufWriter, KeyBuilder, Remove, Update, ValueBuilder},
   HEADER_SIZE,
 };
+
+pub use crate::memtable::dynamic::DynamicMemtable;
+pub use dbutils::equivalentor::{Ascend, Descend};
 
 #[cfg(feature = "bounded")]
 use crate::memtable::dynamic::bounded;
 
 #[cfg(feature = "unbounded")]
 use crate::memtable::dynamic::unbounded;
-
-pub use crate::memtable::dynamic::DynamicMemtable;
 
 /// A multiple versions ordered write-ahead log implementation for concurrent thread environments.
 pub type OrderWal<M, S = Crc32> = swmr::OrderWal<M, S>;

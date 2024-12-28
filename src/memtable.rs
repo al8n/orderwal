@@ -1,6 +1,11 @@
-use core::ops::{Bound, RangeBounds};
+use core::ops::Bound;
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+use core::ops::RangeBounds;
 
-use crate::types::{Query, RecordPointer, WithValue};
+use crate::types::{RecordPointer, WithValue};
+
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
+use crate::types::Query;
 
 #[cfg(feature = "skl")]
 pub(crate) mod bounded;
@@ -116,6 +121,7 @@ pub trait RangeEntry<'a, O> {
   fn version(&self) -> u64;
 }
 
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
 trait RangeEntryExt<'a, O>: RangeEntry<'a, O> {
   /// Returns the start bound of the range entry.
   fn query_start_bound(&self) -> Bound<Query<Self::Key>> {
@@ -141,6 +147,7 @@ trait RangeEntryExt<'a, O>: RangeEntry<'a, O> {
   }
 }
 
+#[cfg(any(feature = "bounded", feature = "unbounded"))]
 impl<'a, O, T> RangeEntryExt<'a, O> for T where T: RangeEntry<'a, O> {}
 
 /// A memory table which is used to store pointers to the underlying entries.
@@ -276,7 +283,7 @@ mod sealed {
 
   #[cfg(not(any(feature = "skl", feature = "crossbeam-skiplist-mvcc")))]
   pub trait Sealed<'a, I>: dbutils::state::State {
-    type Output;
+    type Value;
 
     fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
 
@@ -288,7 +295,7 @@ mod sealed {
     where
       Self: Sized;
 
-    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Output>;
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::Value>;
 
     fn leak<T>(data: Self::Data<'a, T>) -> Option<T>;
 
