@@ -6,9 +6,7 @@ use skl::{
 };
 
 use crate::{
-  memtable::{
-    sealed, Entry, RangeEntry, RawEntry, Transfer,
-  },
+  memtable::{sealed, Entry, RangeEntry, RawEntry, Transfer},
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
     Mode, Query, RecordPointer, RefQuery, Remove, Update,

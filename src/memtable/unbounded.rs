@@ -17,9 +17,7 @@ use crate::types::{
   Mode, Query, RecordPointer, RefQuery, Remove, Update,
 };
 
-use super::{
-  sealed, Entry, Memtable, MutableMemtable, RangeEntry, RangeEntryExt, Transfer,
-};
+use super::{sealed, Entry, Memtable, MutableMemtable, RangeEntry, RangeEntryExt, Transfer};
 
 pub use entry::*;
 pub use iter::*;

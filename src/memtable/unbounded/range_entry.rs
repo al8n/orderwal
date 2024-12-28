@@ -101,7 +101,10 @@ where
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
-  type RawValue = S::Data<'a, &'a [u8]> where O: WithValue;
+  type RawValue
+    = S::Data<'a, &'a [u8]>
+  where
+    O: WithValue;
 
   #[inline]
   fn raw_start_bound(&self) -> Bound<&'a [u8]> {
@@ -148,7 +151,10 @@ where
   T::RangeComparator<C>: Comparator<RecordPointer> + RangeComparator<C>,
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
-  type Value = S::Data<'a, S::Value> where O: WithValue;
+  type Value
+    = S::Data<'a, S::Value>
+  where
+    O: WithValue;
 
   #[inline]
   fn start_bound(&self) -> Bound<Self::Key> {

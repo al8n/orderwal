@@ -143,30 +143,6 @@ trait RangeEntryExt<'a, O>: RangeEntry<'a, O> {
 
 impl<'a, O, T> RangeEntryExt<'a, O> for T where T: RangeEntry<'a, O> {}
 
-// /// A range update entry which is stored in the memory table.
-// pub trait RangeUpdateEntry<'a>
-// where
-//   Self: RangeEntry<'a>,
-// {
-//   /// The value type.
-//   type Value: 'a;
-
-//   /// Returns the value in the entry.
-//   fn value(&self) -> Self::Value;
-// }
-
-// /// A entry which is stored in the memory table.
-// pub trait RawRangeUpdateEntry<'a>
-// where
-//   Self: RangeEntry<'a>,
-// {
-//   /// The value type.
-//   type RawValue: 'a;
-
-//   /// Returns the value in the entry.
-//   fn raw_value(&self) -> Self::RawValue;
-// }
-
 /// A memory table which is used to store pointers to the underlying entries.
 pub trait Memtable {
   /// The configuration options for the memtable.

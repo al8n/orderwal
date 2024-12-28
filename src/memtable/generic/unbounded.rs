@@ -39,7 +39,8 @@ pub type IterPoints<'a, K, V, S, C> = unbounded::IterPoints<'a, S, C, Generic<K,
 pub type RangePoints<'a, K, V, S, Q, R, C> = unbounded::RangePoints<'a, S, Q, R, C, Generic<K, V>>;
 
 /// Bulk operations iterator of the [`Table`].
-pub type IterBulkOperations<'a, K, V, S, O, C> = unbounded::IterBulkOperations<'a, S, O, C, Generic<K, V>>;
+pub type IterBulkOperations<'a, K, V, S, O, C> =
+  unbounded::IterBulkOperations<'a, S, O, C, Generic<K, V>>;
 
 /// Bulk operations range iterator of the [`Table`].
 pub type RangeBulkOperations<'a, K, V, S, O, Q, R, C> =
@@ -65,7 +66,8 @@ where
     Self: 'a,
     S: State + 'a;
 
-  type RangeEntry<'a, S, O> = RangeEntryRef<'a, K, V, S, O, C>
+  type RangeEntry<'a, S, O>
+    = RangeEntryRef<'a, K, V, S, O, C>
   where
     Self: 'a,
     S: State + 'a,
@@ -101,13 +103,15 @@ where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized;
 
-  type BulkOperationsIterator<'a, S, O> = IterBulkOperations<'a, K, V, S, O, C>
+  type BulkOperationsIterator<'a, S, O>
+    = IterBulkOperations<'a, K, V, S, O, C>
   where
     Self: 'a,
     S: State + 'a,
     O: crate::types::BulkOperation;
 
-  type BulkOperationsRange<'a, S, O, Q, R> = RangeBulkOperations<'a, K, V, S, O, Q, R, C>
+  type BulkOperationsRange<'a, S, O, Q, R>
+    = RangeBulkOperations<'a, K, V, S, O, Q, R, C>
   where
     Self: 'a,
     Self::Comparator: TypeRefQueryComparator<'a, K, Q>,
@@ -333,7 +337,10 @@ where
   }
 
   #[inline]
-  fn iter_all_bulk_removes(&self, version: u64) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Remove> {
+  fn iter_all_bulk_removes(
+    &self,
+    version: u64,
+  ) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Remove> {
     IterBulkOperations::new(self.range_deletions_skl.iter_all(version))
   }
 
@@ -371,7 +378,10 @@ where
   }
 
   #[inline]
-  fn iter_all_bulk_updates(&self, version: u64) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Update> {
+  fn iter_all_bulk_updates(
+    &self,
+    version: u64,
+  ) -> Self::BulkOperationsIterator<'_, MaybeTombstone, Update> {
     IterBulkOperations::new(self.range_updates_skl.iter_all(version))
   }
 

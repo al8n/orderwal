@@ -24,7 +24,7 @@ pub type EntryRef<'a, K, V, S, C> = bounded::EntryRef<'a, S, C, Generic<K, V>>;
 pub type PointEntryRef<'a, K, V, S, C> = bounded::PointEntryRef<'a, S, C, Generic<K, V>>;
 
 /// Range entry of the [`Table`].
-pub type RangeEntry<'a, K, V, S, O, C> = bounded::RangeEntryRef<'a, S, O, C, Generic<K, V>>;
+pub type RangeEntryRef<'a, K, V, S, O, C> = bounded::RangeEntryRef<'a, S, O, C, Generic<K, V>>;
 
 /// Iterator of the [`Table`].
 pub type Iter<'a, K, V, S, C> = bounded::Iter<'a, S, C, Generic<K, V>>;
@@ -67,7 +67,7 @@ where
     S: State + 'a;
 
   type RangeEntry<'a, S, O>
-    = RangeEntry<'a, K, V, S, O, C>
+    = RangeEntryRef<'a, K, V, S, O, C>
   where
     Self: 'a,
     S: State + 'a,

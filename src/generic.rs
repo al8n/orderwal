@@ -328,7 +328,13 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<'a, MaybeTombstone, Remove, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<
+    'a,
+    MaybeTombstone,
+    Remove,
+    Q,
+    R,
+  >
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,
@@ -392,7 +398,13 @@ where
     &'a self,
     version: u64,
     range: R,
-  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<'a, MaybeTombstone, Update, Q, R>
+  ) -> <Self::Memtable as GenericMemtable<K, V>>::BulkOperationsRange<
+    'a,
+    MaybeTombstone,
+    Update,
+    Q,
+    R,
+  >
   where
     R: RangeBounds<Q> + 'a,
     Q: ?Sized,

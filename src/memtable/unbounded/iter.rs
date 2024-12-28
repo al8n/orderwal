@@ -6,18 +6,14 @@ use dbutils::{
 };
 
 use crate::{
-  memtable::{
-    sealed, Entry, RangeEntry, Transfer,
-  },
+  memtable::{sealed, Entry, RangeEntry, Transfer},
   types::{
     sealed::{PointComparator, Pointee, RangeComparator},
     Mode, Query, RecordPointer, RefQuery, Remove, Update,
   },
 };
 
-use super::{
-  EntryRef, IterPoints, PointEntryRef, RangeEntryRef, RangePoints, Table
-};
+use super::{EntryRef, IterPoints, PointEntryRef, RangeEntryRef, RangePoints, Table};
 
 /// An iterator over the entries of a `Memtable`.
 pub struct Iter<'a, S, C, T>
@@ -78,7 +74,8 @@ where
     + 'static,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, Active, Remove, C, T>:
+    RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
     'a,
     Update,
@@ -120,7 +117,8 @@ where
     + 'static,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, Active, Remove, C, T>:
+    RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
     'a,
     Update,
@@ -211,7 +209,8 @@ where
     + 'static,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, Active, Remove, C, T>:
+    RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
     'a,
     Update,
@@ -256,7 +255,8 @@ where
     + 'static,
   PointEntryRef<'a, S, C, T>: Entry<'a, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   MaybeTombstone: Transfer<'a, T::Value<'a>>,
-  RangeEntryRef<'a, Active, Remove, C, T>: RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
+  RangeEntryRef<'a, Active, Remove, C, T>:
+    RangeEntry<'a, Remove, Key = <T::Key<'a> as Pointee<'a>>::Output>,
   RangeEntryRef<'a, MaybeTombstone, Update, C, T>: RangeEntry<
     'a,
     Update,

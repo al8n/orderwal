@@ -368,30 +368,6 @@ impl Pointer {
   }
 }
 
-/// The marker trait for the entry kind.
-pub trait EntryMode: entry_mode::Sealed {}
-
-impl<T: entry_mode::Sealed> EntryMode for T {}
-
-/// Combined
-pub struct Combined;
-
-/// Point
-pub struct Point;
-
-/// Range
-pub struct Range;
-
-mod entry_mode {
-  use super::{Combined, Point, Range};
-
-  pub trait Sealed: Send + Sync + 'static {}
-
-  impl Sealed for Combined {}
-  impl Sealed for Point {}
-  impl Sealed for Range {}
-}
-
 /// A marker trait for the entry, which may have a value.
 pub trait WithValue: BulkOperation {}
 
@@ -403,14 +379,14 @@ impl<T: range_operation::Sealed> BulkOperation for T {}
 mod range_operation {
   use core::ops::Bound;
 
-  use super::{RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer, Remove, Update};
+  use super::{RawRangeRemoveRef, RawRangeUpdateRef, RecordPointer, Remove, Update, sealed::RangeComparator};
 
   pub trait Sealed: Send + Sync + 'static {
     type Output<'a>;
 
     fn fetch<'a, C, RC>(cmp: &RC, rp: &RecordPointer) -> Self::Output<'a>
     where
-      RC: crate::types::sealed::RangeComparator<C>;
+      RC: RangeComparator<C>;
 
     fn fmt(
       output: &Self::Output<'_>,
@@ -433,7 +409,7 @@ mod range_operation {
     #[inline]
     fn fetch<'a, C, RC>(cmp: &RC, rp: &RecordPointer) -> Self::Output<'a>
     where
-      RC: crate::types::sealed::RangeComparator<C>,
+      RC: RangeComparator<C>,
     {
       cmp.fetch_range_update(rp)
     }

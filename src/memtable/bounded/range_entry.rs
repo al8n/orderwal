@@ -107,7 +107,8 @@ where
   T::Key<'a>: Pointee<'a, Input = &'a [u8]> + 'a,
   T::RangeComparator<C>: TypeRefComparator<'a, RecordPointer> + RangeComparator<C>,
 {
-  type RawValue = S::Data<'a, &'a [u8]>
+  type RawValue
+    = S::Data<'a, &'a [u8]>
   where
     O: WithValue;
 
@@ -119,7 +120,7 @@ where
 
     O::start_bound(ent)
   }
-  
+
   #[inline]
   fn raw_end_bound(&self) -> Bound<&'a [u8]> {
     let ent = self
@@ -131,7 +132,8 @@ where
   #[inline]
   fn raw_value(&self) -> Self::RawValue
   where
-    O: WithValue {
+    O: WithValue,
+  {
     let ent = self.data.get_or_init(|| {
       let ptr = S::leak(self.ent.value());
 
@@ -157,7 +159,8 @@ where
 {
   type Key = <T::Key<'a> as Pointee<'a>>::Output;
 
-  type Value = S::Data<'a, S::Value>
+  type Value
+    = S::Data<'a, S::Value>
   where
     O: WithValue;
 
@@ -207,18 +210,17 @@ where
   fn next(&mut self) -> Option<Self> {
     self.ent.next().map(Self::new)
   }
-  
+
   #[inline]
   fn prev(&mut self) -> Option<Self> {
     self.ent.prev().map(Self::new)
   }
-  
+
   #[inline]
   fn version(&self) -> u64 {
     self.ent.version()
   }
 }
-
 
 impl<'a, S, O, C, T> RangeEntryRef<'a, S, O, C, T>
 where
