@@ -9,9 +9,7 @@ use std::thread::spawn;
 
 use crate::{
   batch::BatchEntry,
-  generic::{
-    GenericMemtable, OrderWal, OrderWalReader, Reader, Writer,
-  },
+  generic::{GenericMemtable, OrderWal, OrderWalReader, Reader, Writer},
   memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,

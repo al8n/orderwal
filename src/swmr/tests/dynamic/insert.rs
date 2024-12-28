@@ -4,9 +4,7 @@ use std::thread::spawn;
 
 use crate::{
   batch::BatchEntry,
-  dynamic::{
-    DynamicMemtable, OrderWal, OrderWalReader, Reader, Writer,
-  },
+  dynamic::{DynamicMemtable, OrderWal, OrderWalReader, Reader, Writer},
   memtable::{Entry, MutableMemtable},
   types::{KeyBuilder, ValueBuilder},
   Builder,
